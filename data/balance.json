@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fishing": {
+    "cast_ms": 1200,
+    "bite_min_ms": 20000,
+    "bite_max_ms": 60000,
+    "hooked_ms": 900,
+    "reel_ms": 1500,
+    "settle_ms": 1400,
+    "free_wait_multiplier": 2.0
+  },
+  "pomodoro": {
+    "focus_min": 25,
+    "short_break_min": 5,
+    "long_break_min": 15,
+    "cycle_length": 4,
+    "focus_gold_multiplier": 1.5,
+    "focus_flat_bonus": 10,
+    "long_break_bonus": 50
+  },
+  "basket_capacity": 10
+}
