@@ -4,7 +4,9 @@ macOS 桌面上的像素小猫，在透明悬浮窗里坐船钓鱼。开始一�
 
 ## 运行
 
-用 Godot 4.7 打开本文件夹（`project.godot`），按 F5。或在终端：
+**直接玩**：双击 `build/CatFishing.app`（未经 Apple 公证；如果系统拦截，在"系统设置 → 隐私与安全性"里点"仍要打开"，或右键 → 打开）。
+
+**开发调试**：用 Godot 4.7 打开本文件夹（`project.godot`），按 F5。或在终端：
 
 ```bash
 /Applications/Godot.app/Contents/MacOS/Godot --path /Users/rain/DevGame/CC_CatFashing
@@ -33,9 +35,23 @@ macOS 桌面上的像素小猫，在透明悬浮窗里坐船钓鱼。开始一�
 | 商店 | 用金币升级，每项 5 级。鱼竿：自由挂机更快（满级时与专注同速，不会快于 20–60 秒）；鱼饵：稀有鱼更容易上钩；鱼篓：每级容量 +2 |
 | 图鉴 | 每种鱼钓到的数量和单价，没钓到过的显示为剪影 |
 | 统计 | 今日番茄数、累计番茄数、近七日柱状图 |
-| 设置 | 专注 / 短休 / 长休时长（分钟），窗口大小倍数。时长改动从下一个阶段开始生效 |
+| 设置 | 专注 / 短休 / 长休时长（分钟）；窗口大小（2–5 倍）和音效音量（0 静音–3）点加号循环切换。时长改动从下一个阶段开始生效 |
 
 数值全部在 `data/balance.json` 和 `data/fish.json`，改完重启即可。
+
+## 音效与动画
+
+音效由 `tools/audio/generate.py` 用方波/三角波/噪声合成（8-bit 风格），共 11 个：抛竿、咬钩、收竿、上鱼、稀有鱼、金币、购买、失败、番茄完成、休息结束、按钮。
+
+动画反馈：浮漂落水和咬钩时有水花；钓到鱼小猫会眯眼跳一下；钓到稀有鱼有闪光；完成番茄时满屏落星。
+
+## 导出
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path . --export-release "macOS" build/CatFishing.zip
+```
+
+需要先在 Godot 编辑器里安装导出模板（编辑器 → 管理导出模板）。导出预设在 `export_presets.cfg`：通用二进制（Intel + Apple Silicon）、临时签名、不公证。
 
 ## 目录结构
 
@@ -46,7 +62,10 @@ platform/      平台适配：窗口、穿透、拖动、通知。移植新平�
 presentation/  画面与输入
 data/          鱼种与数值配置
 assets/sprites 生成出的像素素材
+assets/sfx     生成出的音效
 tools/art/     素材生成脚本与调色板
+tools/audio/   音效生成脚本
+build/         导出的 macOS 应用（不进版本库）
 tests/         无界面单元测试
 ```
 
@@ -69,7 +88,10 @@ CATFISH_SPEED=60 /Applications/Godot.app/Contents/MacOS/Godot --path .    # 25 �
 | 项目 | 状态 |
 |---|---|
 | 核心逻辑单元测试（67 项） | 通过（Godot 4.7.2 Linux 无界面） |
-| 画面渲染、钓鱼动画、番茄结算、菜单四个标签页 | 通过（Linux 虚拟显示下截图目检） |
+| 画面渲染、钓鱼动画、番茄结算、菜单四个标签页、水花/闪光/小猫反应 | 通过（Linux 虚拟显示下截图目检） |
+| 导出 macOS 应用包 | 已生成（Linux 下导出，通用二进制，临时签名） |
+| 导出的 `.app` 能否在 macOS 上正常启动 | **未验证** |
+| 音效听感与音量 | **未验证**（沙盒没有声音输出，只确认了文件生成和播放代码无报错） |
 | macOS 透明窗口、置顶、窗口大小 | 通过（用户 2026-11-12 实测） |
 | macOS 局部鼠标穿透 | 通过（用户 2026-11-12 实测） |
 | macOS 原生拖动、位置记忆 | 通过（用户 2026-11-12 实测） |

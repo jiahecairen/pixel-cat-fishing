@@ -11,9 +11,9 @@ const UPGRADES := [
 	["bait", "鱼饵", "稀有鱼更容易上钩"],
 	["basket", "鱼篓", "鱼篓容量加二"],
 ]
-const SETTINGS := [
-	["focus_min", "专注"], ["short_break_min", "短休"], ["long_break_min", "长休"], ["pixel_scale", "大小"],
-]
+const SETTINGS := [["focus_min", "专注"], ["short_break_min", "短休"], ["long_break_min", "长休"]]
+## 第 4 行放两个"点一下换一档"的设置：[键, 标签, 标签x, 数值x, 按钮x]
+const CYCLES := [["pixel_scale", "大小", 19, 40, 50], ["sfx_volume", "音效", 66, 87, 99]]
 const ROW_Y := 44
 const ROW_H := 12
 
@@ -39,12 +39,13 @@ func click(p: Vector2) -> bool:
 	for i in TABS.size():
 		if _tab_rect(i).has_point(p):
 			tab = i
+			m.play("click")
 			return true
 	match tab:
 		0:
 			for i in UPGRADES.size():
 				if _plus_rect(i).has_point(p):
-					m.game.buy_upgrade(UPGRADES[i][0])
+					m.play("buy" if m.game.buy_upgrade(UPGRADES[i][0]) else "deny")
 		3:
 			for i in SETTINGS.size():
 				var dir := 0
@@ -53,10 +54,12 @@ func click(p: Vector2) -> bool:
 				elif _plus_rect(i, 99).has_point(p):
 					dir = 1
 				if dir != 0:
-					if SETTINGS[i][0] == "pixel_scale":
-						m.change_pixel_scale(dir)
-					else:
-						m.game.adjust_duration(SETTINGS[i][0], dir)
+					m.game.adjust_duration(SETTINGS[i][0], dir)
+					m.play("click")
+			for c in CYCLES:
+				if _plus_rect(3, c[4]).has_point(p):
+					m.cycle_setting(c[0])
+					m.play("click")
 	return true
 
 # ------------------------------------------------------------------ 绘制
@@ -143,10 +146,15 @@ func _draw_stats() -> void:
 func _draw_settings() -> void:
 	var g = m.game
 	for i in SETTINGS.size():
-		var key: String = SETTINGS[i][0]
 		var y: int = ROW_Y + i * ROW_H
 		m.label(SETTINGS[i][1], Vector2(19, y), Pal.L_W)
 		m.tex_frame("btn_minus", _plus_rect(i, 58).position, 0, 2)
 		m.tex_frame("btn_plus", _plus_rect(i, 99).position, 0, 2)
-		var s := ("x%d" % int(g.state.settings["pixel_scale"])) if key == "pixel_scale" else str(g.duration(key))
+		var s := str(g.duration(SETTINGS[i][0]))
 		m.text(s, Vector2(84 - s.length() * 2, y + 3), Pal.L_W)
+	var y4: int = ROW_Y + 3 * ROW_H
+	for c in CYCLES:
+		m.label(c[1], Vector2(c[2], y4), Pal.L_W)
+		var v := int(g.state.settings.get(c[0], 0))
+		m.text(("x%d" % v) if c[0] == "pixel_scale" else str(v), Vector2(c[3], y4 + 3), Pal.L_W)
+		m.tex_frame("btn_plus", _plus_rect(3, c[4]).position, 0, 2)

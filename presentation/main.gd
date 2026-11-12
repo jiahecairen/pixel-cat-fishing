@@ -18,6 +18,8 @@ const ART := Vector2i(128, 96)
 const FONT_ORDER := "0123456789:/+x-"
 const FPS_NORMAL := 30
 const FPS_DRAG := 60
+const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
+const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 
 # ---- 布局（美术像素） ----
 const PANEL_POS := Vector2(15, 1)
@@ -41,6 +43,13 @@ var saver: SaveService
 var tex: Dictionary = {}
 var px_scale: int = 3
 var floats: Array = []          # 飘字: {text, icon, pos, t0}
+var particles: Array = []       # 闪光粒子: {pos, vel, t0, life}
+var sfx: Dictionary = {}
+var _players: Array = []
+var _next_player: int = 0
+var _last_fs: int = -1
+var _hop_t0: int = -100000      # 小猫开心跳一下的起始时刻
+var _splash_t0: int = -100000
 var _pressed_btn: String = ""
 var _dragging: bool = false
 var _last_win_pos := Vector2i.ZERO
@@ -84,10 +93,18 @@ func _ready() -> void:
 
 	for n in ["cat", "boat", "water", "tomato", "coin", "basket", "bobber", "bang", "zzz",
 			"font", "dots", "panel", "btn_play", "btn_stop", "btn_sell", "btn_skip", "btn_close",
-			"btn_menu", "btn_plus", "btn_minus", "pips", "hold", "labels"]:
+			"btn_menu", "btn_plus", "btn_minus", "pips", "hold", "labels", "sparkle", "splash"]:
 		tex[n] = load("res://assets/sprites/%s.png" % n)
 	for f in fish:
 		tex[f["sprite"]] = load("res://assets/sprites/%s.png" % f["sprite"])
+
+	for n in SFX:
+		sfx[n] = load("res://assets/sfx/%s.wav" % n)
+	for i in 4:
+		var pl := AudioStreamPlayer.new()
+		add_child(pl)
+		_players.append(pl)
+	_last_fs = game.fishing.state
 
 	adapter = Platform.create()
 	var win := get_window()
@@ -114,15 +131,38 @@ func _apply_pixel_scale() -> void:
 		_update_polygon()
 
 
-## 设置里调整窗口大小（每个美术像素放大几倍）。
-func change_pixel_scale(direction: int) -> void:
-	var lim: Array = _limits.get("pixel_scale", [2, 5, 1])
-	var v := clampi(int(game.state.settings.get("pixel_scale", 3)) + direction, int(lim[0]), int(lim[1]))
-	if v == int(game.state.settings.get("pixel_scale", 3)):
-		return
-	game.state.settings["pixel_scale"] = v
+## 设置里循环切换：窗口大小 2→3→4→5→2，音效 0→1→2→3→0。
+func cycle_setting(key: String) -> void:
+	var lim: Array = _limits.get(key, [0, 3, 1])
+	var v := int(game.state.settings.get(key, lim[0])) + 1
+	if v > int(lim[1]):
+		v = int(lim[0])
+	game.state.settings[key] = v
 	game.dirty = true
-	_apply_pixel_scale()
+	if key == "pixel_scale":
+		_apply_pixel_scale()
+
+
+func play(name: String) -> void:
+	var vol := clampi(int(game.state.settings.get("sfx_volume", 2)), 0, 3)
+	if vol == 0 or not sfx.has(name):
+		return
+	var pl: AudioStreamPlayer = _players[_next_player]
+	_next_player = (_next_player + 1) % _players.size()
+	pl.stream = sfx[name]
+	pl.volume_db = VOLUME_DB[vol]
+	pl.play()
+
+
+func _sparkles(center: Vector2, count: int, spread: float, fall := false) -> void:
+	var t := Time.get_ticks_msec()
+	for i in count:
+		var a := randf() * TAU
+		var vel := Vector2(cos(a), sin(a)) * randf_range(4.0, 14.0)
+		var pos := center + Vector2(randf_range(-spread, spread), randf_range(-spread, spread) * 0.5)
+		if fall:
+			vel = Vector2(randf_range(-3.0, 3.0), randf_range(10.0, 22.0))
+		particles.append({"pos": pos, "vel": vel, "t0": t + randi() % 300, "life": randi_range(700, 1500)})
 
 
 func _update_polygon() -> void:
@@ -175,12 +215,31 @@ func _process(dt: float) -> void:
 	if _debug_speed > 1.0 and game.fishing.state != _debug_last_state:
 		_debug_last_state = game.fishing.state
 		print("[debug] frame %d fishing=%s" % [Engine.get_frames_drawn(), Fishing.State.keys()[_debug_last_state]])
+	_fishing_feedback()
 	_track_window()
 	if game.dirty:
 		_save()
 	if not adapter.is_overlay():
 		_fit_fullscreen()
 	queue_redraw()
+
+
+## 钓鱼状态切换时的音效和水花。
+func _fishing_feedback() -> void:
+	var fs: int = game.fishing.state
+	if fs == _last_fs:
+		return
+	_last_fs = fs
+	match fs:
+		Fishing.State.CASTING:
+			play("cast")
+		Fishing.State.WAITING:
+			_splash_t0 = Time.get_ticks_msec()
+		Fishing.State.HOOKED:
+			_splash_t0 = Time.get_ticks_msec()
+			play("bite")
+		Fishing.State.REELING:
+			play("reel")
 
 
 func _fit_fullscreen() -> void:
@@ -209,11 +268,21 @@ func _track_window() -> void:
 func _on_event(e: Dictionary) -> void:
 	match e["type"]:
 		"catch":
-			pass   # 鱼的上钩动画由钓鱼状态直接驱动
+			_hop_t0 = Time.get_ticks_msec()
+			var f: Dictionary = game.fish_by_id.get(e["fish_id"], {})
+			if int(f.get("rarity", 0)) >= 2:
+				play("rare")
+				_sparkles(CAT_POS + Vector2(17, -10), 12, 8.0)
+			else:
+				play("catch")
 		"focus_done":
+			play("done")
+			_hop_t0 = Time.get_ticks_msec()
+			_sparkles(Vector2(64, 30), 26, 44.0, true)
 			_float("+%d" % e["gold"], "coin", Vector2(36, 31))
 			adapter.notify("番茄完成！", "钓到 %d 条鱼，获得 %d 金币。休息一下吧。" % [e["fish_count"], e["gold"]])
 		"break_done":
+			play("break_end")
 			adapter.notify("休息结束", "小猫睡醒了，准备开始下一个番茄吧。")
 		"basket_full":
 			adapter.notify("鱼篓满了", "卖掉鱼，或者开始一个番茄让小猫继续钓。")
@@ -242,9 +311,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif BTN_SELL.has_point(p):
 		_pressed_btn = "sell"
 		var gold := game.sell_basket()
+		play("coin" if gold > 0 else "deny")
 		if gold > 0:
 			_float("+%d" % gold, "coin", Vector2(36, 31))
 	elif BTN_MENU.has_point(p):
+		play("click")
 		menu.open = not menu.open
 		_update_polygon()
 	elif BTN_CLOSE.has_point(p):
@@ -259,12 +330,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _press_main() -> void:
+	play("click")
 	match game.pomodoro.phase():
 		Pomodoro.Phase.IDLE:
 			game.start_focus()
 		Pomodoro.Phase.FOCUS:
 			var gold := game.abandon_focus()
 			if gold > 0:
+				play("coin")
 				_float("+%d" % gold, "coin", Vector2(36, 31))
 		_:
 			game.skip_break()
@@ -286,6 +359,10 @@ func _draw() -> void:
 	_tex_frame("water", WATER_POS, (t / 600) % 3, 3)
 	var cat_pos := CAT_POS + bob
 	var frame := (2 + (t / 1100) % 2) if on_break else (t / 700) % 2
+	var hop_age := t - _hop_t0
+	if hop_age < 600 and not on_break:
+		frame = 2   # 眯眼开心
+		cat_pos.y -= 2 if hop_age < 140 else (1 if hop_age < 280 else 0)
 	_tex_frame("cat", cat_pos, frame, 4)
 
 	draw_texture(tex["boat"], BOAT_POS + bob)
@@ -293,9 +370,12 @@ func _draw() -> void:
 		draw_texture(tex["zzz"], cat_pos + Vector2(32, -2 - (t / 500) % 3))
 	else:
 		_draw_fishing(cat_pos, fs, prog, t)
+	if not on_break and t - _splash_t0 < 360:
+		_tex_frame("splash", BOBBER_POS + Vector2(-3, 3), 0 if t - _splash_t0 < 180 else 1, 2)
 	_draw_hud(now)
 	menu.draw()
 	_draw_floats(t)
+	_draw_particles(t)
 
 
 func _draw_fishing(cat_pos: Vector2, fs: int, prog: float, t: int) -> void:
@@ -387,6 +467,20 @@ func _draw_floats(t: int) -> void:
 			draw_texture(tex[f["icon"]], pos)
 			_text(f["text"], pos + Vector2(11, 2), Pal.L_Y, true)
 	floats = keep
+
+
+func _draw_particles(t: int) -> void:
+	var keep: Array = []
+	for p in particles:
+		var age: int = t - int(p["t0"])
+		if age < int(p["life"]):
+			keep.append(p)
+			if age >= 0:
+				var pos: Vector2 = (p["pos"] + p["vel"] * (age / 1000.0)).round()
+				# 一闪一闪：大小两帧交替，寿命末尾只剩小的
+				var small: bool = age > int(p["life"]) * 0.6 or (age / 120) % 2 == 1
+				_tex_frame("sparkle", pos, 1 if small else 0, 2)
+	particles = keep
 
 
 # ---- 给菜单用的公开绘制接口 ----

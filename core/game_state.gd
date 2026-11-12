@@ -16,7 +16,7 @@ var next_seq: int = 1
 var pomodoro: Dictionary = {"phase": 0, "phase_end_ms": 0, "cycle_done": 0}
 var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}}
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
-var settings: Dictionary = {"pixel_scale": 3, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
+var settings: Dictionary = {"pixel_scale": 3, "sfx_volume": 2, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
 var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0}
 var window: Dictionary = {"has_pos": false, "x": 0, "y": 0}
 

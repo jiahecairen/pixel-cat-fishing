@@ -321,10 +321,24 @@ def hold():
     return c
 
 
+def sparkle():
+    """闪光粒子（特效不描边）：0=大 1=小"""
+    a = Canvas(5, 5); a.rows(0, 0, ["..W..", "..y..", "WyWyW", "..y..", "..W.."])
+    b = Canvas(5, 5); b.rows(1, 1, [".W.", "WyW", ".W."])
+    return sheet([a, b])
+
+
+def splash():
+    """浮漂落水的水花，两帧（特效不描边）"""
+    a = Canvas(11, 5); a.rows(0, 0, ["...........", "....W.W....", "...W...W...", "...cWWWc...", "..........."])
+    b = Canvas(11, 5); b.rows(0, 0, ["..W.....W..", ".W.......W.", "...........", ".c.cWWWc.c.", "..........."])
+    return sheet([a, b])
+
+
 LABELS = [
     "商店", "图鉴", "统计", "设置", "鱼竿", "鱼饵", "鱼篓", "已满级",
     "自由挂机钓得更快", "稀有鱼更容易上钩", "鱼篓容量加二", "金币可以升级装备",
-    "？？？", "共钓到", "今日", "累计", "近七日", "专注", "短休", "长休", "大小",
+    "？？？", "共钓到", "今日", "累计", "近七日", "专注", "短休", "长休", "大小", "音效",
 ]
 FONT_FILE = os.path.join(os.path.dirname(__file__), "fonts", "fusion-pixel-10px-proportional-zh_hans.otf.woff")
 
@@ -394,6 +408,8 @@ def build():
         "panel": save(panel(), "panel"),
         "pips": save(pips(), "pips"),
         "hold": save(hold(), "hold"),
+        "sparkle": save(sparkle(), "sparkle"),
+        "splash": save(splash(), "splash"),
         "labels": labels(),
     }
     for n in BTN:
@@ -443,6 +459,17 @@ def export_palette():
     open(os.path.join(ROOT, "presentation", "palette.gd"), "w").write("\n".join(lines) + "\n")
 
 
+def app_icon():
+    """应用图标：把猫放大 7 倍放在水蓝色底上（最近邻放大，保持像素感）。"""
+    c = Canvas(36, 36)
+    c.rect(1, 0, 34, 35, "b"); c.rect(0, 1, 35, 34, "b")
+    c.rect(0, 26, 35, 34, "B"); c.rect(1, 35, 34, 35, "B")
+    for x in (4, 14, 25):
+        c.rect(x, 25, x + 4, 25, "c")
+    c.blit(cat(), 2, 0)
+    c.image().resize((36 * 7, 36 * 7), Image.NEAREST).save(os.path.join(ROOT, "assets", "icon.png"))
+
+
 def check(made):
     allowed = {rgba(k) for k in PALETTE}
     for n in os.listdir(OUT):
@@ -457,4 +484,5 @@ if __name__ == "__main__":
     m = build()
     preview(m)
     export_palette()
+    app_icon()
     check(m)
