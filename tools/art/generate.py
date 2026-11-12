@@ -257,6 +257,9 @@ BTN = {
     "stop": [".......", ".rrrrr.", ".rrrrr.", ".rrrrr.", ".rrrrr.", ".rrrrr.", "......."],
     "sell": ["..yyy..", ".yyHyy.", ".yHyyy.", ".yyHyy.", ".yyyHy.", ".yyHyy.", "..yyy.."],
     "skip": [".......", "c..c.c.", "cc.ccc.", "cccccc.", "cc.ccc.", "c..c.c.", "......."],
+    "menu": [".......", ".wwwww.", ".......", ".wwwww.", ".......", ".wwwww.", "......."],
+    "plus": [".......", "...g...", "...g...", ".ggggg.", "...g...", "...g...", "......."],
+    "minus": [".......", ".......", ".......", ".rrrrr.", ".......", ".......", "......."],
     "close": [".......", ".a...a.", "..a.a..", "...a...", "..a.a..", ".a...a.", "......."],
 }
 
@@ -298,6 +301,71 @@ def dots():
     return sheet([a, b])
 
 
+def pips():
+    """升级等级点：0=未升 1=已升"""
+    a = Canvas(5, 5); a.rect(1, 1, 3, 3, "A"); a.outline()
+    b = Canvas(5, 5); b.rect(1, 1, 3, 3, "y"); b.set(1, 1, "W"); b.outline()
+    return sheet([a, b])
+
+
+def hold():
+    """番茄渔获（船舱木箱）：专注时用它代替鱼篓图标，表示不限量。"""
+    c = Canvas(11, 10)
+    c.rect(1, 3, 9, 8, "o")
+    c.rect(1, 3, 9, 3, "n")
+    c.rect(1, 6, 9, 6, "O")
+    c.rows(3, 1, ["sss..", "sSsss"])            # 露出来的鱼
+    c.set(7, 1, "s"); c.set(4, 2, "K")
+    c.pts([(2, 5), (8, 5), (2, 8), (8, 8)], "O")
+    c.outline()
+    return c
+
+
+LABELS = [
+    "商店", "图鉴", "统计", "设置", "鱼竿", "鱼饵", "鱼篓", "已满级",
+    "自由挂机钓得更快", "稀有鱼更容易上钩", "鱼篓容量加二", "金币可以升级装备",
+    "？？？", "共钓到", "今日", "累计", "近七日", "专注", "短休", "长休", "大小",
+]
+FONT_FILE = os.path.join(os.path.dirname(__file__), "fonts", "fusion-pixel-10px-proportional-zh_hans.otf.woff")
+
+
+def labels():
+    """把界面用到的中文标签用开源像素字体（Fusion Pixel 10px, OFL）预渲染成图集。
+    这样运行时不依赖任何字体引擎，换平台（含 3DS）也能直接用。"""
+    import json
+    from PIL import ImageDraw, ImageFont
+    names = list(LABELS)
+    for f in json.load(open(os.path.join(ROOT, "data", "fish.json"), encoding="utf-8"))["fish"]:
+        if f["name"] not in names:
+            names.append(f["name"])
+    font_ = ImageFont.truetype(FONT_FILE, 10)
+    rects, strips = {}, []
+    for n in names:
+        im = Image.new("L", (10 * len(n) + 4, 14), 0)
+        d = ImageDraw.Draw(im); d.fontmode = "1"
+        d.text((0, 0), n, font=font_, fill=255)
+        box = im.getbbox()
+        assert box and box[1] >= 2 and box[3] <= 12, f"标签渲染异常: {n} {box}"
+        for i in range(len(n)):   # 每个字都必须真的画出了像素（防止缺字）
+            assert im.crop((i * 10, 0, i * 10 + 10, 14)).getbbox(), f"字体缺字: {n}[{i}]"
+        strips.append((n, im.crop((0, 2, box[2], 12))))
+    w = max(s.width for _, s in strips)
+    c = Canvas(w, 10 * len(strips))
+    for row, (n, im) in enumerate(strips):
+        for y in range(10):
+            for x in range(im.width):
+                if im.getpixel((x, y)) > 128:
+                    c.set(x, row * 10 + y, "w")
+        rects[n] = (0, row * 10, im.width, 10)
+    save(c, "labels")
+    out = ["# 由 tools/art/generate.py 自动生成，请勿手改。", "extends RefCounted", "", "const RECTS := {"]
+    for n, r in rects.items():
+        out.append(f'\t"{n}": Rect2({r[0]}, {r[1]}, {r[2]}, {r[3]}),')
+    out.append("}")
+    open(os.path.join(ROOT, "presentation", "labels.gd"), "w", encoding="utf-8").write("\n".join(out) + "\n")
+    return c
+
+
 def panel():
     c = Canvas(98, 27)
     c.rect(1, 1, 96, 25, "K")
@@ -324,6 +392,9 @@ def build():
         "font": save(font(), "font"),
         "dots": save(dots(), "dots"),
         "panel": save(panel(), "panel"),
+        "pips": save(pips(), "pips"),
+        "hold": save(hold(), "hold"),
+        "labels": labels(),
     }
     for n in BTN:
         made["btn_" + n] = save(sheet([button(n), button(n, True)]), "btn_" + n)

@@ -37,6 +37,7 @@ func _init() -> void:
 		test_pomodoro(balance)
 		test_game_focus(balance, fish)
 		test_game_free_mode(balance, fish)
+		test_upgrades_and_settings(balance, fish)
 		test_save()
 		test_bad_config()
 	print("%d checks, %d failed" % [_checks, _fails])
@@ -171,6 +172,51 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 	check(g.sell_basket() > 0 and g.state.basket.is_empty(), "卖鱼清空鱼篓")
 	clock.t += 500; g.tick()
 	check(g.fishing.is_active(), "卖完后自动继续钓")
+
+func test_upgrades_and_settings(balance: Dictionary, fish: Array) -> void:
+	print("upgrades & settings")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(9))
+	check(not g.buy_upgrade("basket") and g.state.upgrades["basket"] == 0, "没钱不能升级")
+	g.state.wallet_gold = 100
+	check(g.buy_upgrade("basket") and g.state.wallet_gold == 20, "升级扣 80 金币")
+	check(g.state.basket_capacity == 12, "鱼篓容量 10→12")
+	check(not g.buy_upgrade("nope"), "未知升级被拒绝")
+	g.state.wallet_gold = 100000
+	for i in 10:
+		g.buy_upgrade("basket"); g.buy_upgrade("rod"); g.buy_upgrade("bait")
+	check(g.state.upgrades == {"rod": 5, "bait": 5, "basket": 5}, "最多升到 5 级")
+	check(g.upgrades.next_cost(g.state, "rod") == -1, "满级后没有下一级价格")
+	check(g.state.basket_capacity == 20, "满级鱼篓 20")
+	g.tick()
+	check(is_equal_approx(g.fishing.wait_multiplier, 1.0), "满级鱼竿：自由挂机等待倍率 1.0（不快于 20–60 秒）")
+	# 鱼饵让稀有鱼更多
+	var base := Fishing.new(balance["fishing"], fish, _rng(1))
+	var baited := Fishing.new(balance["fishing"], fish, _rng(1))
+	baited.rarity_bonus = 0.75
+	var k0 := 0; var k1 := 0
+	for i in 5000:
+		if base._roll_fish() == "koi": k0 += 1
+		if baited._roll_fish() == "koi": k1 += 1
+	check(k1 > k0 * 1.4, "满级鱼饵锦鲤明显变多 (%d → %d)" % [k0, k1])
+	# 升级随存档恢复
+	var s2 := GameState.new(); s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
+	var g2 := Game.new(balance, fish, s2, clock, _rng(9))
+	check(g2.state.basket_capacity == 20 and s2.upgrades["rod"] == 5, "升级随存档恢复")
+	# 时长设置
+	check(g.duration("focus_min") == 25, "默认专注 25 分钟")
+	check(g.adjust_duration("focus_min", 1) == 30 and g.pomodoro.remaining_ms(clock.t) == 30 * 60000, "专注调到 30 分钟")
+	for i in 40:
+		g.adjust_duration("focus_min", -1)
+	check(g.duration("focus_min") == 5, "专注最短 5 分钟")
+	for i in 40:
+		g.adjust_duration("short_break_min", 1)
+	check(g.duration("short_break_min") == 30, "短休最长 30 分钟")
+	var s3 := GameState.new(); s3.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
+	var g3 := Game.new(balance, fish, s3, clock, _rng(9))
+	check(g3.duration("focus_min") == 5 and g3.duration("long_break_min") == 15, "时长设置随存档恢复，未改的保持默认")
+	g3.start_focus(); clock.t += 5 * 60000
+	check(_types(g3.tick()).has("focus_done"), "5 分钟番茄按新时长完成")
 
 func test_save() -> void:
 	print("save")

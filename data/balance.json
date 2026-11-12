@@ -18,5 +18,66 @@
     "focus_flat_bonus": 10,
     "long_break_bonus": 50
   },
-  "basket_capacity": 10
+  "basket_capacity": 10,
+  "upgrades": {
+    "rod": {
+      "costs": [
+        100,
+        250,
+        500,
+        1000,
+        2000
+      ],
+      "free_wait_multipliers": [
+        2.0,
+        1.8,
+        1.6,
+        1.4,
+        1.2,
+        1.0
+      ]
+    },
+    "bait": {
+      "costs": [
+        150,
+        300,
+        600,
+        1200,
+        2400
+      ],
+      "rarity_bonus_per_level": 0.15
+    },
+    "basket": {
+      "costs": [
+        80,
+        200,
+        400,
+        800,
+        1600
+      ],
+      "capacity_per_level": 2
+    }
+  },
+  "settings_limits": {
+    "focus_min": [
+      5,
+      90,
+      5
+    ],
+    "short_break_min": [
+      1,
+      30,
+      1
+    ],
+    "long_break_min": [
+      5,
+      60,
+      5
+    ],
+    "pixel_scale": [
+      2,
+      5,
+      1
+    ]
+  }
 }

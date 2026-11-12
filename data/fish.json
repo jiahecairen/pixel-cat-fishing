@@ -1,8 +1,29 @@
 {
   "version": 1,
   "fish": [
-    {"id": "crucian", "name": "小鲫鱼", "sprite": "fish_crucian", "price": 5,  "weight": 60},
-    {"id": "bass",    "name": "鲈鱼",   "sprite": "fish_bass",    "price": 12, "weight": 30},
-    {"id": "koi",     "name": "金锦鲤", "sprite": "fish_koi",     "price": 40, "weight": 10}
+    {
+      "id": "crucian",
+      "name": "小鲫鱼",
+      "sprite": "fish_crucian",
+      "price": 5,
+      "weight": 60,
+      "rarity": 0
+    },
+    {
+      "id": "bass",
+      "name": "鲈鱼",
+      "sprite": "fish_bass",
+      "price": 12,
+      "weight": 30,
+      "rarity": 1
+    },
+    {
+      "id": "koi",
+      "name": "金锦鲤",
+      "sprite": "fish_koi",
+      "price": 40,
+      "weight": 10,
+      "rarity": 2
+    }
   ]
 }

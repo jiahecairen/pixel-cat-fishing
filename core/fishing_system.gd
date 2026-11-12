@@ -9,18 +9,16 @@ var state_start_ms: int = 0
 var deadline_ms: int = 0
 var wait_multiplier: float = 1.0
 var hooked_fish: String = ""
+var rarity_bonus: float = 0.0     # 鱼饵升级：稀有鱼权重 ×(1 + rarity_bonus × rarity)
 
 var _cfg: Dictionary
 var _fish: Array
 var _rng: RandomNumberGenerator
-var _total_weight: float = 0.0
 
 func _init(cfg: Dictionary, fish_table: Array, rng: RandomNumberGenerator) -> void:
 	_cfg = cfg
 	_fish = fish_table
 	_rng = rng
-	for f in _fish:
-		_total_weight += float(f["weight"])
 
 func is_active() -> bool:
 	return state != State.IDLE and state != State.PAUSED
@@ -67,10 +65,16 @@ func _enter(s: int, now_ms: int, duration_ms: int) -> void:
 	state_start_ms = now_ms
 	deadline_ms = now_ms + duration_ms
 
+func _weight(f: Dictionary) -> float:
+	return float(f["weight"]) * (1.0 + rarity_bonus * float(f.get("rarity", 0)))
+
 func _roll_fish() -> String:
-	var r := _rng.randf() * _total_weight
+	var total := 0.0
 	for f in _fish:
-		r -= float(f["weight"])
+		total += _weight(f)
+	var r := _rng.randf() * total
+	for f in _fish:
+		r -= _weight(f)
 		if r < 0.0:
 			return f["id"]
 	return _fish[-1]["id"]

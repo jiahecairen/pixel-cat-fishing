@@ -11,6 +11,8 @@ const ConfigLoader := preload("res://io/config_loader.gd")
 const SaveService := preload("res://io/save_service.gd")
 const Platform := preload("res://platform/platform.gd")
 const Pal := preload("res://presentation/palette.gd")
+const Labels := preload("res://presentation/labels.gd")
+const Menu := preload("res://presentation/menu.gd")
 
 const ART := Vector2i(128, 96)
 const FONT_ORDER := "0123456789:/+x-"
@@ -21,7 +23,8 @@ const FPS_DRAG := 60
 const PANEL_POS := Vector2(15, 1)
 const BTN_MAIN := Rect2(78, 3, 11, 11)
 const BTN_SELL := Rect2(89, 3, 11, 11)
-const BTN_CLOSE := Rect2(100, 3, 11, 11)
+const BTN_MENU := Rect2(100, 3, 11, 11)
+const BTN_CLOSE := Rect2(100, 14, 11, 11)
 const DRAG_RECT := Rect2(30, 28, 90, 66)
 const WATER_POS := Vector2(2, 73)
 const BOAT_POS := Vector2(34, 62)
@@ -43,7 +46,10 @@ var _dragging: bool = false
 var _last_win_pos := Vector2i.ZERO
 var _pos_stable_since: int = 0
 var _config_ok: bool = true
-var _clock: Clock
+var _limits: Dictionary = {}
+var _missing_labels: Dictionary = {}
+var clock: Clock
+var menu: Menu
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
 var _debug_last_state: int = -1
 
@@ -66,8 +72,10 @@ func _ready() -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	_clock = Clock.new()
-	game = Game.new(balance, fish, state, _clock, rng)
+	clock = Clock.new()
+	_limits = balance.get("settings_limits", {})
+	game = Game.new(balance, fish, state, clock, rng)
+	menu = Menu.new(self)
 	if OS.is_debug_build():
 		if OS.has_environment("CATFISH_SPEED"):
 			_debug_speed = maxf(1.0, OS.get_environment("CATFISH_SPEED").to_float())
@@ -75,35 +83,64 @@ func _ready() -> void:
 			game.start_focus()
 
 	for n in ["cat", "boat", "water", "tomato", "coin", "basket", "bobber", "bang", "zzz",
-			"font", "dots", "panel", "btn_play", "btn_stop", "btn_sell", "btn_skip", "btn_close"]:
+			"font", "dots", "panel", "btn_play", "btn_stop", "btn_sell", "btn_skip", "btn_close",
+			"btn_menu", "btn_plus", "btn_minus", "pips", "hold", "labels"]:
 		tex[n] = load("res://assets/sprites/%s.png" % n)
 	for f in fish:
 		tex[f["sprite"]] = load("res://assets/sprites/%s.png" % f["sprite"])
 
 	adapter = Platform.create()
 	var win := get_window()
-	px_scale = adapter.pixel_scale(int(state.settings.get("pixel_scale", 3)))
-	adapter.setup_window(win, ART, px_scale)
 	adapter.set_fps(FPS_NORMAL)
+	_apply_pixel_scale()
 	if adapter.is_overlay():
-		scale = Vector2(px_scale, px_scale)
 		var pos: Vector2i = adapter.default_position(win)
 		if state.window.get("has_pos", false):
 			pos = adapter.clamp_position(win, Vector2i(int(state.window["x"]), int(state.window["y"])))
 		win.position = pos
 		_last_win_pos = pos
-		adapter.set_interactive_polygon(win, _interactive_polygon())
 	get_tree().auto_accept_quit = false
+	if OS.is_debug_build() and OS.has_environment("CATFISH_MENU"):
+		menu.open = true
+		menu.tab = OS.get_environment("CATFISH_MENU").to_int()
+		_update_polygon()
+
+
+func _apply_pixel_scale() -> void:
+	px_scale = adapter.pixel_scale(int(game.state.settings.get("pixel_scale", 3)))
+	adapter.setup_window(get_window(), ART, px_scale)
+	if adapter.is_overlay():
+		scale = Vector2(px_scale, px_scale)
+		_update_polygon()
+
+
+## 设置里调整窗口大小（每个美术像素放大几倍）。
+func change_pixel_scale(direction: int) -> void:
+	var lim: Array = _limits.get("pixel_scale", [2, 5, 1])
+	var v := clampi(int(game.state.settings.get("pixel_scale", 3)) + direction, int(lim[0]), int(lim[1]))
+	if v == int(game.state.settings.get("pixel_scale", 3)):
+		return
+	game.state.settings["pixel_scale"] = v
+	game.dirty = true
+	_apply_pixel_scale()
+
+
+func _update_polygon() -> void:
+	if adapter.is_overlay():
+		adapter.set_interactive_polygon(get_window(), _interactive_polygon())
 
 
 func _interactive_polygon() -> PackedVector2Array:
 	# 上面是 HUD 面板，下面是猫/船/水面；两块拼成一个多边形，其余透明区域鼠标穿透
+	# 菜单打开时它盖住整个下半部分，可交互区域扩大成一个整矩形
 	var p := PANEL_POS
 	var d := DRAG_RECT
 	var pts := PackedVector2Array([
 		p, Vector2(p.x + 98, p.y), Vector2(p.x + 98, d.position.y), Vector2(d.end.x, d.position.y),
 		d.end, Vector2(d.position.x, d.end.y), d.position, Vector2(p.x, d.position.y),
 	])
+	if menu != null and menu.open:
+		pts = PackedVector2Array([p, Vector2(d.end.x, p.y), d.end, Vector2(p.x, d.end.y)])
 	for i in pts.size():
 		pts[i] *= px_scale
 	return pts
@@ -130,7 +167,7 @@ func _process(dt: float) -> void:
 	if not _config_ok:
 		return
 	if _debug_speed > 1.0:
-		_clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
+		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
 	for e in game.tick():
 		_on_event(e)
 		if _debug_speed > 1.0:
@@ -188,7 +225,12 @@ func _float(text: String, icon: String, pos: Vector2) -> void:
 
 # ------------------------------------------------------------------ 输入
 func _unhandled_input(event: InputEvent) -> void:
-	if not _config_ok or not event is InputEventMouseButton or event.button_index != MOUSE_BUTTON_LEFT:
+	if not _config_ok:
+		return
+	if event is InputEventMouseMotion:
+		menu.hover = (event.position - position) / float(px_scale)
+		return
+	if not event is InputEventMouseButton or event.button_index != MOUSE_BUTTON_LEFT:
 		return
 	var p: Vector2 = (event.position - position) / float(px_scale)
 	if not event.pressed:
@@ -202,8 +244,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		var gold := game.sell_basket()
 		if gold > 0:
 			_float("+%d" % gold, "coin", Vector2(36, 31))
+	elif BTN_MENU.has_point(p):
+		menu.open = not menu.open
+		_update_polygon()
 	elif BTN_CLOSE.has_point(p):
 		_quit()
+	elif menu.click(p):
+		pass
 	elif DRAG_RECT.has_point(p):
 		if adapter.start_window_drag(get_window()):
 			_dragging = true
@@ -247,6 +294,7 @@ func _draw() -> void:
 	else:
 		_draw_fishing(cat_pos, fs, prog, t)
 	_draw_hud(now)
+	menu.draw()
 	_draw_floats(t)
 
 
@@ -314,11 +362,13 @@ func _draw_hud(now: int) -> void:
 	var can_sell: bool = not game.state.basket.is_empty()
 	_tex_frame("btn_sell", BTN_SELL.position, 1 if _pressed_btn == "sell" else 0, 2,
 			Color.WHITE if can_sell else Color(1, 1, 1, 0.35))
+	_tex_frame("btn_menu", BTN_MENU.position, 1 if menu.open else 0, 2)
 	_tex_frame("btn_close", BTN_CLOSE.position, 0, 2)
 
 	draw_texture(tex["coin"], Vector2(20, 15))
 	_text(str(game.state.wallet_gold), Vector2(31, 17), Pal.L_Y)
-	draw_texture(tex["basket"], Vector2(56, 14))
+	# 专注时显示"番茄渔获"木箱（不限量）；其余时候显示 10 格鱼篓
+	draw_texture(tex["hold" if ph == Pomodoro.Phase.FOCUS else "basket"], Vector2(56, 14))
 	if ph == Pomodoro.Phase.FOCUS:
 		_text("x%d" % game.state.session_haul.size(), Vector2(69, 17), Pal.L_W)
 	else:
@@ -337,6 +387,27 @@ func _draw_floats(t: int) -> void:
 			draw_texture(tex[f["icon"]], pos)
 			_text(f["text"], pos + Vector2(11, 2), Pal.L_Y, true)
 	floats = keep
+
+
+# ---- 给菜单用的公开绘制接口 ----
+func tex_frame(name: String, pos: Vector2, frame: int, count: int, mod := Color.WHITE) -> void:
+	_tex_frame(name, pos, frame, count, mod)
+
+func text(s: String, pos: Vector2, color: Color) -> void:
+	_text(s, pos, color)
+
+func text_right(s: String, right_x: float, y: float, color: Color) -> void:
+	_text(s, Vector2(right_x - s.length() * 4 + 1, y), color)
+
+## 画一个预渲染的中文标签；图集里没有的文字会被跳过并报一次警告。
+func label(s: String, pos: Vector2, color: Color) -> void:
+	if not Labels.RECTS.has(s):
+		if not _missing_labels.has(s):
+			_missing_labels[s] = true
+			push_warning("标签图集缺少文字: %s（请加到 tools/art/generate.py 的 LABELS 后重新生成）" % s)
+		return
+	var r: Rect2 = Labels.RECTS[s]
+	draw_texture_rect_region(tex["labels"], Rect2(pos, r.size), r, color)
 
 
 # ---- 绘制小工具 ----
