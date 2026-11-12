@@ -14,6 +14,8 @@ var processed_catch_ids: Array = []
 var processed_sale_ids: Array = []
 var next_seq: int = 1
 var pomodoro: Dictionary = {"phase": 0, "phase_end_ms": 0, "cycle_done": 0}
+## 钓鱼断点（见 FishingSystem.checkpoint）
+var fishing_checkpoint: Dictionary = {"state": 0, "state_start_ms": 0, "deadline_ms": 0, "hooked_fish": ""}
 var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0, "next_eat_ms": 0, "paused_at_ms": 0, "sales": 0, "roam_x": 0, "walk_from": -1}
 var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}}
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
@@ -33,7 +35,7 @@ func to_dict() -> Dictionary:
 	return {
 		"save_version": save_version, "revision": revision,
 		"wallet_gold": wallet_gold, "basket_capacity": basket_capacity,
-		"journey": journey.duplicate(true),
+		"journey": journey.duplicate(true), "fishing_checkpoint": fishing_checkpoint.duplicate(true),
 		"basket": basket.duplicate(), "session_haul": session_haul.duplicate(),
 		"processed_catch_ids": processed_catch_ids.duplicate(),
 		"processed_sale_ids": processed_sale_ids.duplicate(),
@@ -56,6 +58,9 @@ func from_dict(d: Dictionary) -> bool:
 	processed_sale_ids = _str_array(d.get("processed_sale_ids"))
 	next_seq = max(1, int(d.get("next_seq", 1)))
 	_merge(pomodoro, d.get("pomodoro"))
+	_merge(fishing_checkpoint, d.get("fishing_checkpoint"))
+	for k in ["state", "state_start_ms", "deadline_ms"]:
+		fishing_checkpoint[k] = int(fishing_checkpoint[k])
 	_merge(journey, d.get("journey"))
 	for k in journey.keys():
 		journey[k] = int(journey[k])

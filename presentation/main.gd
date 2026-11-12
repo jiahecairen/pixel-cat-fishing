@@ -15,6 +15,7 @@ const Pomodoro := preload("res://core/pomodoro.gd")
 const Journey := preload("res://core/journey.gd")
 const ConfigLoader := preload("res://io/config_loader.gd")
 const SaveService := preload("res://io/save_service.gd")
+const EventLog := preload("res://io/event_log.gd")
 const Platform := preload("res://platform/platform.gd")
 const Pal := preload("res://presentation/palette.gd")
 const Labels := preload("res://presentation/labels.gd")
@@ -56,6 +57,10 @@ const FULL_UI_OFF := Vector2(-11, 3)
 var game: Game
 var adapter
 var saver: SaveService
+var log: EventLog
+var _save_retry_at: int = 0     # 存档失败后下次重试的时刻
+var _low_power: bool = false
+const FPS_HIDDEN := 5            # 窗口最小化时的帧率
 var clock: Clock
 var menu: Menu
 var wardrobe: Wardrobe
@@ -91,6 +96,7 @@ const KEYS_ACT := [KEY_SPACE, KEY_ENTER, KEY_E, KEY_UP, KEY_W]
 var _cam_snap: bool = true
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
 var _debug_last: String = ""
+var _debug_act_frame: int = -1
 var _debug_dir: int = 0         # 调试：CATFISH_ROAM=1/-1 模拟一直按着右/左方向键
 var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  在这些帧截图后退出
 var _shot_frames: Array = []
@@ -108,6 +114,8 @@ func _ready() -> void:
 		return
 
 	saver = SaveService.new()
+	log = EventLog.new()
+	log.write("app_start", {"version": ProjectSettings.get_setting("application/config/version", ""), "os": OS.get_name()})
 	var state := GameState.new()
 	var saved := saver.load_data()
 	if not saved.is_empty() and not state.from_dict(saved):
@@ -173,6 +181,8 @@ func _apply_debug_env() -> void:
 			game.economy.add_catch(st, st.new_id("c"), ids[i % ids.size()], false)
 	if OS.has_environment("CATFISH_AUTOFOCUS"):
 		game.start_focus()
+	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
+		_debug_act_frame = OS.get_environment("CATFISH_ACT_AT").to_int()
 	if OS.has_environment("CATFISH_ROAM"):
 		_debug_dir = OS.get_environment("CATFISH_ROAM").to_int()
 	if OS.has_environment("CATFISH_GO"):
@@ -272,7 +282,8 @@ func _update_roam(dt: float) -> void:
 			world.roam_moving = true
 			world.roam_flip = dir < 0
 			_last_walk_input = t
-	elif j.activity() == Journey.Activity.ROAM and (mini or t - _last_walk_input > ROAM_AUTO_MS):
+	elif j.activity() == Journey.Activity.ROAM and (mini or t - _last_walk_input > ROAM_AUTO_MS) \
+			and not (menu.open or wardrobe.open) and t - world.chat_t0 > 3500:
 		var x := float(j.roam_x())
 		game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))
 
@@ -289,8 +300,32 @@ func _interact() -> void:
 			play("click")
 		elif world.near_stall(x) and not game.state.basket.is_empty():
 			game.end_roam(0.0, world.frac_to_boat(x))
+		elif not world.door_near(x).is_empty():
+			_enter_building(world.door_near(x)[2])
+		elif world.stroller_near(x, Time.get_ticks_msec()) >= 0:
+			var t := Time.get_ticks_msec()
+			world.chat_with(world.stroller_near(x, t), t)
+			_last_walk_input = t
+			play("click")
 		else:
 			play("deny")
+
+
+## 走进镇上的房子 = 打开对应的面板。
+func _enter_building(kind: String) -> void:
+	play("buy")
+	log.write("enter", {"building": kind})
+	match kind:
+		"tackle":
+			menu.tab = 0
+			menu.open = true
+		"home":
+			menu.tab = 1
+			menu.open = true
+		"tailor":
+			wardrobe.open = true
+	_last_walk_input = Time.get_ticks_msec()
+	_update_polygon()
 
 
 ## 设置里循环切换：迷你窗大小 2→3→4→5→2，音效 0→1→2→3→0。
@@ -335,13 +370,33 @@ func _notification(what: int) -> void:
 
 
 func _quit() -> void:
+	_save_retry_at = 0
 	_save()
+	log.write("app_quit", {"gold": game.state.wallet_gold if game != null else 0})
 	get_tree().quit()
 
 
 func _save() -> void:
-	if game != null and saver.save(game.state.to_dict()):
+	if game == null:
+		return
+	var t := Time.get_ticks_msec()
+	if t < _save_retry_at:
+		return
+	if saver.save(game.state.to_dict()):
 		game.dirty = false
+	else:
+		# 写盘失败：内存里的进度保留（dirty 不清），5 秒后再试，不每帧硬写
+		_save_retry_at = t + 5000
+		log.write("save_failed", {"revision": game.state.revision})
+
+
+## 窗口最小化时降到 5 帧并停止重绘；逻辑照常推进（靠时间戳，不靠帧数）。
+func _update_power() -> void:
+	var hidden := get_window().mode == Window.MODE_MINIMIZED
+	if hidden != _low_power:
+		_low_power = hidden
+		adapter.set_fps(FPS_HIDDEN if hidden else FPS_NORMAL)
+		log.write("low_power", {"on": hidden})
 
 
 func _process(dt: float) -> void:
@@ -349,11 +404,17 @@ func _process(dt: float) -> void:
 		return
 	if _debug_speed > 1.0:
 		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
+	_update_power()
 	for e in game.tick():
+		log.write(e["type"], e)
 		_on_event(e)
 		if _debug_speed > 1.0:
 			print("[debug] frame %d event %s" % [Engine.get_frames_drawn(), str(e)])
 	_update_roam(dt)
+	if _debug_act_frame >= 0 and Engine.get_frames_drawn() >= _debug_act_frame:
+		_debug_act_frame = -1
+		_debug_dir = 0
+		_interact()
 	_fishing_feedback()
 	_debug_trace()
 	_track_window()
@@ -362,7 +423,8 @@ func _process(dt: float) -> void:
 	_update_camera(dt)
 	if game.dirty:
 		_save()
-	queue_redraw()
+	if not _low_power:
+		queue_redraw()
 	if not _shot_frames.is_empty() and not _shot_busy and Engine.get_frames_drawn() >= int(_shot_frames[0]):
 		_take_debug_shot()
 
@@ -495,9 +557,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not _config_ok:
 		return
 	if event is InputEventKey:
-		if event.pressed and not event.echo and not mini and not menu.open and not wardrobe.open \
-				and event.keycode in KEYS_ACT:
-			_interact()
+		if event.pressed and not event.echo and not mini:
+			if (menu.open or wardrobe.open) and event.keycode == KEY_ESCAPE:
+				menu.open = false          # Esc 关闭面板（从店里出来）
+				if wardrobe.open:
+					wardrobe.close()
+				_update_polygon()
+			elif not menu.open and not wardrobe.open and event.keycode in KEYS_ACT:
+				_interact()
 		return
 	if event is InputEventMouseMotion:
 		menu.hover = event.position / float(px_scale) - ui_off
@@ -549,6 +616,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _go_to_town() -> void:
 	if game.go_to_town():
+		log.write("go_to_town", {"basket": game.state.basket.size()})
 		_full_notified = false
 		play("cast")
 	else:
@@ -627,7 +695,13 @@ func _draw_hud(now: int) -> void:
 		if game.journey.in_town():
 			label("方向键走动", Vector2(17, 30), Pal.U_K)
 			if game.journey.activity() == Journey.Activity.ROAM:
-				label("空格键互动", Vector2(17, 41), Pal.U_K)
+				var rx := float(game.journey.roam_x())
+				var hint := "空格键互动"
+				if not world.door_near(rx).is_empty():
+					hint = "空格键进入"
+				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_stall(rx) and not world.near_pier(rx):
+					hint = "空格键聊天"
+				label(hint, Vector2(17, 41), Pal.U_K)
 		elif game.can_go_to_town():
 			label("空格键去小镇", Vector2(17, 30), Pal.U_K)
 
@@ -705,6 +779,10 @@ func label(s: String, pos: Vector2, color: Color) -> void:
 		return
 	var r: Rect2 = Labels.RECTS[s]
 	draw_texture_rect_region(tex["labels"], Rect2(pos, r.size), r, color)
+
+func label_width(s: String) -> float:
+	return Labels.RECTS[s].size.x if Labels.RECTS.has(s) else 0.0
+
 
 func label_centered(s: String, center_x: float, y: float, color: Color) -> void:
 	if Labels.RECTS.has(s):

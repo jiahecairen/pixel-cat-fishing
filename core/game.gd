@@ -32,6 +32,7 @@ var _cfg: Dictionary
 var _pomo_cfg: Dictionary
 var _base_capacity: int = 10
 var _free_multiplier: float = 2.0
+var _last_cp_state: int = 0
 
 func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock, rng: RandomNumberGenerator) -> void:
 	_cfg = balance
@@ -52,6 +53,10 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	pomodoro = Pomodoro.new(state.pomodoro, _pomo_cfg)
 	upgrades = Upgrades.new(balance.get("upgrades", {}))
 	_apply_upgrades()
+	# 接着上次没钓完的那一竿
+	if journey.activity() == Journey.Activity.FISHING and not pomodoro.is_break():
+		fishing.restore(state.fishing_checkpoint)
+	_last_cp_state = fishing.state
 
 func now_ms() -> int:
 	return _clock.now_ms()
@@ -60,6 +65,15 @@ func in_focus() -> bool:
 	return pomodoro.phase() == Pomodoro.Phase.FOCUS
 
 func tick() -> Array:
+	var events := _tick()
+	# 钓鱼状态一变就更新断点（状态切换不频繁，不会造成频繁写盘）
+	if fishing.state != _last_cp_state:
+		_last_cp_state = fishing.state
+		state.fishing_checkpoint = fishing.checkpoint()
+		dirty = true
+	return events
+
+func _tick() -> Array:
 	var now: int = _clock.now_ms()
 	var events: Array = []
 

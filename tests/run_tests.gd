@@ -10,6 +10,7 @@ const Fishing := preload("res://core/fishing_system.gd")
 const Pomodoro := preload("res://core/pomodoro.gd")
 const ConfigLoader := preload("res://io/config_loader.gd")
 const SaveService := preload("res://io/save_service.gd")
+const EventLog := preload("res://io/event_log.gd")
 
 class FakeClock:
 	var t: int = 1_000_000
@@ -39,6 +40,8 @@ func _init() -> void:
 		test_game_free_mode(balance, fish)
 		test_upgrades_and_settings(balance, fish)
 		test_cat_config()
+		test_checkpoint(balance, fish)
+		test_event_log()
 		test_save()
 		test_bad_config()
 	print("%d checks, %d failed" % [_checks, _fails])
@@ -350,6 +353,46 @@ func test_cat_config() -> void:
 	var old := s.to_dict(); old.erase("cat")
 	var s3 := GameState.new()
 	check(s3.from_dict(old) and not s3.cat["created"] and s3.cat["hat"] == 1, "旧存档兼容")
+
+func test_checkpoint(balance: Dictionary, fish: Array) -> void:
+	print("fishing checkpoint")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(11))
+	_run(g, clock, 5)
+	check(g.fishing.state == Fishing.State.WAITING and g.state.fishing_checkpoint["state"] == Fishing.State.WAITING, "等鱼时断点已记录")
+	var deadline: int = g.fishing.deadline_ms
+	var s2 := GameState.new(); s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
+	clock.t += 3000    # 关掉 3 秒再打开
+	var g2 := Game.new(balance, fish, s2, clock, _rng(99))
+	check(g2.fishing.state == Fishing.State.WAITING and g2.fishing.deadline_ms == deadline, "重启后接着等同一竿，咬钩时刻不变")
+	var ev := _run(g2, clock, (deadline - clock.t) / 1000.0 + 5)
+	check(_count(ev, "catch") == 1, "到点照常上鱼，只上一条")
+	# 断点里是没见过的鱼或非法状态：放弃断点，正常重新抛竿
+	var s3 := GameState.new()
+	s3.fishing_checkpoint = {"state": Fishing.State.REELING, "state_start_ms": 0, "deadline_ms": 0, "hooked_fish": "shark"}
+	var g3 := Game.new(balance, fish, s3, clock, _rng(1))
+	check(g3.fishing.state == Fishing.State.IDLE, "非法断点被忽略")
+	_run(g3, clock, 2)
+	check(g3.fishing.state == Fishing.State.CASTING or g3.fishing.state == Fishing.State.WAITING, "然后正常抛竿")
+	check(g3.state.basket.is_empty(), "非法断点不会凭空产生鱼")
+
+func test_event_log() -> void:
+	print("event log")
+	var path := "user://logs/test_events.log"
+	var dir := DirAccess.open("user://")
+	dir.remove("logs/test_events.log"); dir.remove("logs/test_events.log.1")
+	var lg := EventLog.new(path, 400)
+	lg.write("app_start", {"version": "t"})
+	lg.write("catch", {"fish_id": "koi"})
+	var lines := FileAccess.get_file_as_string(path).strip_edges().split("\n")
+	check(lines.size() == 2, "写入两行")
+	var last = JSON.parse_string(lines[1])
+	check(last is Dictionary and last["type"] == "catch" and last["fish_id"] == "koi" and last.has("time"), "每行是带时间和类型的 JSON")
+	for i in 20:
+		lg.write("filler", {"i": i})
+	check(FileAccess.file_exists(path + ".1"), "超过上限后轮转出 .1")
+	check(FileAccess.get_file_as_string(path).length() < 800, "当前日志保持在上限附近")
+	dir.remove("logs/test_events.log"); dir.remove("logs/test_events.log.1")
 
 func test_save() -> void:
 	print("save")

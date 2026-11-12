@@ -21,6 +21,11 @@ const ROAM_MAX_X := 1000
 const WORLD_END := 1048               # 世界右边界，镜头不会越过
 const ROAM_SPEED := 46.0              # 自由走动速度（像素/秒）
 const NEAR := 16                      # 离摊位/码头多近算"到了"
+## 可以进去的房子：[门的中心 x, 名字, 用途]
+const DOORS := [[674, "小猫的家", "home"], [828, "裁缝铺", "tailor"], [898, "渔具店", "tackle"]]
+## 街上散步的居民：[样子, 散步范围左端, 右端, 走一个来回的毫秒数]
+const STROLLERS := [[1, 690, 800, 26000], [2, 850, 980, 34000], [0, 930, 1010, 22000]]
+const CHAT := ["今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看"]
 const HOUSES := [["house_0", 652], ["house_1", 818], ["house_2", 872]]
 const TREES := [716, 940]
 
@@ -41,6 +46,10 @@ var leaving: Array = []       # 买完离开的顾客: {kind, t0}
 var walk_flip: bool = false   # 自动行走时是否朝左
 var roam_flip: bool = false   # 自由走动时是否朝左
 var roam_moving: bool = false
+var chat_who: int = -1        # 正在说话的居民下标
+var chat_line: String = ""
+var chat_t0: int = -100000
+var chat_x: float = 0.0       # 说话时居民停在原地
 
 func _init(main) -> void:
 	m = main
@@ -102,6 +111,58 @@ func near_stall(x: float) -> bool:
 func near_pier(x: float) -> bool:
 	return x <= PIER_X + NEAR
 
+## 小猫中心点附近的门；没有返回空数组。
+func door_near(x: float) -> Array:
+	for d in DOORS:
+		if absf(x + 16.0 - float(d[0])) <= 11.0:
+			return d
+	return []
+
+## 居民此刻的位置和朝向：返回 [x, 是否朝左]。说话时停在原地。
+func stroller_at(i: int, t: int) -> Array:
+	if i == chat_who and t - chat_t0 < 3500:
+		return [chat_x, chat_x > cat_pos.x]
+	var s: Array = STROLLERS[i]
+	var ph := fposmod(float(t + i * 7000) / float(s[3]), 1.0)
+	var going_right := ph < 0.5
+	var k := ph * 2.0 if going_right else (1.0 - ph) * 2.0
+	return [roundf(lerpf(float(s[1]), float(s[2]), k)), not going_right]
+
+func stroller_near(x: float, t: int) -> int:
+	for i in STROLLERS.size():
+		if absf(float(stroller_at(i, t)[0]) + 8.0 - (x + 16.0)) <= 18.0:
+			return i
+	return -1
+
+func chat_with(i: int, t: int) -> void:
+	chat_x = float(stroller_at(i, t)[0])
+	chat_who = i
+	chat_line = CHAT[(t / 1000 + i) % CHAT.size()]
+	chat_t0 = t
+
+func _draw_strollers(t: int) -> void:
+	for i in STROLLERS.size():
+		var at := stroller_at(i, t)
+		var talking := i == chat_who and t - chat_t0 < 3500
+		var name := "villager_%d" % int(STROLLERS[i][0])
+		var pos := Vector2(float(at[0]), GROUND_Y - 21)
+		if at[1]:
+			m.tex_frame_flipped(name, pos, 0 if talking else (t / 220) % 2, 2)
+		else:
+			m.tex_frame(name, pos, 0 if talking else (t / 220) % 2, 2)
+
+## 居民说的话：最后画，保证不被摊位和房子挡住。
+func _draw_chat(t: int) -> void:
+	if chat_who < 0 or t - chat_t0 >= 3500 or m.label_width(chat_line) <= 0:
+		return
+	var pos := Vector2(chat_x, GROUND_Y - 21)
+	var w: float = m.label_width(chat_line) + 6
+	var box := Rect2(roundf(pos.x + 8 - w / 2), pos.y - 17, w, 13)
+	m.draw_rect(box.grow(1), Pal.U_K)
+	m.draw_rect(box, Pal.U_W)
+	m.draw_rect(Rect2(pos.x + 6, box.end.y, 3, 2), Pal.U_W)
+	m.label(chat_line, box.position + Vector2(3, 1), Pal.U_K)
+
 func on_sale() -> void:
 	leaving.append({"kind": (m.game.journey.sales_made() - 1) % 3, "t0": Time.get_ticks_msec()})
 
@@ -135,6 +196,15 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 		m.draw_rect(Rect2(land_left, GROUND_Y + 16, right - land_left, maxf(0, bottom - GROUND_Y - 16)), Pal.L_N)
 	m.draw_texture(m.tex["pier"], Vector2(PIER_X, GROUND_Y))
 
+	for d in DOORS:      # 门楣上的木招牌
+		var w: float = m.label_width(d[1]) + 5
+		var plate := Rect2(roundf(float(d[0]) - w / 2), GROUND_Y - 39, w, 12)
+		m.draw_rect(plate.grow(1), Pal.U_K)
+		m.draw_rect(plate, Pal.L_N)
+		m.draw_rect(Rect2(plate.position.x, plate.end.y - 2, plate.size.x, 2), Pal.L_O)
+		m.label(d[1], plate.position + Vector2(3, 0), Pal.U_K)
+	_draw_strollers(t)
+
 	# 摊位（后半）→ 小猫 → 柜台
 	m.draw_texture(m.tex["stall_back"], Vector2(STALL_X, GROUND_Y - 40))
 	var in_town: bool = not j.on_boat()
@@ -145,6 +215,7 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	if act == Journey.Activity.VENDING:
 		_draw_stall_goods(now, t, on_break)
 	_draw_leaving(t)
+	_draw_chat(t)
 
 	# 船
 	if not in_town:

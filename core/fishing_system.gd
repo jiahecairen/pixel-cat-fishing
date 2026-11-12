@@ -20,6 +20,28 @@ func _init(cfg: Dictionary, fish_table: Array, rng: RandomNumberGenerator) -> vo
 	_fish = fish_table
 	_rng = rng
 
+## 断点：把当前这一竿的进度存下来，重启后接着等，而不是重新抛竿。
+func checkpoint() -> Dictionary:
+	return {"state": state, "state_start_ms": state_start_ms, "deadline_ms": deadline_ms, "hooked_fish": hooked_fish}
+
+## 从断点恢复。数据不合法（未知状态、未知鱼种）时返回 false 并保持空闲。
+func restore(cp: Dictionary) -> bool:
+	var s := int(cp.get("state", State.IDLE))
+	var fish := str(cp.get("hooked_fish", ""))
+	var known := fish == ""
+	for f in _fish:
+		if f["id"] == fish:
+			known = true
+	if s <= State.IDLE or s >= State.PAUSED or not known:
+		return false
+	if s in [State.HOOKED, State.REELING, State.SETTLEMENT] and fish == "":
+		return false
+	state = s
+	state_start_ms = int(cp.get("state_start_ms", 0))
+	deadline_ms = int(cp.get("deadline_ms", 0))
+	hooked_fish = fish
+	return true
+
 func is_active() -> bool:
 	return state != State.IDLE and state != State.PAUSED
 
