@@ -84,5 +84,13 @@
       3,
       1
     ]
+  },
+  "town": {
+    "sail_ms": 30000,
+    "walk_ms": 8000,
+    "sale_min_ms": 8000,
+    "sale_max_ms": 20000,
+    "eat_min_ms": 180000,
+    "eat_max_ms": 300000
   }
 }

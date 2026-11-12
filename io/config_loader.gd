@@ -34,6 +34,14 @@ static func load_balance(path: String = "res://data/balance.json") -> Dictionary
 	if float(f.get("bite_min_ms", 0)) <= 0 or float(f.get("bite_max_ms", 0)) < float(f.get("bite_min_ms", 0)):
 		push_error("balance.json 咬钩时间范围非法")
 		return {}
+	var town = b.get("town")
+	if not town is Dictionary:
+		push_error("balance.json 缺少 town")
+		return {}
+	for k in ["sail_ms", "walk_ms", "sale_min_ms", "sale_max_ms", "eat_min_ms", "eat_max_ms"]:
+		if float(town.get(k, 0)) <= 0:
+			push_error("balance.json town.%s 必须 > 0" % k)
+			return {}
 	for k in ["focus_min", "short_break_min", "long_break_min", "cycle_length"]:
 		if float(b["pomodoro"].get(k, 0)) <= 0:
 			push_error("balance.json pomodoro.%s 必须 > 0" % k)

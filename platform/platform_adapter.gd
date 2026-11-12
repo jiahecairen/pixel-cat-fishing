@@ -1,20 +1,29 @@
 extends RefCounted
 ## 平台适配接口。core 和 presentation 只通过这里接触"窗口/系统"能力。
 ## 移植到新平台 = 新写一个子类并在 platform.gd 里登记，其余代码不动。
-## 基类给出"普通全屏/窗口应用"的默认行为，手机和主机可直接用。
+## 基类给出"普通全屏应用"的默认行为，手机和主机可直接用（它们没有迷你悬浮窗）。
 
-## 是否为桌面悬浮形态（透明、置顶、可穿透）。false 时表现层应画一个完整背景。
+## 本平台是否支持桌面迷你悬浮窗（透明、置顶、可穿透）。
 func is_overlay() -> bool:
 	return false
 
-## 每个美术像素放大成多少个屏幕像素。
+## 迷你悬浮窗里每个美术像素放大成多少个屏幕像素。
 func pixel_scale(_preferred: int) -> int:
 	return max(1, _preferred)
 
-func setup_window(_window: Window, _art_size: Vector2i, _scale: int) -> void:
+## 屏幕缩放（Retina 为 2）。
+func screen_scale() -> int:
+	return 1
+
+## 切到迷你悬浮窗：无边框、透明、置顶、固定大小。
+func enter_mini(_window: Window, _size: Vector2i) -> void:
 	pass
 
-## 设置窗口内可交互区域（窗口像素坐标）；区域外鼠标穿透到后面的应用。
+## 切到全画面窗口：普通带标题栏的窗口，可调整大小。
+func enter_full(_window: Window, _size: Vector2i) -> void:
+	pass
+
+## 设置窗口内可交互区域（窗口像素坐标）；区域外鼠标穿透到后面的应用。传空数组 = 整窗可交互。
 func set_interactive_polygon(_window: Window, _points: PackedVector2Array) -> void:
 	pass
 

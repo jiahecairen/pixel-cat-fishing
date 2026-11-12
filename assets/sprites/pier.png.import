@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ccukcrdoysw38"
-path="res://.godot/imported/btn_sell.png-5b70aac8e5c152d7b625f631d7298535.ctex"
+uid="uid://bvwe20w8uipq5"
+path="res://.godot/imported/pier.png-46b73752d9bdbac1ce0ac3ed30d284f7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/btn_sell.png"
-dest_files=["res://.godot/imported/btn_sell.png-5b70aac8e5c152d7b625f631d7298535.ctex"]
+source_file="res://assets/sprites/pier.png"
+dest_files=["res://.godot/imported/pier.png-46b73752d9bdbac1ce0ac3ed30d284f7.ctex"]
 
 [params]
 

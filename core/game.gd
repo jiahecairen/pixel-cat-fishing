@@ -1,16 +1,19 @@
 extends RefCounted
 ## 游戏总控（纯逻辑，不依赖任何节点/窗口）。表现层每帧调用 tick()，按返回的事件做动画。
 ##
-## 三种模式：
-##   专注(FOCUS)  小猫正常速度钓鱼，鱼进"番茄渔获"，完成番茄后加成结算
-##   休息(BREAK)  小猫打盹，不钓鱼
-##   自由(IDLE)   小猫慢速钓鱼，鱼进鱼篓（容量有限，满了就停，需要手动卖）
+## 小猫的活动循环：钓鱼 → 鱼篓满 → 划船去小镇 → 摆摊一条条卖 → 划船回来 → 继续钓。
+## 番茄钟与活动循环的关系：
+##   专注中   在海上：正常速度钓鱼，鱼进不限量的"木箱"（番茄渔获），完成番茄时 1.5 倍结算；
+##            在摊位：每条鱼按 1.5 倍价格卖出。去不去小镇始终由玩家决定，不会自己出发
+##   自由挂机 钓鱼减速，鱼进鱼篓；满篓后要玩家点气泡才出发，否则小猫原地睡觉/玩掌机，偶尔偷吃一条
+##   休息中   整个循环暂停，小猫原地打盹
 
 const GameState := preload("res://core/game_state.gd")
 const Economy := preload("res://core/economy.gd")
 const FishingSystem := preload("res://core/fishing_system.gd")
 const Pomodoro := preload("res://core/pomodoro.gd")
 const Upgrades := preload("res://core/upgrades.gd")
+const Journey := preload("res://core/journey.gd")
 
 const DURATION_KEYS := ["focus_min", "short_break_min", "long_break_min"]
 
@@ -19,6 +22,7 @@ var economy: Economy
 var fishing: FishingSystem
 var pomodoro: Pomodoro
 var upgrades: Upgrades
+var journey: Journey
 var fish_list: Array = []
 var fish_by_id: Dictionary = {}
 var dirty: bool = false     # 有需要落盘的变化
@@ -39,6 +43,7 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 		fish_by_id[f["id"]] = f
 	economy = Economy.new(fish_table)
 	fishing = FishingSystem.new(balance["fishing"], fish_table, rng)
+	journey = Journey.new(state.journey, balance["town"], rng)
 	# 番茄钟用一份"生效配置"：默认值来自 balance.json，玩家在设置里改过的时长覆盖它
 	_pomo_cfg = balance["pomodoro"].duplicate(true)
 	for k in DURATION_KEYS:
@@ -65,29 +70,63 @@ func tick() -> Array:
 		events.append({"type": "break_done"})
 		dirty = true
 
-	_sync_fishing(now, events)
-
-	var fish_id := fishing.advance(now)
-	if fish_id != "":
-		if economy.add_catch(state, state.new_id("c"), fish_id, in_focus()):
-			events.append({"type": "catch", "fish_id": fish_id})
+	# 休息：整个循环暂停，记下暂停时刻，恢复时把截止时间顺延
+	if pomodoro.is_break():
+		if int(state.journey["paused_at_ms"]) == 0:
+			state.journey["paused_at_ms"] = now
+			fishing.stop(now)
 			dirty = true
+		return events
+	if int(state.journey["paused_at_ms"]) != 0:
+		journey.shift(maxi(0, now - int(state.journey["paused_at_ms"])))
+		state.journey["paused_at_ms"] = 0
+		dirty = true
+
+	match journey.activity():
+		Journey.Activity.FISHING:
+			_tick_fishing(now, events)
+		Journey.Activity.IDLE_FULL:
+			_tick_idle_full(now, events)
+		_:
+			_tick_trip(now, events)
 	return events
 
 func start_focus() -> bool:
 	var now: int = _clock.now_ms()
 	if not pomodoro.start_focus(now):
 		return false
-	fishing.stop(now)   # 重新抛竿，让专注从干净的一竿开始
+	if journey.activity() == Journey.Activity.FISHING:
+		fishing.stop(now)   # 重新抛竿，让专注从干净的一竿开始
 	dirty = true
 	return true
 
-## 放弃专注：已钓的鱼按原价结算，没有完成奖励。
+## 放弃专注：木箱里的鱼按原价结算，没有完成奖励，也不计入番茄数。返回结算金币，未在专注返回 -1。
 func abandon_focus() -> int:
 	if not pomodoro.abandon(_clock.now_ms()):
 		return -1
 	dirty = true
 	return economy.settle_haul(state, state.new_id("s"), 1.0, 0)
+
+func focus_multiplier() -> float:
+	return float(_pomo_cfg.get("focus_gold_multiplier", 1.0)) if in_focus() else 1.0
+
+## 完整窗口里玩家接管小猫（x 为当前世界坐标）。
+func begin_roam(x: float) -> bool:
+	if journey.begin_roam(x, _clock.now_ms()):
+		dirty = true
+		return true
+	return false
+
+## 松手后交还给自动流程：有鱼就走去摊位，没鱼就回码头。fraction 为剩余路程比例。
+func end_roam(fraction_to_stall: float, fraction_to_boat: float) -> void:
+	var to_stall := not state.basket.is_empty()
+	if journey.end_roam(to_stall, fraction_to_stall if to_stall else fraction_to_boat, _clock.now_ms()):
+		dirty = true
+
+## 玩家在码头按互动键：不管还有没有鱼，直接上船返航。
+func roam_board(fraction_to_boat: float) -> void:
+	if journey.end_roam(false, fraction_to_boat, _clock.now_ms()):
+		dirty = true
 
 func skip_break() -> bool:
 	if pomodoro.skip_break():
@@ -95,11 +134,18 @@ func skip_break() -> bool:
 		return true
 	return false
 
-func sell_basket() -> int:
-	var gold := economy.sell_basket(state, state.new_id("s"))
-	if gold > 0:
-		dirty = true
-	return gold
+func can_go_to_town() -> bool:
+	return journey.can_depart() and not state.basket.is_empty() and not pomodoro.is_break()
+
+## 让小猫出发去小镇卖鱼（鱼篓没满也可以提前去）。
+func go_to_town() -> bool:
+	if not can_go_to_town():
+		return false
+	var now: int = _clock.now_ms()
+	fishing.stop(now)
+	journey.depart(now)
+	dirty = true
+	return true
 
 func buy_upgrade(id: String) -> bool:
 	if not upgrades.buy(state, id):
@@ -123,19 +169,59 @@ func adjust_duration(key: String, direction: int) -> int:
 	dirty = true
 	return v
 
-func _clamp_setting(key: String, v: int) -> int:
-	var lim: Array = _cfg.get("settings_limits", {}).get(key, [1, 120, 1])
-	return clampi(v, int(lim[0]), int(lim[1]))
+# ------------------------------------------------------------------ 内部
+func _tick_fishing(now: int, events: Array) -> void:
+	var focus := in_focus()
+	fishing.wait_multiplier = 1.0 if focus else _free_multiplier
+	if not focus and economy.basket_full(state):
+		# 让最后一条鱼的结算动画播完再收竿
+		if fishing.is_active() and fishing.state == FishingSystem.State.SETTLEMENT:
+			fishing.advance(now)
+			return
+		fishing.stop(now)
+		journey.set_full(now)
+		events.append({"type": "basket_full"})
+		dirty = true
+		return
+	if not fishing.is_active():
+		fishing.start(now)
+	var fish_id := fishing.advance(now)
+	if fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
+		events.append({"type": "catch", "fish_id": fish_id})
+		dirty = true
 
-func _apply_upgrades() -> void:
-	state.basket_capacity = _base_capacity + upgrades.level(state, "basket") * int(upgrades.param("basket", "capacity_per_level", 0))
-	fishing.rarity_bonus = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0)
-	_free_multiplier = float(_cfg["fishing"]["free_wait_multiplier"])
-	if upgrades.has("rod"):
-		var table: Array = _cfg["upgrades"]["rod"].get("free_wait_multipliers", [])
-		var lv := upgrades.level(state, "rod")
-		if lv < table.size():
-			_free_multiplier = float(table[lv])
+func _tick_idle_full(now: int, events: Array) -> void:
+	if in_focus() or not economy.basket_full(state):   # 专注：鱼进木箱，满篓也接着钓
+		journey.resume_fishing(now)   # 例如刚升级了鱼篓容量
+		dirty = true
+	elif journey.advance(now) == "eat":
+		var eaten := economy.eat_cheapest(state)
+		if eaten != "":
+			events.append({"type": "ate", "fish_id": eaten})
+			journey.resume_fishing(now)
+		dirty = true
+
+func _tick_trip(now: int, events: Array) -> void:
+	var r := journey.advance(now)
+	if r == "":
+		return
+	dirty = true
+	match r:
+		"sale":
+			var sale := economy.sell_one(state, state.new_id("s"), focus_multiplier())
+			if not sale.is_empty():
+				events.append({"type": "sale", "fish_id": sale["fish_id"], "gold": sale["gold"]})
+			if state.basket.is_empty():
+				journey.leave_stall(now)
+				events.append({"type": "sold_out"})
+			else:
+				journey.schedule_next_sale(now)
+		"open":
+			if state.basket.is_empty():
+				journey.leave_stall(now)
+			events.append({"type": "open"})
+		_:
+			events.append({"type": r})
 
 func _finish_focus(is_long: bool) -> Dictionary:
 	var pc: Dictionary = _pomo_cfg
@@ -149,18 +235,16 @@ func _finish_focus(is_long: bool) -> Dictionary:
 	dirty = true
 	return {"type": "focus_done", "gold": gold, "fish_count": count, "long": is_long}
 
-func _sync_fishing(now: int, events: Array) -> void:
-	var should_fish := true
-	if pomodoro.is_break():
-		should_fish = false
-	elif not in_focus() and economy.basket_full(state):
-		should_fish = false
-	fishing.wait_multiplier = 1.0 if in_focus() else _free_multiplier
-	if should_fish and not fishing.is_active():
-		fishing.start(now)
-	elif not should_fish and fishing.is_active():
-		# 鱼篓满时让当前这一竿的结算动画播完再停
-		if pomodoro.is_break() or fishing.state != FishingSystem.State.SETTLEMENT:
-			fishing.stop(now)
-			if not pomodoro.is_break():
-				events.append({"type": "basket_full"})
+func _clamp_setting(key: String, v: int) -> int:
+	var lim: Array = _cfg.get("settings_limits", {}).get(key, [1, 120, 1])
+	return clampi(v, int(lim[0]), int(lim[1]))
+
+func _apply_upgrades() -> void:
+	state.basket_capacity = _base_capacity + upgrades.level(state, "basket") * int(upgrades.param("basket", "capacity_per_level", 0))
+	fishing.rarity_bonus = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0)
+	_free_multiplier = float(_cfg["fishing"]["free_wait_multiplier"])
+	if upgrades.has("rod"):
+		var table: Array = _cfg["upgrades"]["rod"].get("free_wait_multipliers", [])
+		var lv := upgrades.level(state, "rod")
+		if lv < table.size():
+			_free_multiplier = float(table[lv])

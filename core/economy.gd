@@ -4,10 +4,12 @@ extends RefCounted
 const GameState := preload("res://core/game_state.gd")
 
 var _prices: Dictionary = {}
+var _rarity: Dictionary = {}
 
 func _init(fish_table: Array) -> void:
 	for f in fish_table:
 		_prices[f["id"]] = int(f["price"])
+		_rarity[f["id"]] = int(f.get("rarity", 0))
 
 func price_of(fish_id: String) -> int:
 	return int(_prices.get(fish_id, 0))
@@ -49,7 +51,34 @@ func sell_basket(s: GameState, sale_id: String) -> int:
 	s.revision += 1
 	return gold
 
-## 结算番茄渔获。multiplier/bonus 由番茄钟是否完成决定。
+## 摆摊卖出鱼篓里的一条鱼。返回 {"fish_id", "gold"}；没卖成返回空字典。
+func sell_one(s: GameState, sale_id: String, multiplier: float = 1.0) -> Dictionary:
+	if sale_id in s.processed_sale_ids or s.basket.is_empty():
+		return {}
+	var fish_id: String = s.basket.pop_front()
+	var gold := int(round(price_of(fish_id) * multiplier))
+	_remember(s.processed_sale_ids, sale_id)
+	s.wallet_gold += gold
+	s.revision += 1
+	return {"fish_id": fish_id, "gold": gold}
+
+## 小猫偷吃：吃掉鱼篓里最便宜的一条普通鱼（稀有鱼 rarity>=2 不吃）。返回被吃的鱼 id，没得吃返回 ""。
+func eat_cheapest(s: GameState) -> String:
+	var best := -1
+	for i in s.basket.size():
+		var id: String = s.basket[i]
+		if int(_rarity.get(id, 0)) >= 2:
+			continue
+		if best < 0 or price_of(id) < price_of(s.basket[best]):
+			best = i
+	if best < 0:
+		return ""
+	var eaten: String = s.basket[best]
+	s.basket.remove_at(best)
+	s.revision += 1
+	return eaten
+
+## 结算番茄渔获（木箱）。multiplier/bonus 由番茄钟是否完成决定。
 func settle_haul(s: GameState, sale_id: String, multiplier: float, bonus: int) -> int:
 	if sale_id in s.processed_sale_ids:
 		return 0

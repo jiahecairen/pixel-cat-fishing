@@ -1,22 +1,39 @@
 extends "res://platform/platform_adapter.gd"
-## 桌面悬浮窗实现（macOS 为主，Windows/Linux 走同一套 Godot API）。
-## 采用已在技术探针中人工验证过的方案：polygon 局部穿透 + 系统原生拖动。
+## 桌面实现（macOS 为主，Windows/Linux 走同一套 Godot API）。
+## 迷你悬浮窗采用已人工验证过的方案：polygon 局部穿透 + 系统原生拖动。
 
 func is_overlay() -> bool:
 	return true
 
+func screen_scale() -> int:
+	return max(1, int(round(DisplayServer.screen_get_scale(DisplayServer.window_get_current_screen()))))
+
 func pixel_scale(preferred: int) -> int:
 	# Retina 屏下 Godot 的窗口尺寸以物理像素计，需要乘上屏幕缩放才不会显得太小
-	var s := DisplayServer.screen_get_scale(DisplayServer.window_get_current_screen())
-	return max(1, preferred) * max(1, int(round(s)))
+	return max(1, preferred) * screen_scale()
 
-func setup_window(window: Window, art_size: Vector2i, scale: int) -> void:
+func enter_mini(window: Window, size: Vector2i) -> void:
+	window.mode = Window.MODE_WINDOWED
 	window.borderless = true
 	window.transparent = true
 	window.transparent_bg = true
 	window.always_on_top = true
 	window.unresizable = true
-	window.size = art_size * scale
+	window.min_size = Vector2i.ZERO
+	window.size = size
+
+func enter_full(window: Window, size: Vector2i) -> void:
+	window.mouse_passthrough_polygon = PackedVector2Array()
+	window.always_on_top = false
+	window.transparent = false
+	window.transparent_bg = false
+	window.borderless = false
+	window.unresizable = false
+	window.min_size = Vector2i(480, 300)
+	var r := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	size = Vector2i(mini(size.x, r.size.x), mini(size.y, r.size.y - 40))
+	window.size = size
+	window.position = r.position + (r.size - size) / 2
 
 func set_interactive_polygon(window: Window, points: PackedVector2Array) -> void:
 	# 注意：不能同时打开 mouse_passthrough=true，那会整窗穿透并覆盖 polygon

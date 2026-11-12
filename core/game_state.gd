@@ -9,14 +9,16 @@ var revision: int = 0
 var wallet_gold: int = 0
 var basket_capacity: int = 10
 var basket: Array = []            # 自由挂机钓到的鱼 id
-var session_haul: Array = []      # 当前专注番茄内钓到的鱼 id
+var session_haul: Array = []      # 当前专注番茄内钓到的鱼 id（"木箱"，不限量）
 var processed_catch_ids: Array = []
 var processed_sale_ids: Array = []
 var next_seq: int = 1
 var pomodoro: Dictionary = {"phase": 0, "phase_end_ms": 0, "cycle_done": 0}
+var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0, "next_eat_ms": 0, "paused_at_ms": 0, "sales": 0, "roam_x": 0, "walk_from": -1}
 var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}}
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
-var settings: Dictionary = {"pixel_scale": 3, "sfx_volume": 2, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
+## view_mode: 0 = 桌面迷你悬浮窗，1 = 全画面窗口
+var settings: Dictionary = {"view_mode": 1, "pixel_scale": 3, "sfx_volume": 2, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
 var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0}
 ## 小猫形象：各项是 data/cat.json 里对应列表的下标；created=false 时首次启动会弹出捏猫面板
 var cat: Dictionary = {"fur": 0, "pattern": 1, "hat": 1, "created": false}
@@ -31,6 +33,7 @@ func to_dict() -> Dictionary:
 	return {
 		"save_version": save_version, "revision": revision,
 		"wallet_gold": wallet_gold, "basket_capacity": basket_capacity,
+		"journey": journey.duplicate(true),
 		"basket": basket.duplicate(), "session_haul": session_haul.duplicate(),
 		"processed_catch_ids": processed_catch_ids.duplicate(),
 		"processed_sale_ids": processed_sale_ids.duplicate(),
@@ -53,6 +56,9 @@ func from_dict(d: Dictionary) -> bool:
 	processed_sale_ids = _str_array(d.get("processed_sale_ids"))
 	next_seq = max(1, int(d.get("next_seq", 1)))
 	_merge(pomodoro, d.get("pomodoro"))
+	_merge(journey, d.get("journey"))
+	for k in journey.keys():
+		journey[k] = int(journey[k])
 	_merge(stats, d.get("stats"))
 	_merge(settings, d.get("settings"))
 	_merge(window, d.get("window"))

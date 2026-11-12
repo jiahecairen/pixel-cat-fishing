@@ -102,39 +102,55 @@ STRIPES = [(8, 19), (8, 20), (8, 21), (11, 17), (11, 18), (11, 19), (14, 17), (1
 HEAD_STRIPES = [(16, 9), (16, 10), (18, 8), (18, 9), (18, 10), (20, 9), (20, 10)]
 
 
-def draw_hat(c, hat, by):
+def draw_hat(c, hat, by, dx=0):
     if hat == "straw":
-        c.rect(13, 5 + by, 23, 7 + by, "h")
-        c.rect(14, 4 + by, 22, 4 + by, "h")
-        c.rect(13, 7 + by, 23, 7 + by, "r")
-        c.rect(9, 8 + by, 27, 8 + by, "h")
-        c.rect(10, 9 + by, 26, 9 + by, "H")
-        c.pts([(15, 5 + by), (16, 5 + by), (17, 4 + by)], "w")
+        c.rect(13 + dx, 5 + by, 23 + dx, 7 + by, "h")
+        c.rect(14 + dx, 4 + by, 22 + dx, 4 + by, "h")
+        c.rect(13 + dx, 7 + by, 23 + dx, 7 + by, "r")
+        c.rect(9 + dx, 8 + by, 27 + dx, 8 + by, "h")
+        c.rect(10 + dx, 9 + by, 26 + dx, 9 + by, "H")
+        c.pts([(15 + dx, 5 + by), (16 + dx, 5 + by), (17 + dx, 4 + by)], "w")
     elif hat == "bucket":
-        c.rect(14, 3 + by, 22, 3 + by, "g")
-        c.rect(13, 4 + by, 23, 6 + by, "g")
-        c.rect(13, 7 + by, 23, 7 + by, "G")
-        c.rect(11, 8 + by, 25, 8 + by, "g")
-        c.rect(10, 9 + by, 26, 9 + by, "G")
-        c.pts([(15, 4 + by), (16, 4 + by)], "W")
+        c.rect(14 + dx, 3 + by, 22 + dx, 3 + by, "g")
+        c.rect(13 + dx, 4 + by, 23 + dx, 6 + by, "g")
+        c.rect(13 + dx, 7 + by, 23 + dx, 7 + by, "G")
+        c.rect(11 + dx, 8 + by, 25 + dx, 8 + by, "g")
+        c.rect(10 + dx, 9 + by, 26 + dx, 9 + by, "G")
+        c.pts([(15 + dx, 4 + by), (16 + dx, 4 + by)], "W")
     elif hat == "beret":
-        c.ellipse(17, 6 + by, 6.2, 2.6, "r")
-        c.rect(12, 8 + by, 22, 8 + by, "R")
-        c.pts([(17, 3 + by), (17, 2 + by)], "R")
-        c.pts([(14, 5 + by), (15, 4 + by)], "p")
+        c.ellipse(17 + dx, 6 + by, 6.2, 2.6, "r")
+        c.rect(12 + dx, 8 + by, 22 + dx, 8 + by, "R")
+        c.pts([(17 + dx, 3 + by), (17 + dx, 2 + by)], "R")
+        c.pts([(14 + dx, 5 + by), (15 + dx, 4 + by)], "p")
 
 
-def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None):
+def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None, pose="sit", step=0):
     c = Canvas(32, 32)
     by = breathe
-    tail = [(6, 27), (5, 26), (4, 25), (3, 24), (3, 23)]
-    tail += [(3, 22), (4, 21)] if tail_up else [(2, 23), (2, 22)]
-    for x, y in tail:
-        c.rect(x, y, x + 1, y, "F")
-    c.ellipse(13, 23 + by, 7, 7 - by, "f")
-    c.ellipse(10, 25, 4, 4, "F")          # 背侧暗部
-    c.ellipse(13, 23 + by, 5, 5 - by, "f")
-    c.ellipse(16.5, 25, 2.6, 3.6, "1")    # 肚皮
+    if pose == "walk":
+        # 四脚着地走路：头的位置和坐姿完全一样，所以帽子不用另画
+        for x, y in [(5, 21), (4, 20), (3, 19), (3, 18), (4, 17)]:
+            c.rect(x, y, x + 1, y, "F")
+        far = [(10, 14)] if step == 0 else [(6, 18)]
+        near = [(7, 17)] if step == 0 else [(9, 15)]
+        for back, front in far:                      # 远侧的腿（暗）
+            c.rect(back, 25, back + 1, 28, "F"); c.rect(front, 25, front + 1, 28, "F")
+        c.ellipse(12.5, 22, 7.5, 4.5, "f")
+        c.ellipse(9.5, 24, 5, 2.2, "F")
+        c.ellipse(12.5, 21.3, 6, 3.4, "f")
+        c.ellipse(14, 25.2, 4, 1.2, "1")
+        for back, front in near:                     # 近侧的腿
+            c.rect(back, 25, back + 1, 28, "f"); c.rect(front, 25, front + 1, 28, "f")
+            c.rect(back, 29, back + 1, 29, "1"); c.rect(front, 29, front + 1, 29, "1")
+    else:
+        tail = [(6, 27), (5, 26), (4, 25), (3, 24), (3, 23)]
+        tail += [(3, 22), (4, 21)] if tail_up else [(2, 23), (2, 22)]
+        for x, y in tail:
+            c.rect(x, y, x + 1, y, "F")
+        c.ellipse(13, 23 + by, 7, 7 - by, "f")
+        c.ellipse(10, 25, 4, 4, "F")          # 背侧暗部
+        c.ellipse(13, 23 + by, 5, 5 - by, "f")
+        c.ellipse(16.5, 25, 2.6, 3.6, "1")    # 肚皮
     c.ellipse(18, 14 + by, 7.2, 6, "f")   # 头
     c.rows(12, 7 + by, ["f....", "ff...", "fpf..", "fpff."])     # 左耳
     c.rows(20, 7 + by, ["...f.", "..ff.", ".fpf.", "ffpf."])     # 右耳
@@ -142,7 +158,8 @@ def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None):
     c.ellipse(22, 16.5 + by, 3.2, 2.2, "1")  # 嘴套
     c.set(25, 15 + by, "p")               # 鼻
     c.pts([(12, 17 + by), (13, 18 + by), (12, 15 + by)], "F")  # 脸侧花纹
-    for x, y in STRIPES + [(x, y + by) for x, y in HEAD_STRIPES]:
+    body_stripes = [(8, 19), (8, 20), (11, 18), (11, 19), (14, 18), (14, 19)] if pose == "walk" else STRIPES
+    for x, y in body_stripes + [(x, y + by) for x, y in HEAD_STRIPES]:
         if c.get(x, y) == "f":
             c.set(x, y, "2")
     if eyes_closed:
@@ -150,16 +167,18 @@ def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None):
     else:
         c.rect(20, 13 + by, 21, 14 + by, "K")
         c.set(20, 13 + by, "W")
-    c.rect(19, 22, 21, 23, "1")           # 前爪
-    c.set(18, 22, "f")
+    if pose != "walk":
+        c.rect(19, 22, 21, 23, "1")           # 前爪
+        c.set(18, 22, "f")
     if hat:
         draw_hat(c, hat, by)
     c.outline()
     return c
 
 
-CAT_FRAMES = [dict(), dict(tail_up=True), dict(eyes_closed=True), dict(eyes_closed=True, breathe=1)]
-# 帧含义: 0 坐-A  1 坐-B（摆尾）  2 打盹-A / 眯眼  3 打盹-B（呼吸）
+CAT_FRAMES = [dict(), dict(tail_up=True), dict(eyes_closed=True), dict(eyes_closed=True, breathe=1),
+              dict(pose="walk", step=0), dict(pose="walk", step=1)]
+# 帧含义: 0 坐-A  1 坐-B（摆尾）  2 打盹-A / 眯眼  3 打盹-B（呼吸）  4 走路-A  5 走路-B
 
 
 def colorize(c, look):
@@ -268,24 +287,161 @@ def boat():
     return c
 
 
-# ---------------------------------------------------------------- 水面
-def water(phase):
-    w, h = 124, 22
-    c = Canvas(w, h)
-    for y in range(h):
-        t = y / (h - 1)
-        inset = int(round((1 - math.sin(math.pi * min(1, (y + 1) / 5.0) / 2)) * 6)) if y < 5 else 0
-        if y > h - 6:
-            inset = int(round(((y - (h - 6)) / 5.0) ** 2 * 10))
-        k = "b" if t < 0.6 else "B"
-        c.rect(inset, y, w - 1 - inset, y, k)
-    c.rect(8, 0, w - 9, 0, "c")
-    for row, (y, step) in enumerate(((3, 22), (8, 26), (13, 30))):
-        for i in range(-1, 6):
-            x = i * step + (row * 9 + phase * 5) % step
-            if c.get(x + 6, y) is not None and c.get(x, y) is not None:
-                c.rect(x, y, x + 5 - row, y, "c" if row < 2 else "b")
-                c.set(x + 1, y - 1, "W") if row == 0 else None
+# ---------------------------------------------------------------- 横版世界
+# 背景类素材（海、地面、云、山）不描边；物件（房子、摊位、码头、路人）描边。
+def sea(phase):
+    """海面瓦片 32×6，可横向平铺；下面的深水由代码填色。"""
+    c = Canvas(32, 6)
+    c.rect(0, 0, 31, 5, "b")
+    c.rect(0, 0, 31, 0, "c")
+    for x0 in (3 + phase * 5, 19 + phase * 5):
+        c.rect(x0 % 32, 0, (x0 % 32), 0, "W")
+        for i in range(5):
+            c.set((x0 + 6 + i) % 32, 3, "c")
+    for i in range(4):
+        c.set((11 + phase * 3 + i) % 32, 5, "B")
+    return c
+
+
+def ground():
+    """小镇地面瓦片 32×16：草皮 + 泥土。"""
+    c = Canvas(32, 16)
+    c.rect(0, 0, 31, 2, "g")
+    c.rect(0, 3, 31, 15, "n")
+    for x in (2, 9, 15, 22, 28):
+        c.set(x, 0, "G"); c.set(x + 1, 3, "g")
+    for x, y in ((4, 6), (13, 9), (20, 5), (27, 11), (8, 13), (30, 7), (17, 12)):
+        c.set(x, y, "o")
+    return c
+
+
+def pier():
+    c = Canvas(64, 28)
+    c.rect(0, 0, 63, 1, "n")
+    c.rect(0, 2, 63, 3, "o")
+    for x in range(7, 64, 8):
+        c.set(x, 0, "o"); c.set(x, 1, "o")
+    for x in (5, 30, 55):
+        c.rect(x, 4, x + 2, 27, "O")
+        c.rect(x, 4, x, 27, "o")
+    c.outline()
+    return c
+
+
+def house(wall, wall_dark, roof, roof_dark, w=46, door_x=18):
+    c = Canvas(w + 4, 60)
+    for i in range(18):                           # 屋顶
+        inset = max(0, 14 - i)
+        c.rect(1 + inset, 6 + i, w + 2 - inset, 6 + i, roof if i < 14 else roof_dark)
+    c.rect(w - 9, 2, w - 5, 12, "A"); c.rect(w - 10, 1, w - 4, 2, "a")   # 烟囱
+    for i in range(2, 14, 4):
+        c.rect(6 + max(0, 14 - i), 6 + i, w - 3 - max(0, 14 - i), 6 + i, roof_dark)
+    c.rect(3, 24, w, 59, wall)
+    c.rect(3, 24, w, 25, wall_dark)
+    c.rect(3, 56, w, 59, wall_dark)
+    c.rect(door_x, 42, door_x + 9, 59, "o"); c.rect(door_x, 42, door_x + 9, 43, "O"); c.set(door_x + 7, 51, "y")
+    for wx in (6, w - 13):
+        if abs(wx - door_x) > 8:
+            c.rect(wx, 31, wx + 8, 39, "c"); c.rect(wx, 31, wx + 8, 31, "O"); c.rect(wx + 4, 31, wx + 4, 39, "O")
+            c.rect(wx, 35, wx + 8, 35, "O"); c.set(wx + 1, 32, "W"); c.set(wx + 2, 33, "W")
+    c.outline()
+    return c
+
+
+def tree():
+    c = Canvas(24, 36)
+    c.rect(10, 22, 13, 35, "o"); c.rect(10, 22, 10, 35, "O")
+    c.ellipse(11.5, 13, 9.5, 10, "G")
+    c.ellipse(10, 11, 7.5, 7.5, "g")
+    c.pts([(6, 8), (7, 7), (9, 6), (13, 9), (5, 12)], "h")
+    c.outline()
+    return c
+
+
+def stall_back():
+    """摊位后半：立柱 + 红白条纹雨棚。猫坐在它和柜台之间。"""
+    c = Canvas(46, 40)
+    c.rect(3, 8, 4, 39, "o"); c.rect(41, 8, 42, 39, "o")
+    for x in range(1, 45):
+        k = "r" if ((x - 1) // 4) % 2 == 0 else "w"
+        c.rect(x, 1, x, 8, k)
+        if ((x - 1) % 4) in (1, 2):
+            c.set(x, 9, k)
+    c.rect(1, 1, 44, 1, "R")
+    c.outline()
+    return c
+
+
+def stall_front():
+    """摊位前半：柜台。"""
+    c = Canvas(46, 15)
+    c.rect(1, 1, 44, 2, "n")
+    c.rect(2, 3, 43, 14, "o")
+    c.rect(2, 3, 43, 3, "O")
+    for x in (12, 23, 34):
+        c.rect(x, 4, x, 14, "O")
+    c.outline()
+    return c
+
+
+def villager(kind, step):
+    """路人顾客，面朝左。kind: 0 兔子 1 小熊 2 狐狸"""
+    body, dark, ear = [("W", "a", "p"), ("o", "O", "n"), ("f", "F", "w")][kind]
+    cloth = ["b", "g", "r"][kind]
+    c = Canvas(16, 22)
+    if kind == 0:
+        c.rect(6, 1, 7, 6, body); c.rect(10, 1, 11, 6, body); c.set(6, 3, ear); c.set(10, 3, ear)
+    elif kind == 1:
+        c.rect(4, 4, 6, 6, body); c.rect(10, 4, 12, 6, body)
+    else:
+        c.rows(4, 3, ["f..", "ff.", "fff"], {"f": body}); c.rows(10, 3, ["..f", ".ff", "fff"], {"f": body})
+    c.ellipse(8, 9, 4.6, 3.8, body)
+    c.ellipse(8, 16, 4, 3.6, cloth)
+    c.rect(4, 15, 5, 17, body)                          # 伸出的手
+    c.set(5, 9, "K"); c.set(3, 10, "p" if kind != 2 else "K")
+    if kind == 2:
+        c.ellipse(5, 11, 2, 1.2, "w")
+    legs = [(6, 10)] if step == 0 else [(7, 9)]
+    for a_, b_ in legs:
+        c.rect(a_, 19, a_ + 1, 20, dark); c.rect(b_, 19, b_ + 1, 20, dark)
+    c.outline()
+    return c
+
+
+def gameboy():
+    c = Canvas(7, 9)
+    c.rect(1, 1, 5, 7, "a")
+    c.rect(2, 2, 4, 4, "g"); c.set(2, 2, "W")
+    c.set(2, 6, "K"); c.set(4, 6, "r")
+    c.outline()
+    return c
+
+
+def bubble():
+    """满篓气泡：点它让小猫去小镇卖鱼。里面画一个小摊。"""
+    c = Canvas(19, 18)
+    c.rect(2, 1, 16, 12, "W"); c.rect(1, 2, 17, 11, "W")
+    c.rows(4, 13, ["WWW", "WW.", "W.."])
+    c.rows(5, 3, ["rwrwrwrwr", "rwrwrwrwr", ".o.....o.", ".o.sSs.o.", ".nnnnnnn.", ".ooooooo."])
+    c.outline()
+    return c
+
+
+def cloud():
+    c = Canvas(30, 11)
+    c.ellipse(9, 6, 7, 3.6, "W"); c.ellipse(17, 4.5, 7, 4, "W"); c.ellipse(23, 7, 5.5, 3, "W")
+    c.rect(4, 8, 26, 9, "W")
+    return c
+
+
+def hills():
+    """远山，64 宽可平铺。"""
+    c = Canvas(64, 22)
+    for x in range(64):
+        h1 = int(9 + 7 * math.sin(x / 64 * 2 * math.pi) + 3 * math.sin(x / 64 * 6 * math.pi))
+        c.rect(x, 21 - h1, x, 21, "S")
+        h2 = int(5 + 4 * math.sin(x / 64 * 4 * math.pi + 1.3))
+        c.rect(x, 21 - h2, x, 21, "G")
     return c
 
 
@@ -362,7 +518,8 @@ def zzz():
 BTN = {
     "play": ["..g....", "..gg...", "..ggg..", "..gggg.", "..ggg..", "..gg...", "..g...."],
     "stop": [".......", ".rrrrr.", ".rrrrr.", ".rrrrr.", ".rrrrr.", ".rrrrr.", "......."],
-    "sell": ["..yyy..", ".yyHyy.", ".yHyyy.", ".yyHyy.", ".yyyHy.", ".yyHyy.", "..yyy.."],
+    "town": ["...r...", "..rrr..", ".rrrrr.", ".hhhhh.", ".hohch.", ".hohhh.", "......."],
+    "view": ["ww...ww", "w.....w", "..www..", "..www..", "..www..", "w.....w", "ww...ww"],
     "skip": [".......", "c..c.c.", "cc.ccc.", "cccccc.", "cc.ccc.", "c..c.c.", "......."],
     "menu": [".......", ".wwwww.", ".......", ".wwwww.", ".......", ".wwwww.", "......."],
     "plus": [".......", "...g...", "...g...", ".ggggg.", "...g...", "...g...", "......."],
@@ -450,6 +607,7 @@ LABELS = [
     "自由挂机钓得更快", "稀有鱼更容易上钩", "鱼篓容量加二", "金币可以升级装备",
     "？？？", "共钓到", "今日", "累计", "近七日", "专注", "短休", "长休", "大小", "音效",
     "我的小猫", "给小猫选个样子", "完成",
+    "方向键走动", "空格键互动", "空格键去小镇",
 ]
 FONT_FILE = os.path.join(os.path.dirname(__file__), "fonts", "fusion-pixel-10px-proportional-zh_hans.otf.woff")
 
@@ -494,10 +652,10 @@ def labels():
 
 
 def panel():
-    c = Canvas(98, 27)
-    c.rect(1, 1, 96, 25, "K")
-    c.rect(2, 2, 95, 2, "A")
-    for x, y in ((1, 1), (96, 1), (1, 25), (96, 25)):
+    c = Canvas(110, 27)
+    c.rect(1, 1, 108, 25, "K")
+    c.rect(2, 2, 107, 2, "A")
+    for x, y in ((1, 1), (108, 1), (1, 25), (108, 25)):
         c.px[y][x] = None
     return c
 
@@ -506,7 +664,19 @@ def build():
     made = {
         "cat": save(cat_sheet(), "cat"),
         "boat": save(boat(), "boat"),
-        "water": save(sheet([water(0), water(1), water(2)]), "water"),
+        "sea": save(sheet([sea(0), sea(1), sea(2)]), "sea"),
+        "ground": save(ground(), "ground"),
+        "pier": save(pier(), "pier"),
+        "house_0": save(house("w", "h", "r", "R"), "house_0"),
+        "house_1": save(house("l", "f", "b", "B", w=40, door_x=6), "house_1"),
+        "house_2": save(house("W", "a", "g", "G", w=52, door_x=22), "house_2"),
+        "tree": save(tree(), "tree"),
+        "stall_back": save(stall_back(), "stall_back"),
+        "stall_front": save(stall_front(), "stall_front"),
+        "gameboy": save(gameboy(), "gameboy"),
+        "bubble": save(bubble(), "bubble"),
+        "cloud": save(cloud(), "cloud"),
+        "hills": save(hills(), "hills"),
         "fish_crucian": save(fish("s", "S", "w", "S"), "fish_crucian"),
         "fish_bass": save(fish("b", "B", "W", "B"), "fish_bass"),
         "fish_koi": save(fish("y", "f", "w", "r", spots=True), "fish_koi"),
@@ -520,46 +690,42 @@ def build():
         "dots": save(dots(), "dots"),
         "panel": save(panel(), "panel"),
         "pips": save(pips(), "pips"),
-        "hold": save(hold(), "hold"),
         "sparkle": save(sparkle(), "sparkle"),
         "splash": save(splash(), "splash"),
+        "hold": save(hold(), "hold"),
         "labels": labels(),
     }
+    for k in range(3):
+        made["villager_%d" % k] = save(sheet([villager(k, 0), villager(k, 1)]), "villager_%d" % k)
     for n in BTN:
         made["btn_" + n] = save(sheet([button(n), button(n, True)]), "btn_" + n)
     return made
 
 
 def preview(made):
-    """合成一张 4 倍放大的场景预览，仅用于人工目检（不进版本库）。"""
-    s = Canvas(128, 96)
-    s.blit(made["panel"], 15, 1)
-    s.blit(made["tomato"], 19, 3)
-    for i, ch in enumerate("24:59"):
-        s.rows(32 + i * 4, 6, FONT[ch])
-    d = dots()
-    for i in range(4):
-        for y in range(5):
-            for x in range(5):
-                v = d.px[y][x + (5 if i < 2 else 0)]
-                if v: s.set(55 + i * 6 + x, 6 + y, v)
-    for i, n in enumerate(("play", "sell", "close")):
-        b = button(n)
-        s.blit(b, 78 + i * 11, 3)
-    s.blit(made["coin"], 20, 15); s.blit(made["basket"], 56, 14)
-    for i, ch in enumerate("128"): s.rows(31 + i * 4, 17, FONT[ch])
-    for i, ch in enumerate("3/10"): s.rows(69 + i * 4, 17, FONT[ch])
-    w0 = water(0); s.blit(w0, 2, 73)
-    s.blit(cat(), 44, 39)
-    s.blit(made["boat"], 34, 62)
-    s.blit(made["bobber"], 110, 70)
-    s.blit(made["bang"], 70, 30)
-    for i, n in enumerate(("fish_crucian", "fish_bass", "fish_koi")):
-        s.blit(made[n], 4 + i * 0, 30 + i * 13)
-    s.blit(zzz(), 82, 34)
-    im = Image.new("RGBA", (128, 96), (96, 110, 130, 255))
-    im.alpha_composite(s.image())
-    im = im.resize((128 * 5, 96 * 5), Image.NEAREST)
+    """拼一张小镇场景目检图（不进版本库）。"""
+    s = Canvas(320, 110)
+    s.rect(0, 0, 319, 109, "c")
+    for x in range(0, 320, 64):
+        s.blit(made["hills"], x, 46)
+    s.blit(made["cloud"], 30, 8); s.blit(made["cloud"], 190, 16)
+    for x in range(0, 128, 32):
+        s.blit(sea(0), x, 68)
+    s.rect(0, 74, 127, 109, "b"); s.rect(0, 90, 127, 109, "B")
+    for x in range(128, 320, 32):
+        s.blit(made["ground"], x, 64)
+    s.rect(128, 80, 319, 109, "n")
+    s.blit(made["pier"], 84, 61)
+    s.blit(made["house_0"], 140, 5); s.blit(made["house_1"], 196, 5); s.blit(made["house_2"], 262, 5)
+    s.blit(made["tree"], 240, 29)
+    s.blit(made["boat"], 20, 57); s.blit(cat(), 30, 34)
+    s.blit(made["stall_back"], 150, 25); s.blit(cat(), 157, 33); s.blit(made["stall_front"], 150, 50)
+    s.blit(cat(pose="walk"), 100, 32); s.blit(made["basket"], 104, 44)
+    s.blit(cat(pose="walk", step=1, hat="beret", look=("A", "K", "a", True, True)), 215, 35)
+    for k in range(3):
+        s.blit(villager(k, k % 2), 200 + k * 22 + (40 if k else 0), 43)
+    s.blit(made["bubble"], 52, 16); s.blit(made["gameboy"], 49, 53)
+    im = s.image().resize((320 * 4, 110 * 4), Image.NEAREST)
     im.save(os.path.join(os.path.dirname(__file__), "preview.png"))
 
 

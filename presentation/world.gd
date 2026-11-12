@@ -1,0 +1,328 @@
+extends RefCounted
+## 横版世界：海 → 码头 → 小镇街道 → 摊位。坐标单位是美术像素，x 向右、y 向下。
+## 两种视图（全画面 / 迷你悬浮窗）画的是同一个世界，只是镜头和取景大小不同。
+## 自己不是节点：借用主节点 m 的 draw_* 方法，只能在 m._draw() 里调用 draw()。
+
+const Pal := preload("res://presentation/palette.gd")
+const Fishing := preload("res://core/fishing_system.gd")
+const Journey := preload("res://core/journey.gd")
+
+const WATER_Y := 128        # 海面
+const GROUND_Y := 124       # 小镇地面 / 码头面（脚踩的那条线）
+const SHORE_X := 640        # 海岸线
+const FISH_X := 100         # 钓点：船的左端
+const DOCK_X := 512         # 靠岸：船的左端
+const PIER_X := 576
+const STALL_X := 760
+const WALK_FROM_X := 552
+const STALL_CAT_X := STALL_X + 1      # 小猫坐在摊位左半边，右半边摆鱼
+const ROAM_MIN_X := 548               # 自由走动的范围（小猫贴图左边缘）
+const ROAM_MAX_X := 1000
+const WORLD_END := 1048               # 世界右边界，镜头不会越过
+const ROAM_SPEED := 46.0              # 自由走动速度（像素/秒）
+const NEAR := 16                      # 离摊位/码头多近算"到了"
+const HOUSES := [["house_0", 652], ["house_1", 818], ["house_2", 872]]
+const TREES := [716, 940]
+
+# 相对小猫贴图左上角的偏移
+const HAND := Vector2(21, 22)
+const TIP_IDLE := Vector2(33, 6)
+const TIP_WAIT := Vector2(38, 12)
+const TIP_REEL := Vector2(30, 2)
+
+var m
+var cat_pos := Vector2(FISH_X + 10, WATER_Y - 34)   # 小猫贴图左上角（世界坐标）
+var boat_x: float = FISH_X
+var eat_t0: int = -100000
+var eat_fish: String = ""
+var splash_t0: int = -100000
+var hop_t0: int = -100000
+var leaving: Array = []       # 买完离开的顾客: {kind, t0}
+var walk_flip: bool = false   # 自动行走时是否朝左
+var roam_flip: bool = false   # 自由走动时是否朝左
+var roam_moving: bool = false
+
+func _init(main) -> void:
+	m = main
+
+func _ease(p: float) -> float:
+	return p * p * (3.0 - 2.0 * p)
+
+func boat_y(t: int) -> float:
+	return WATER_Y - 11 + (1 if (t / 900) % 2 == 0 else 0)
+
+func bobber_rest() -> Vector2:
+	return Vector2(boat_x + 74, WATER_Y - 3)
+
+## 每帧先调用：根据活动状态算出船和猫的位置。
+func update(now: int, t: int) -> void:
+	var j: Journey = m.game.journey
+	var p := _ease(j.progress(now))
+	match j.activity():
+		Journey.Activity.SAIL_OUT:
+			boat_x = lerpf(FISH_X, DOCK_X, p)
+		Journey.Activity.SAIL_BACK:
+			boat_x = lerpf(DOCK_X, FISH_X, p)
+		Journey.Activity.FISHING, Journey.Activity.IDLE_FULL:
+			boat_x = FISH_X
+		_:
+			boat_x = DOCK_X
+	boat_x = roundf(boat_x)
+	match j.activity():
+		Journey.Activity.WALK_TO_STALL, Journey.Activity.WALK_TO_BOAT:
+			# 默认从码头走到摊位（或反过来）；如果是玩家松手后接管，则从松手的位置出发
+			var to_stall: bool = j.activity() == Journey.Activity.WALK_TO_STALL
+			var from: float = j.walk_from() if j.walk_from() >= 0 else (WALK_FROM_X if to_stall else STALL_CAT_X)
+			var to: float = STALL_CAT_X if to_stall else WALK_FROM_X
+			walk_flip = to < from
+			cat_pos = Vector2(roundf(lerpf(from, to, j.progress(now))), GROUND_Y - 30)
+		Journey.Activity.ROAM:
+			cat_pos = Vector2(j.roam_x(), GROUND_Y - 30)
+		Journey.Activity.VENDING:
+			cat_pos = Vector2(STALL_CAT_X, GROUND_Y - 31)
+		_:
+			cat_pos = Vector2(boat_x + 10, boat_y(t) - 23)
+
+## 满篓气泡的点击区域（世界坐标）；不显示气泡时返回空矩形。
+func bubble_rect(t: int) -> Rect2:
+	if m.game.journey.activity() != Journey.Activity.IDLE_FULL or m.game.pomodoro.is_break():
+		return Rect2()
+	return Rect2(cat_pos + Vector2(34, -11 - (t / 600) % 2), Vector2(19, 18))   # 在头的右上方，不被迷你视图的面板挡住
+
+## 从 x 走到摊位 / 码头的路程，占"码头↔摊位"全程的比例。
+func frac_to_stall(x: float) -> float:
+	return absf(x - STALL_CAT_X) / float(STALL_CAT_X - WALK_FROM_X)
+
+func frac_to_boat(x: float) -> float:
+	return absf(x - WALK_FROM_X) / float(STALL_CAT_X - WALK_FROM_X)
+
+func near_stall(x: float) -> bool:
+	return absf(x - STALL_CAT_X) <= NEAR
+
+func near_pier(x: float) -> bool:
+	return x <= PIER_X + NEAR
+
+func on_sale() -> void:
+	leaving.append({"kind": (m.game.journey.sales_made() - 1) % 3, "t0": Time.get_ticks_msec()})
+
+# ------------------------------------------------------------------ 绘制
+func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
+	var g = m.game
+	var j: Journey = g.journey
+	var act: int = j.activity()
+	var on_break: bool = g.pomodoro.is_break()
+	var left := cam.x + (2 if mini else 0)
+	var right := cam.x + view.x - (2 if mini else 0)
+	var bottom := cam.y + view.y
+
+	if not mini:
+		_draw_sky(cam, view, t)
+	for h in HOUSES:
+		m.draw_texture(m.tex[h[0]], Vector2(h[1], GROUND_Y - 60))
+	for x in TREES:
+		m.draw_texture(m.tex["tree"], Vector2(x, GROUND_Y - 36))
+
+	# 海
+	var sea_right := minf(right, SHORE_X)
+	if left < sea_right:
+		_tile_row("sea", (t / 600) % 3, 3, WATER_Y, left, sea_right)
+		m.draw_rect(Rect2(left, WATER_Y + 6, sea_right - left, 14), Pal.L_B)
+		m.draw_rect(Rect2(left, WATER_Y + 20, sea_right - left, maxf(0, bottom - WATER_Y - 20)), Pal.U_B)
+	# 地面
+	var land_left := maxf(left, SHORE_X)
+	if land_left < right:
+		_tile_row("ground", 0, 1, GROUND_Y, land_left, right)
+		m.draw_rect(Rect2(land_left, GROUND_Y + 16, right - land_left, maxf(0, bottom - GROUND_Y - 16)), Pal.L_N)
+	m.draw_texture(m.tex["pier"], Vector2(PIER_X, GROUND_Y))
+
+	# 摊位（后半）→ 小猫 → 柜台
+	m.draw_texture(m.tex["stall_back"], Vector2(STALL_X, GROUND_Y - 40))
+	var in_town: bool = not j.on_boat()
+	var bob_y := boat_y(t)
+	if in_town:
+		_draw_town_cat(act, on_break, now, t)
+	m.draw_texture(m.tex["stall_front"], Vector2(STALL_X, GROUND_Y - 15))
+	if act == Journey.Activity.VENDING:
+		_draw_stall_goods(now, t, on_break)
+	_draw_leaving(t)
+
+	# 船
+	if not in_town:
+		_draw_boat_cat(act, on_break, now, t)
+	m.draw_texture(m.tex["boat"], Vector2(boat_x, bob_y))
+	if not in_town:
+		_draw_boat_extras(act, on_break, now, t)
+
+func _draw_sky(cam: Vector2, view: Vector2, t: int) -> void:
+	m.draw_rect(Rect2(cam, view), Pal.L_C)
+	m.draw_rect(Rect2(cam.x, WATER_Y - 26, view.x, 26), Pal.U_W)
+	# 远景视差：云最慢，山其次
+	var cloud_shift := fposmod(cam.x * 0.85 - t / 500.0, 150.0)
+	for i in range(-1, int(view.x / 150) + 2):
+		var cx := cam.x - cloud_shift + i * 150
+		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 20), cam.y + 14 + (i * 37) % 23 + maxf(0, view.y - 180) * 0.5))
+		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 95), cam.y + 40 + (i * 53) % 17 + maxf(0, view.y - 180) * 0.5))
+	var hill_shift := fposmod(cam.x * 0.4, 64.0)
+	for i in range(-1, int(view.x / 64) + 2):
+		m.draw_texture(m.tex["hills"], Vector2(roundf(cam.x - hill_shift + i * 64), WATER_Y - 22))
+
+func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
+	if on_break:
+		m.draw_cat(cat_pos + Vector2(0, -1 if act != Journey.Activity.VENDING else 0), 2 + (t / 1100) % 2)
+		m.draw_texture(m.tex["zzz"], cat_pos + Vector2(30, -4 - (t / 500) % 3))
+		return
+	match act:
+		Journey.Activity.WALK_TO_STALL, Journey.Activity.WALK_TO_BOAT:
+			m.draw_cat(cat_pos, 4 + (t / 180) % 2, walk_flip)
+			if not m.game.state.basket.is_empty():        # 还有鱼就背着鱼篓
+				m.draw_texture(m.tex["basket"], cat_pos + Vector2(17 if walk_flip else 4, 11 + (t / 180) % 2))
+		Journey.Activity.ROAM:
+			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 4, roam_flip)
+			if not m.game.state.basket.is_empty():
+				m.draw_texture(m.tex["basket"], cat_pos + Vector2(17 if roam_flip else 4, 11 + ((t / 180) % 2 if roam_moving else 0)))
+		Journey.Activity.VENDING:
+			var frame := (t / 700) % 2
+			var p := cat_pos
+			if t - hop_t0 < 500:
+				frame = 2
+				p.y -= 2 if t - hop_t0 < 140 else (1 if t - hop_t0 < 280 else 0)
+			m.draw_cat(p, frame)
+
+func _draw_stall_goods(now: int, t: int, on_break: bool) -> void:
+	var g = m.game
+	# 柜台右半边摆出接下来要卖的两条鱼（先卖的在前面）
+	var n: int = mini(g.state.basket.size(), 2)
+	for i in n:
+		var f: Dictionary = g.fish_by_id.get(g.state.basket[n - 1 - i], {})
+		if m.tex.has(f.get("sprite", "")):
+			m.draw_texture(m.tex[f["sprite"]], Vector2(STALL_X + 29 - (n - 1 - i) * 3, GROUND_Y - 24 - (n - 1 - i) * 3))
+	if on_break or g.state.basket.is_empty():
+		return
+	# 顾客在这一单的后半段从右边走过来
+	var p: float = g.journey.progress(now)
+	if p > 0.45:
+		var q := minf(1.0, (p - 0.45) / 0.5)
+		var x := STALL_X + 50 + roundf((1.0 - q) * 80.0)
+		var walking := q < 1.0
+		m.tex_frame("villager_%d" % (g.journey.sales_made() % 3), Vector2(x, GROUND_Y - 21), (t / 200) % 2 if walking else 0, 2)
+
+func _draw_leaving(t: int) -> void:
+	var keep: Array = []
+	for c in leaving:
+		var age: int = t - int(c["t0"])
+		if age < 4500:
+			keep.append(c)
+			var x := STALL_X + 50 + roundf(age * 0.028)
+			m.tex_frame_flipped("villager_%d" % int(c["kind"]), Vector2(x, GROUND_Y - 21), (t / 200) % 2, 2)
+			m.draw_texture(m.tex["fish_crucian"], Vector2(x + 8, GROUND_Y - 12))   # 拎着买到的鱼
+	leaving = keep
+
+func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:
+	var frame := (t / 700) % 2
+	var pos := cat_pos
+	var flip := act == Journey.Activity.SAIL_BACK
+	if on_break:
+		frame = 2 + (t / 1100) % 2
+	elif act == Journey.Activity.IDLE_FULL:
+		if t - eat_t0 < 1600:
+			frame = 2
+			pos.y -= 1 if (t / 200) % 2 == 0 else 0
+		elif _idle_sleeping(now):
+			frame = 2 + (t / 1100) % 2
+	elif t - hop_t0 < 600:
+		frame = 2   # 钓到鱼：眯眼开心跳一下
+		pos.y -= 2 if t - hop_t0 < 140 else (1 if t - hop_t0 < 280 else 0)
+	m.draw_cat(pos, frame, flip)
+
+func _idle_sleeping(now: int) -> bool:
+	return (now / 40000) % 2 == 0
+
+func _draw_boat_extras(act: int, on_break: bool, now: int, t: int) -> void:
+	if on_break:
+		m.draw_texture(m.tex["zzz"], cat_pos + Vector2(32, -2 - (t / 500) % 3))
+		return
+	match act:
+		Journey.Activity.FISHING:
+			_draw_fishing(t, now)
+		Journey.Activity.IDLE_FULL:
+			if t - eat_t0 < 1600:
+				var f: Dictionary = m.game.fish_by_id.get(eat_fish, {})
+				if t - eat_t0 < 1000 and m.tex.has(f.get("sprite", "")):
+					m.draw_texture(m.tex[f["sprite"]], cat_pos + Vector2(21, 11))
+			elif _idle_sleeping(now):
+				m.draw_texture(m.tex["zzz"], cat_pos + Vector2(21, -11 - (t / 500) % 3))
+			else:
+				m.draw_texture(m.tex["gameboy"], cat_pos + Vector2(18, 17))
+				if (t / 350) % 3 == 0:
+					m.draw_rect(Rect2(cat_pos + Vector2(27, 13), Vector2(1, 1)), Pal.L_G)
+			var b := bubble_rect(t)
+			if b.size.x > 0:
+				m.draw_texture(m.tex["bubble"], b.position)
+		Journey.Activity.SAIL_OUT, Journey.Activity.SAIL_BACK:
+			# 划桨：桨从爪子伸到水里，前后摆动
+			var dir := -1.0 if act == Journey.Activity.SAIL_BACK else 1.0
+			var swing := roundf(sin(t / 260.0) * 6.0)
+			var hand := cat_pos + (Vector2(10, 23) if dir < 0 else Vector2(21, 23))
+			var blade := Vector2(boat_x + 32 - dir * 6 + swing, WATER_Y + 3)
+			m.pixel_line(hand, blade, Pal.U_O)
+			m.draw_rect(Rect2(blade.x - 1, blade.y, 3, 3), Pal.L_N)
+			if absf(swing) > 4:
+				m.tex_frame("splash", blade + Vector2(-5, -3), (t / 130) % 2, 2)
+
+func _draw_fishing(t: int, now: int) -> void:
+	var fs: int = m.game.fishing.state
+	var prog: float = m.game.fishing.progress(now)
+	var rest := bobber_rest()
+	var tip := TIP_IDLE
+	var bobber := Vector2.INF     # INF = 不画浮漂
+	var fish_tex: Texture2D = null
+	var fish_pos := Vector2.ZERO
+	match fs:
+		Fishing.State.CASTING:
+			tip = TIP_IDLE.lerp(TIP_WAIT, prog)
+			if prog > 0.4:
+				var k := (prog - 0.4) / 0.6
+				bobber = ((cat_pos + tip).lerp(rest, k) + Vector2(0, -10.0 * sin(k * PI))).round()
+		Fishing.State.WAITING:
+			tip = TIP_WAIT
+			bobber = rest + Vector2(0, (t / 800) % 2)
+		Fishing.State.HOOKED:
+			tip = TIP_WAIT + Vector2(1, 2)
+			bobber = rest + Vector2((t / 80) % 2, 3)
+			m.draw_texture(m.tex["bang"], cat_pos + Vector2(24, -12))
+		Fishing.State.REELING:
+			tip = TIP_WAIT.lerp(TIP_REEL, minf(1.0, prog * 2.0))
+			fish_tex = _hooked_tex()
+			fish_pos = (rest.lerp(cat_pos + TIP_REEL + Vector2(-6, 8), prog)).round()
+		Fishing.State.SETTLEMENT:
+			tip = TIP_REEL.lerp(TIP_IDLE, prog)
+			fish_tex = _hooked_tex()
+			fish_pos = (cat_pos + Vector2(8, -12 - 6.0 * prog)).round()
+	var tip_abs := (cat_pos + tip).round()
+	m.pixel_line(cat_pos + HAND, tip_abs, Pal.U_O)
+	if bobber != Vector2.INF:
+		m.pixel_line(tip_abs, bobber + Vector2(2, 0), Pal.L_W)
+		m.draw_texture(m.tex["bobber"], bobber)
+	if fish_tex != null:
+		if fs == Fishing.State.REELING:
+			m.pixel_line(tip_abs, fish_pos + Vector2(16, 5), Pal.L_W)
+		m.draw_texture(fish_tex, fish_pos)
+	if t - splash_t0 < 360:
+		m.tex_frame("splash", rest + Vector2(-3, 3), 0 if t - splash_t0 < 180 else 1, 2)
+
+func _hooked_tex() -> Texture2D:
+	var f: Dictionary = m.game.fish_by_id.get(m.game.fishing.hooked_fish, {})
+	return m.tex.get(f.get("sprite", ""), null)
+
+## 横向平铺一行瓦片，两端按 x_from / x_to 精确裁切。
+func _tile_row(name: String, frame: int, count: int, y: float, x_from: float, x_to: float) -> void:
+	var tx: Texture2D = m.tex[name]
+	var w: int = tx.get_width() / count
+	var h: int = tx.get_height()
+	var x := floorf(x_from / w) * w
+	while x < x_to:
+		var a := maxf(x, x_from)
+		var b := minf(x + w, x_to)
+		if b > a:
+			m.draw_texture_rect_region(tx, Rect2(a, y, b - a, h), Rect2(frame * w + (a - x), 0, b - a, h))
+		x += w

@@ -1,12 +1,18 @@
 extends Node2D
 ## 表现层入口：把 core 的状态画成像素画面，把鼠标操作翻译成 core 的指令。
-## 所有坐标以"美术像素"为单位（画布 128×96），整个节点按整数倍放大，保证像素不糊。
+##
+## 同一个横版世界有两种视图：
+##   全画面  普通窗口，取景随窗口大小变化（至少 180 像素高），镜头跟着小猫
+##   迷你    桌面透明悬浮窗，固定 128×96，只取小猫周围一小块，透明区域鼠标穿透
+## 所有坐标以"美术像素"为单位，整个节点按整数倍放大，保证像素不糊。
+## 三套坐标：世界坐标（world.gd）、界面坐标（HUD/菜单，原点在 ui_off）、视图坐标（窗口内的美术像素）。
 
 const Game := preload("res://core/game.gd")
 const GameState := preload("res://core/game_state.gd")
 const Clock := preload("res://core/clock.gd")
 const Fishing := preload("res://core/fishing_system.gd")
 const Pomodoro := preload("res://core/pomodoro.gd")
+const Journey := preload("res://core/journey.gd")
 const ConfigLoader := preload("res://io/config_loader.gd")
 const SaveService := preload("res://io/save_service.gd")
 const Platform := preload("res://platform/platform.gd")
@@ -14,45 +20,60 @@ const Pal := preload("res://presentation/palette.gd")
 const Labels := preload("res://presentation/labels.gd")
 const Menu := preload("res://presentation/menu.gd")
 const Wardrobe := preload("res://presentation/wardrobe.gd")
+const World := preload("res://presentation/world.gd")
 
-const ART := Vector2i(128, 96)
+const MINI_VIEW := Vector2i(128, 96)
+const FULL_MIN_H := 180          # 全画面至少能看到这么高的世界
+const FULL_MIN_W := 256
+const FULL_DEFAULT := Vector2i(960, 540)
 const FONT_ORDER := "0123456789:/+x-"
 const FPS_NORMAL := 30
 const FPS_DRAG := 60
 const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
-
-# ---- 布局（美术像素） ----
-const PANEL_POS := Vector2(15, 1)
-const BTN_MAIN := Rect2(78, 3, 11, 11)
-const BTN_SELL := Rect2(89, 3, 11, 11)
-const BTN_MENU := Rect2(100, 3, 11, 11)
-const BTN_CLOSE := Rect2(100, 14, 11, 11)
-const BTN_CAT := Rect2(89, 14, 11, 11)
+const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
+	"stall_front", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "cloud", "hills",
+	"tomato", "coin", "basket", "hold", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
+	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
+	"btn_minus", "btn_left", "btn_right", "btn_cat", "btn_town", "btn_view"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed"]
-const DRAG_RECT := Rect2(30, 28, 90, 66)
-const WATER_POS := Vector2(2, 73)
-const BOAT_POS := Vector2(34, 62)
-const CAT_POS := Vector2(44, 39)
-const BOBBER_POS := Vector2(108, 70)
-const HAND := Vector2(21, 22)
-const TIP_IDLE := Vector2(33, 6)
-const TIP_WAIT := Vector2(38, 12)
-const TIP_REEL := Vector2(30, 2)
+const CAT_FRAMES := 6
+
+# ---- 界面布局（界面坐标） ----
+const PANEL_POS := Vector2(15, 1)
+const PANEL_SIZE := Vector2(110, 27)
+const BTN_MAIN := Rect2(78, 3, 11, 11)
+const BTN_TOWN := Rect2(89, 3, 11, 11)
+const BTN_MENU := Rect2(100, 3, 11, 11)
+const BTN_VIEW := Rect2(111, 3, 11, 11)
+const BTN_CAT := Rect2(100, 14, 11, 11)
+const BTN_CLOSE := Rect2(111, 14, 11, 11)
+const MINI_SCENE := Rect2(4, 28, 121, 66)     # 迷你视图里可拖动/可点击的场景区域
+const MINI_CAM_Y := World.WATER_Y - 74
+const MINI_CAT_X := 44                        # 迷你视图里小猫固定出现的横坐标
+const FULL_UI_OFF := Vector2(-11, 3)
 
 var game: Game
 var adapter
 var saver: SaveService
+var clock: Clock
+var menu: Menu
+var wardrobe: Wardrobe
+var world: World
+var cat_cfg: Dictionary = {}
 var tex: Dictionary = {}
-var px_scale: int = 3
-var floats: Array = []          # 飘字: {text, icon, pos, t0}
-var particles: Array = []       # 闪光粒子: {pos, vel, t0, life}
 var sfx: Dictionary = {}
+var px_scale: int = 3
+var mini: bool = false
+var view := Vector2(320, 180)   # 当前取景大小（美术像素）
+var cam := Vector2.ZERO         # 镜头左上角（世界坐标）
+var ui_off := Vector2.ZERO      # 界面坐标原点在视图里的位置
+var floats: Array = []          # 飘字（世界坐标）: {text, icon, pos, t0}
+var particles: Array = []       # 闪光粒子（视图坐标）: {pos, vel, t0, life}
+
 var _players: Array = []
 var _next_player: int = 0
 var _last_fs: int = -1
-var _hop_t0: int = -100000      # 小猫开心跳一下的起始时刻
-var _splash_t0: int = -100000
 var _pressed_btn: String = ""
 var _dragging: bool = false
 var _last_win_pos := Vector2i.ZERO
@@ -60,12 +81,20 @@ var _pos_stable_since: int = 0
 var _config_ok: bool = true
 var _limits: Dictionary = {}
 var _missing_labels: Dictionary = {}
-var clock: Clock
-var menu: Menu
-var wardrobe: Wardrobe
-var cat_cfg: Dictionary = {}
+var _full_notified: bool = false
+var _roam_fx: float = 0.0        # 自由走动的亚像素位置
+var _last_walk_input: int = -100000
+const ROAM_AUTO_MS := 6000       # 松手这么久后小猫自己接着干活
+const KEYS_LEFT := [KEY_LEFT, KEY_A]
+const KEYS_RIGHT := [KEY_RIGHT, KEY_D]
+const KEYS_ACT := [KEY_SPACE, KEY_ENTER, KEY_E, KEY_UP, KEY_W]
+var _cam_snap: bool = true
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
-var _debug_last_state: int = -1
+var _debug_last: String = ""
+var _debug_dir: int = 0         # 调试：CATFISH_ROAM=1/-1 模拟一直按着右/左方向键
+var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  在这些帧截图后退出
+var _shot_frames: Array = []
+var _shot_busy: bool = false
 
 
 func _ready() -> void:
@@ -92,21 +121,14 @@ func _ready() -> void:
 	game = Game.new(balance, fish, state, clock, rng)
 	menu = Menu.new(self)
 	wardrobe = Wardrobe.new(self)
+	world = World.new(self)
 	wardrobe.open = not state.cat.get("created", false)   # 第一次启动先捏猫
-	if OS.is_debug_build():
-		if OS.has_environment("CATFISH_SPEED"):
-			_debug_speed = maxf(1.0, OS.get_environment("CATFISH_SPEED").to_float())
-		if OS.has_environment("CATFISH_AUTOFOCUS"):
-			game.start_focus()
+	_apply_debug_env()
 
-	for n in ["cat", "boat", "water", "tomato", "coin", "basket", "bobber", "bang", "zzz",
-			"font", "dots", "panel", "btn_play", "btn_stop", "btn_sell", "btn_skip", "btn_close",
-			"btn_menu", "btn_plus", "btn_minus", "pips", "hold", "labels", "sparkle", "splash",
-			"btn_left", "btn_right", "btn_cat"]:
+	for n in SPRITES:
 		tex[n] = load("res://assets/sprites/%s.png" % n)
 	for f in fish:
 		tex[f["sprite"]] = load("res://assets/sprites/%s.png" % f["sprite"])
-
 	for n in CAT_LAYERS:
 		tex["cat/" + n] = load("res://assets/cat/%s.png" % n)
 	for h in cat_cfg["hats"]:
@@ -121,36 +143,157 @@ func _ready() -> void:
 	_last_fs = game.fishing.state
 
 	adapter = Platform.create()
-	var win := get_window()
 	adapter.set_fps(FPS_NORMAL)
-	_apply_pixel_scale()
-	if adapter.is_overlay():
-		var pos: Vector2i = adapter.default_position(win)
-		if state.window.get("has_pos", false):
-			pos = adapter.clamp_position(win, Vector2i(int(state.window["x"]), int(state.window["y"])))
-		win.position = pos
-		_last_win_pos = pos
 	get_tree().auto_accept_quit = false
-	if OS.is_debug_build() and OS.has_environment("CATFISH_LOOK"):
+	_apply_view_mode()
+
+
+func _apply_debug_env() -> void:
+	if not OS.is_debug_build():
+		return
+	var st := game.state
+	if OS.has_environment("CATFISH_SPEED"):
+		_debug_speed = maxf(1.0, OS.get_environment("CATFISH_SPEED").to_float())
+	if OS.has_environment("CATFISH_SHOT"):
+		var sp := OS.get_environment("CATFISH_SHOT").split(":")
+		if sp.size() == 2:
+			_shot_prefix = sp[0]
+			for f in sp[1].split(","):
+				_shot_frames.append(f.to_int())
+	if OS.has_environment("CATFISH_VIEW"):
+		st.settings["view_mode"] = OS.get_environment("CATFISH_VIEW").to_int()
+	if OS.has_environment("CATFISH_LOOK"):
 		var parts := OS.get_environment("CATFISH_LOOK").split(",")
 		if parts.size() == 3:
-			state.cat = {"fur": parts[0].to_int(), "pattern": parts[1].to_int(), "hat": parts[2].to_int(), "created": true}
+			st.cat = {"fur": parts[0].to_int(), "pattern": parts[1].to_int(), "hat": parts[2].to_int(), "created": true}
 			wardrobe.open = false
-	if OS.is_debug_build() and OS.has_environment("CATFISH_MENU"):
+	if OS.has_environment("CATFISH_FILL"):
+		var ids: Array = game.fish_by_id.keys()
+		for i in OS.get_environment("CATFISH_FILL").to_int():
+			game.economy.add_catch(st, st.new_id("c"), ids[i % ids.size()], false)
+	if OS.has_environment("CATFISH_AUTOFOCUS"):
+		game.start_focus()
+	if OS.has_environment("CATFISH_ROAM"):
+		_debug_dir = OS.get_environment("CATFISH_ROAM").to_int()
+	if OS.has_environment("CATFISH_GO"):
+		game.go_to_town()
+	if OS.has_environment("CATFISH_MENU"):
+		wardrobe.open = false
 		menu.open = true
 		menu.tab = OS.get_environment("CATFISH_MENU").to_int()
-		_update_polygon()
 
 
-func _apply_pixel_scale() -> void:
-	px_scale = adapter.pixel_scale(int(game.state.settings.get("pixel_scale", 3)))
-	adapter.setup_window(get_window(), ART, px_scale)
-	if adapter.is_overlay():
-		scale = Vector2(px_scale, px_scale)
-		_update_polygon()
+# ------------------------------------------------------------------ 视图模式
+func _apply_view_mode() -> void:
+	var win := get_window()
+	mini = adapter.is_overlay() and int(game.state.settings.get("view_mode", 1)) == 0
+	_cam_snap = true
+	if mini:
+		px_scale = adapter.pixel_scale(int(game.state.settings.get("pixel_scale", 3)))
+		view = Vector2(MINI_VIEW)
+		ui_off = Vector2.ZERO
+		adapter.enter_mini(win, MINI_VIEW * px_scale)
+		var pos: Vector2i = adapter.default_position(win)
+		if game.state.window.get("has_pos", false):
+			pos = adapter.clamp_position(win, Vector2i(int(game.state.window["x"]), int(game.state.window["y"])))
+		win.position = pos
+		_last_win_pos = pos
+	else:
+		ui_off = FULL_UI_OFF
+		adapter.enter_full(win, FULL_DEFAULT * adapter.screen_scale())
+	_layout()
+	_update_polygon()
 
 
-## 设置里循环切换：窗口大小 2→3→4→5→2，音效 0→1→2→3→0。
+func toggle_view_mode() -> void:
+	if not adapter.is_overlay():
+		return
+	game.state.settings["view_mode"] = 1 if mini else 0
+	game.dirty = true
+	_apply_view_mode()
+
+
+## 根据窗口实际大小决定放大倍数和取景范围（全画面窗口可以随意拉伸）。
+func _layout() -> void:
+	if not mini:
+		var vs := get_viewport_rect().size
+		px_scale = maxi(1, mini_i(int(vs.y / FULL_MIN_H), int(vs.x / FULL_MIN_W)))
+		view = Vector2(ceilf(vs.x / px_scale), ceilf(vs.y / px_scale))
+	scale = Vector2(px_scale, px_scale)
+
+
+static func mini_i(a: int, b: int) -> int:
+	return a if a < b else b
+
+
+func _update_camera(_dt: float) -> void:
+	if mini:
+		cam = Vector2(world.cat_pos.x - MINI_CAT_X, MINI_CAM_Y).round()
+		_cam_snap = false
+		return
+	# 完整窗口：小猫在画面中间 30%–70% 的"静止区"里活动时镜头不动，走出静止区镜头才跟上，
+	# 所以小猫永远不会走出画面。世界底边对齐窗口底边，多出来的高度都给天空。
+	var cx := world.cat_pos.x + 16.0
+	var x := cam.x
+	if _cam_snap:
+		x = cx - view.x * 0.45
+		_cam_snap = false
+	elif cx < x + view.x * 0.3:
+		x = cx - view.x * 0.3
+	elif cx > x + view.x * 0.7:
+		x = cx - view.x * 0.7
+	x = clampf(x, 0.0, maxf(0.0, World.WORLD_END - view.x))
+	cam = Vector2(x, FULL_MIN_H - view.y).round()
+
+
+## 完整窗口里用方向键带着小猫在镇上走；松手一会儿后交还给自动流程。
+func _update_roam(dt: float) -> void:
+	var j: Journey = game.journey
+	var t := Time.get_ticks_msec()
+	world.roam_moving = false
+	var dir := 0
+	if _debug_dir != 0:
+		dir = _debug_dir
+	elif not mini and not menu.open and not wardrobe.open and get_window().has_focus():
+		for k in KEYS_LEFT:
+			if Input.is_key_pressed(k):
+				dir -= 1
+				break
+		for k in KEYS_RIGHT:
+			if Input.is_key_pressed(k):
+				dir += 1
+				break
+	if dir != 0 and j.in_town():
+		if j.activity() != Journey.Activity.ROAM and game.begin_roam(world.cat_pos.x):
+			_roam_fx = world.cat_pos.x
+		if j.activity() == Journey.Activity.ROAM:
+			_roam_fx = clampf(_roam_fx + dir * World.ROAM_SPEED * dt, World.ROAM_MIN_X, World.ROAM_MAX_X)
+			j.set_roam_x(_roam_fx)
+			world.roam_moving = true
+			world.roam_flip = dir < 0
+			_last_walk_input = t
+	elif j.activity() == Journey.Activity.ROAM and (mini or t - _last_walk_input > ROAM_AUTO_MS):
+		var x := float(j.roam_x())
+		game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))
+
+
+## 互动键：在海上 = 去小镇；自由走动时在摊位旁 = 开张，在码头 = 上船。
+func _interact() -> void:
+	var j: Journey = game.journey
+	if j.on_boat():
+		_go_to_town()
+	elif j.activity() == Journey.Activity.ROAM:
+		var x := float(j.roam_x())
+		if world.near_pier(x):
+			game.roam_board(world.frac_to_boat(x))
+			play("click")
+		elif world.near_stall(x) and not game.state.basket.is_empty():
+			game.end_roam(0.0, world.frac_to_boat(x))
+		else:
+			play("deny")
+
+
+## 设置里循环切换：迷你窗大小 2→3→4→5→2，音效 0→1→2→3→0。
 func cycle_setting(key: String) -> void:
 	var lim: Array = _limits.get(key, [0, 3, 1])
 	var v := int(game.state.settings.get(key, lim[0])) + 1
@@ -158,8 +301,171 @@ func cycle_setting(key: String) -> void:
 		v = int(lim[0])
 	game.state.settings[key] = v
 	game.dirty = true
-	if key == "pixel_scale":
-		_apply_pixel_scale()
+	if key == "pixel_scale" and mini:
+		_apply_view_mode()
+
+
+## 菜单或捏猫面板开合后调用：更新可交互区域。
+func on_panel_toggled() -> void:
+	_update_polygon()
+
+
+func _update_polygon() -> void:
+	if not adapter.is_overlay():
+		return
+	if not mini:
+		adapter.set_interactive_polygon(get_window(), PackedVector2Array())
+		return
+	# 上面是 HUD 面板，下面是场景；两块拼成一个多边形，其余透明区域鼠标穿透
+	var p := PANEL_POS
+	var s := MINI_SCENE
+	var pts := PackedVector2Array([
+		p, Vector2(p.x + PANEL_SIZE.x, p.y), Vector2(p.x + PANEL_SIZE.x, s.end.y),
+		Vector2(s.position.x, s.end.y), s.position, Vector2(p.x, s.position.y),
+	])
+	for i in pts.size():
+		pts[i] *= px_scale
+	adapter.set_interactive_polygon(get_window(), pts)
+
+
+# ------------------------------------------------------------------ 主循环
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_quit()
+
+
+func _quit() -> void:
+	_save()
+	get_tree().quit()
+
+
+func _save() -> void:
+	if game != null and saver.save(game.state.to_dict()):
+		game.dirty = false
+
+
+func _process(dt: float) -> void:
+	if not _config_ok:
+		return
+	if _debug_speed > 1.0:
+		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
+	for e in game.tick():
+		_on_event(e)
+		if _debug_speed > 1.0:
+			print("[debug] frame %d event %s" % [Engine.get_frames_drawn(), str(e)])
+	_update_roam(dt)
+	_fishing_feedback()
+	_debug_trace()
+	_track_window()
+	_layout()
+	world.update(game.now_ms(), Time.get_ticks_msec())
+	_update_camera(dt)
+	if game.dirty:
+		_save()
+	queue_redraw()
+	if not _shot_frames.is_empty() and not _shot_busy and Engine.get_frames_drawn() >= int(_shot_frames[0]):
+		_take_debug_shot()
+
+
+func _take_debug_shot() -> void:
+	_shot_busy = true
+	var frame: int = _shot_frames.pop_front()
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("%s_%d.png" % [_shot_prefix, frame])
+	_shot_busy = false
+	if _shot_frames.is_empty():
+		get_tree().quit()
+
+
+func _debug_trace() -> void:
+	if _debug_speed <= 1.0:
+		return
+	var s := "%s/%s" % [Journey.Activity.keys()[game.journey.activity()], Fishing.State.keys()[game.fishing.state]]
+	if s != _debug_last:
+		_debug_last = s
+		print("[debug] frame %d %s" % [Engine.get_frames_drawn(), s])
+
+
+## 钓鱼状态切换时的音效和水花。
+func _fishing_feedback() -> void:
+	var fs: int = game.fishing.state
+	if fs == _last_fs:
+		return
+	_last_fs = fs
+	match fs:
+		Fishing.State.CASTING:
+			play("cast")
+		Fishing.State.WAITING:
+			world.splash_t0 = Time.get_ticks_msec()
+		Fishing.State.HOOKED:
+			world.splash_t0 = Time.get_ticks_msec()
+			play("bite")
+		Fishing.State.REELING:
+			play("reel")
+
+
+func _track_window() -> void:
+	if not mini:
+		return
+	var now := Time.get_ticks_msec()
+	var pos := get_window().position
+	if pos != _last_win_pos:
+		_last_win_pos = pos
+		_pos_stable_since = now
+		game.state.window = {"has_pos": true, "x": pos.x, "y": pos.y}
+	elif _dragging and now - _pos_stable_since > 500 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		# 原生拖动结束时可能收不到松开事件，用"位置稳定 + 左键已松"兜底
+		_dragging = false
+		adapter.set_fps(FPS_NORMAL)
+		game.dirty = true
+
+
+func _on_event(e: Dictionary) -> void:
+	var t := Time.get_ticks_msec()
+	match e["type"]:
+		"catch":
+			world.hop_t0 = t
+			var f: Dictionary = game.fish_by_id.get(e["fish_id"], {})
+			if int(f.get("rarity", 0)) >= 2:
+				play("rare")
+				_sparkles(_world_to_view(world.cat_pos + Vector2(17, -10)), 12, 8.0)
+			else:
+				play("catch")
+		"basket_full":
+			if not _full_notified:
+				_full_notified = true
+				adapter.notify("鱼篓满了", "点小猫头上的气泡，让它去小镇摆摊卖鱼。")
+		"depart":
+			_full_notified = false
+		"open":
+			play("buy")
+		"sale":
+			play("coin")
+			world.hop_t0 = t
+			world.on_sale()
+			_float("+%d" % e["gold"], "coin", Vector2(World.STALL_X + 8, World.GROUND_Y - 52))
+		"ate":
+			world.eat_t0 = t
+			world.eat_fish = e["fish_id"]
+			play("bite")
+		"focus_done":
+			play("done")
+			world.hop_t0 = t
+			_sparkles(Vector2(view.x / 2, 30), 26, minf(view.x * 0.4, 90.0), true)
+			if e["gold"] > 0:
+				_float("+%d" % e["gold"], "coin", world.cat_pos + Vector2(-6, -14))
+			adapter.notify("番茄完成！", "木箱里的 %d 条鱼卖了 %d 金币。休息一下吧。" % [e["fish_count"], e["gold"]])
+		"break_done":
+			play("break_end")
+			adapter.notify("休息结束", "小猫睡醒了，准备开始下一个番茄吧。")
+
+
+func _float(text: String, icon: String, world_pos: Vector2) -> void:
+	floats.append({"text": text, "icon": icon, "pos": world_pos, "t0": Time.get_ticks_msec()})
+
+
+func _world_to_view(p: Vector2) -> Vector2:
+	return p - cam
 
 
 func play(name: String) -> void:
@@ -184,166 +490,40 @@ func _sparkles(center: Vector2, count: int, spread: float, fall := false) -> voi
 		particles.append({"pos": pos, "vel": vel, "t0": t + randi() % 300, "life": randi_range(700, 1500)})
 
 
-## 菜单或捏猫面板开合后调用：更新可交互区域。
-func on_panel_toggled() -> void:
-	_update_polygon()
-
-
-func _update_polygon() -> void:
-	if adapter.is_overlay():
-		adapter.set_interactive_polygon(get_window(), _interactive_polygon())
-
-
-func _interactive_polygon() -> PackedVector2Array:
-	# 上面是 HUD 面板，下面是猫/船/水面；两块拼成一个多边形，其余透明区域鼠标穿透
-	# 菜单打开时它盖住整个下半部分，可交互区域扩大成一个整矩形
-	var p := PANEL_POS
-	var d := DRAG_RECT
-	var pts := PackedVector2Array([
-		p, Vector2(p.x + 98, p.y), Vector2(p.x + 98, d.position.y), Vector2(d.end.x, d.position.y),
-		d.end, Vector2(d.position.x, d.end.y), d.position, Vector2(p.x, d.position.y),
-	])
-	if (menu != null and menu.open) or (wardrobe != null and wardrobe.open):
-		pts = PackedVector2Array([p, Vector2(d.end.x, p.y), d.end, Vector2(p.x, d.end.y)])
-	for i in pts.size():
-		pts[i] *= px_scale
-	return pts
-
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_quit()
-
-
-func _quit() -> void:
-	_save()
-	get_tree().quit()
-
-
-func _save() -> void:
-	if game == null:
-		return
-	if saver.save(game.state.to_dict()):
-		game.dirty = false
-
-
-func _process(dt: float) -> void:
-	if not _config_ok:
-		return
-	if _debug_speed > 1.0:
-		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
-	for e in game.tick():
-		_on_event(e)
-		if _debug_speed > 1.0:
-			print("[debug] frame %d event %s" % [Engine.get_frames_drawn(), str(e)])
-	if _debug_speed > 1.0 and game.fishing.state != _debug_last_state:
-		_debug_last_state = game.fishing.state
-		print("[debug] frame %d fishing=%s" % [Engine.get_frames_drawn(), Fishing.State.keys()[_debug_last_state]])
-	_fishing_feedback()
-	_track_window()
-	if game.dirty:
-		_save()
-	if not adapter.is_overlay():
-		_fit_fullscreen()
-	queue_redraw()
-
-
-## 钓鱼状态切换时的音效和水花。
-func _fishing_feedback() -> void:
-	var fs: int = game.fishing.state
-	if fs == _last_fs:
-		return
-	_last_fs = fs
-	match fs:
-		Fishing.State.CASTING:
-			play("cast")
-		Fishing.State.WAITING:
-			_splash_t0 = Time.get_ticks_msec()
-		Fishing.State.HOOKED:
-			_splash_t0 = Time.get_ticks_msec()
-			play("bite")
-		Fishing.State.REELING:
-			play("reel")
-
-
-func _fit_fullscreen() -> void:
-	var vs := get_viewport_rect().size
-	px_scale = max(1, int(min(vs.x / ART.x, vs.y / ART.y)))
-	scale = Vector2(px_scale, px_scale)
-	position = ((vs - Vector2(ART * px_scale)) / 2.0).floor()
-
-
-func _track_window() -> void:
-	if not adapter.is_overlay():
-		return
-	var now := Time.get_ticks_msec()
-	var pos := get_window().position
-	if pos != _last_win_pos:
-		_last_win_pos = pos
-		_pos_stable_since = now
-		game.state.window = {"has_pos": true, "x": pos.x, "y": pos.y}
-	elif _dragging and now - _pos_stable_since > 500 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		# 原生拖动结束时可能收不到松开事件，用"位置稳定 + 左键已松"兜底
-		_dragging = false
-		adapter.set_fps(FPS_NORMAL)
-		game.dirty = true
-
-
-func _on_event(e: Dictionary) -> void:
-	match e["type"]:
-		"catch":
-			_hop_t0 = Time.get_ticks_msec()
-			var f: Dictionary = game.fish_by_id.get(e["fish_id"], {})
-			if int(f.get("rarity", 0)) >= 2:
-				play("rare")
-				_sparkles(CAT_POS + Vector2(17, -10), 12, 8.0)
-			else:
-				play("catch")
-		"focus_done":
-			play("done")
-			_hop_t0 = Time.get_ticks_msec()
-			_sparkles(Vector2(64, 30), 26, 44.0, true)
-			_float("+%d" % e["gold"], "coin", Vector2(36, 31))
-			adapter.notify("番茄完成！", "钓到 %d 条鱼，获得 %d 金币。休息一下吧。" % [e["fish_count"], e["gold"]])
-		"break_done":
-			play("break_end")
-			adapter.notify("休息结束", "小猫睡醒了，准备开始下一个番茄吧。")
-		"basket_full":
-			adapter.notify("鱼篓满了", "卖掉鱼，或者开始一个番茄让小猫继续钓。")
-
-
-func _float(text: String, icon: String, pos: Vector2) -> void:
-	floats.append({"text": text, "icon": icon, "pos": pos, "t0": Time.get_ticks_msec()})
-
-
 # ------------------------------------------------------------------ 输入
 func _unhandled_input(event: InputEvent) -> void:
 	if not _config_ok:
 		return
+	if event is InputEventKey:
+		if event.pressed and not event.echo and not mini and not menu.open and not wardrobe.open \
+				and event.keycode in KEYS_ACT:
+			_interact()
+		return
 	if event is InputEventMouseMotion:
-		menu.hover = (event.position - position) / float(px_scale)
+		menu.hover = event.position / float(px_scale) - ui_off
 		return
 	if not event is InputEventMouseButton or event.button_index != MOUSE_BUTTON_LEFT:
 		return
-	var p: Vector2 = (event.position - position) / float(px_scale)
 	if not event.pressed:
 		_pressed_btn = ""
 		return
+	var v: Vector2 = event.position / float(px_scale)   # 视图坐标
+	var p := v - ui_off                                  # 界面坐标
 	if BTN_MAIN.has_point(p):
 		_pressed_btn = "main"
 		_press_main()
-	elif BTN_SELL.has_point(p):
-		_pressed_btn = "sell"
-		var gold := game.sell_basket()
-		play("coin" if gold > 0 else "deny")
-		if gold > 0:
-			_float("+%d" % gold, "coin", Vector2(36, 31))
+	elif BTN_TOWN.has_point(p):
+		_pressed_btn = "town"
+		_go_to_town()
 	elif BTN_MENU.has_point(p):
 		play("click")
 		if wardrobe.open:
 			wardrobe.close()
 		menu.open = not menu.open
 		_update_polygon()
+	elif BTN_VIEW.has_point(p):
+		play("click")
+		toggle_view_mode()
 	elif BTN_CAT.has_point(p):
 		play("click")
 		menu.open = false
@@ -354,13 +534,25 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_polygon()
 	elif BTN_CLOSE.has_point(p):
 		_quit()
+	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(p):
+		pass
 	elif menu.click(p) or wardrobe.click(p):
 		pass
-	elif DRAG_RECT.has_point(p):
+	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
+		_go_to_town()
+	elif mini and MINI_SCENE.has_point(p):
 		if adapter.start_window_drag(get_window()):
 			_dragging = true
 			_pos_stable_since = Time.get_ticks_msec()
 			adapter.set_fps(FPS_DRAG)
+
+
+func _go_to_town() -> void:
+	if game.go_to_town():
+		_full_notified = false
+		play("cast")
+	else:
+		play("deny")
 
 
 func _press_main() -> void:
@@ -372,7 +564,7 @@ func _press_main() -> void:
 			var gold := game.abandon_focus()
 			if gold > 0:
 				play("coin")
-				_float("+%d" % gold, "coin", Vector2(36, 31))
+				_float("+%d" % gold, "coin", world.cat_pos + Vector2(-6, -14))
 		_:
 			game.skip_break()
 
@@ -383,78 +575,15 @@ func _draw() -> void:
 		return
 	var now := game.now_ms()
 	var t := Time.get_ticks_msec()
-	if not adapter.is_overlay():
-		draw_rect(Rect2(Vector2.ZERO, ART), Pal.L_C)
-	var bob := Vector2(0, 1 if (t / 900) % 2 == 0 else 0)
-	var on_break: bool = game.pomodoro.is_break()
-	var fs: int = game.fishing.state
-	var prog: float = game.fishing.progress(now)
-
-	_tex_frame("water", WATER_POS, (t / 600) % 3, 3)
-	var cat_pos := CAT_POS + bob
-	var frame := (2 + (t / 1100) % 2) if on_break else (t / 700) % 2
-	var hop_age := t - _hop_t0
-	if hop_age < 600 and not on_break:
-		frame = 2   # 眯眼开心
-		cat_pos.y -= 2 if hop_age < 140 else (1 if hop_age < 280 else 0)
-	draw_cat(cat_pos, frame)
-
-	draw_texture(tex["boat"], BOAT_POS + bob)
-	if on_break:
-		draw_texture(tex["zzz"], cat_pos + Vector2(32, -2 - (t / 500) % 3))
-	else:
-		_draw_fishing(cat_pos, fs, prog, t)
-	if not on_break and t - _splash_t0 < 360:
-		_tex_frame("splash", BOBBER_POS + Vector2(-3, 3), 0 if t - _splash_t0 < 180 else 1, 2)
+	draw_set_transform(-cam)
+	world.draw(cam, view, mini, now, t)
+	_draw_floats(t)
+	draw_set_transform(ui_off)
 	_draw_hud(now)
 	menu.draw()
 	wardrobe.draw()
-	_draw_floats(t)
+	draw_set_transform(Vector2.ZERO)
 	_draw_particles(t)
-
-
-func _draw_fishing(cat_pos: Vector2, fs: int, prog: float, t: int) -> void:
-	var tip := TIP_IDLE
-	var bobber := Vector2.INF     # INF = 不画浮漂
-	var fish_tex: Texture2D = null
-	var fish_pos := Vector2.ZERO
-	var water_bob := Vector2(0, (t / 800) % 2)
-	match fs:
-		Fishing.State.CASTING:
-			tip = TIP_IDLE.lerp(TIP_WAIT, prog)
-			if prog > 0.4:
-				var k := (prog - 0.4) / 0.6
-				var from := cat_pos + tip
-				bobber = (from.lerp(BOBBER_POS, k) + Vector2(0, -10.0 * sin(k * PI))).round()
-		Fishing.State.WAITING:
-			tip = TIP_WAIT
-			bobber = BOBBER_POS + water_bob
-		Fishing.State.HOOKED:
-			tip = TIP_WAIT + Vector2(1, 2)
-			bobber = BOBBER_POS + Vector2((t / 80) % 2, 3)
-			draw_texture(tex["bang"], cat_pos + Vector2(24, -12))
-		Fishing.State.REELING:
-			tip = TIP_WAIT.lerp(TIP_REEL, minf(1.0, prog * 2.0))
-			fish_tex = _fish_tex()
-			fish_pos = (BOBBER_POS.lerp(cat_pos + TIP_REEL + Vector2(-6, 8), prog)).round()
-		Fishing.State.SETTLEMENT:
-			tip = TIP_REEL.lerp(TIP_IDLE, prog)
-			fish_tex = _fish_tex()
-			fish_pos = (cat_pos + Vector2(8, -12 - 6.0 * prog)).round()
-	var tip_abs := (cat_pos + tip).round()
-	_pixel_line(cat_pos + HAND, tip_abs, Pal.U_O)
-	if bobber != Vector2.INF:
-		_pixel_line(tip_abs, bobber + Vector2(2, 0), Pal.L_W)
-		draw_texture(tex["bobber"], bobber)
-	if fish_tex != null:
-		if fs == Fishing.State.REELING:
-			_pixel_line(tip_abs, fish_pos + Vector2(16, 5), Pal.L_W)
-		draw_texture(fish_tex, fish_pos)
-
-
-func _fish_tex() -> Texture2D:
-	var f: Dictionary = game.fish_by_id.get(game.fishing.hooked_fish, {})
-	return tex.get(f.get("sprite", ""), null)
 
 
 func _draw_hud(now: int) -> void:
@@ -474,23 +603,33 @@ func _draw_hud(now: int) -> void:
 	elif on_break:
 		main_btn = "btn_skip"
 	_tex_frame(main_btn, BTN_MAIN.position, 1 if _pressed_btn == "main" else 0, 2)
-	var can_sell: bool = not game.state.basket.is_empty()
-	_tex_frame("btn_sell", BTN_SELL.position, 1 if _pressed_btn == "sell" else 0, 2,
-			Color.WHITE if can_sell else Color(1, 1, 1, 0.35))
+	_tex_frame("btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
+			Color.WHITE if game.can_go_to_town() else Color(1, 1, 1, 0.35))
 	_tex_frame("btn_menu", BTN_MENU.position, 1 if menu.open else 0, 2)
-	_tex_frame("btn_close", BTN_CLOSE.position, 0, 2)
+	if adapter.is_overlay():
+		_tex_frame("btn_view", BTN_VIEW.position, 0, 2)
 	_tex_frame("btn_cat", BTN_CAT.position, 1 if wardrobe.open else 0, 2)
+	_tex_frame("btn_close", BTN_CLOSE.position, 0, 2)
 
 	draw_texture(tex["coin"], Vector2(20, 15))
 	_text(str(game.state.wallet_gold), Vector2(31, 17), Pal.L_Y)
-	# 专注时显示"番茄渔获"木箱（不限量）；其余时候显示 10 格鱼篓
-	draw_texture(tex["hold" if ph == Pomodoro.Phase.FOCUS else "basket"], Vector2(56, 14))
-	if ph == Pomodoro.Phase.FOCUS:
+	# 专注且在海上：显示不限量的木箱（番茄渔获）；其余时候显示鱼篓
+	if ph == Pomodoro.Phase.FOCUS and game.journey.on_boat():
+		draw_texture(tex["hold"], Vector2(56, 14))
 		_text("x%d" % game.state.session_haul.size(), Vector2(69, 17), Pal.L_W)
 	else:
+		draw_texture(tex["basket"], Vector2(56, 14))
 		var full: bool = game.economy.basket_full(game.state)
 		_text("%d/%d" % [game.state.basket.size(), game.state.basket_capacity], Vector2(69, 17),
 				Pal.L_R if full else Pal.L_W)
+	# 完整窗口里的操作提示
+	if not mini and not menu.open and not wardrobe.open:
+		if game.journey.in_town():
+			label("方向键走动", Vector2(17, 30), Pal.U_K)
+			if game.journey.activity() == Journey.Activity.ROAM:
+				label("空格键互动", Vector2(17, 41), Pal.U_K)
+		elif game.can_go_to_town():
+			label("空格键去小镇", Vector2(17, 30), Pal.U_K)
 
 
 func _draw_floats(t: int) -> void:
@@ -501,7 +640,7 @@ func _draw_floats(t: int) -> void:
 			keep.append(f)
 			var pos: Vector2 = f["pos"] + Vector2(0, -int(age / 180))
 			draw_texture(tex[f["icon"]], pos)
-			_text(f["text"], pos + Vector2(11, 2), Pal.L_Y, true)
+			_text(f["text"], pos + Vector2(12, 2), Pal.L_Y, true)
 	floats = keep
 
 
@@ -520,7 +659,7 @@ func _draw_particles(t: int) -> void:
 
 
 ## 按存档里的形象分层画猫：毛色三层 + 花纹两层（白色蒙版乘上颜色）+ 固定层 + 帽子。
-func draw_cat(pos: Vector2, frame: int) -> void:
+func draw_cat(pos: Vector2, frame: int, flip := false) -> void:
 	var look: Dictionary = game.state.cat
 	var furs: Array = cat_cfg["furs"]
 	var pats: Array = cat_cfg["patterns"]
@@ -531,32 +670,31 @@ func draw_cat(pos: Vector2, frame: int) -> void:
 	var base: Color = Pal.BY_KEY.get(fur["base"], Pal.L_F)
 	var shade: Color = Pal.BY_KEY.get(fur["shade"], Pal.U_F)
 	var light: Color = Pal.BY_KEY.get(fur["light"], Pal.L_L)
-	_tex_frame("cat/fur_base", pos, frame, 4, base)
-	_tex_frame("cat/fur_shade", pos, frame, 4, shade)
-	_tex_frame("cat/fur_light", pos, frame, 4, light)
-	_tex_frame("cat/pat_white", pos, frame, 4, Pal.L_W if pat.get("white", false) else light)
-	_tex_frame("cat/pat_stripe", pos, frame, 4, shade if pat.get("stripes", false) else base)
-	_tex_frame("cat/fixed", pos, frame, 4)
+	_tex_frame("cat/fur_base", pos, frame, CAT_FRAMES, base, flip)
+	_tex_frame("cat/fur_shade", pos, frame, CAT_FRAMES, shade, flip)
+	_tex_frame("cat/fur_light", pos, frame, CAT_FRAMES, light, flip)
+	_tex_frame("cat/pat_white", pos, frame, CAT_FRAMES, Pal.L_W if pat.get("white", false) else light, flip)
+	_tex_frame("cat/pat_stripe", pos, frame, CAT_FRAMES, shade if pat.get("stripes", false) else base, flip)
+	_tex_frame("cat/fixed", pos, frame, CAT_FRAMES, Color.WHITE, flip)
 	if hat.get("sprite", "") != "":
-		_tex_frame("cat/" + hat["sprite"], pos, frame, 4)
+		_tex_frame("cat/" + hat["sprite"], pos, frame, CAT_FRAMES, Color.WHITE, flip)
 
 
-func label_centered(s: String, center_x: float, y: float, color: Color) -> void:
-	if Labels.RECTS.has(s):
-		label(s, Vector2(center_x - int(Labels.RECTS[s].size.x / 2), y), color)
-	else:
-		label(s, Vector2(center_x, y), color)
-
-
-# ---- 给菜单用的公开绘制接口 ----
+# ---- 给 world / menu / wardrobe 用的公开绘制接口 ----
 func tex_frame(name: String, pos: Vector2, frame: int, count: int, mod := Color.WHITE) -> void:
 	_tex_frame(name, pos, frame, count, mod)
+
+func tex_frame_flipped(name: String, pos: Vector2, frame: int, count: int) -> void:
+	_tex_frame(name, pos, frame, count, Color.WHITE, true)
 
 func text(s: String, pos: Vector2, color: Color) -> void:
 	_text(s, pos, color)
 
 func text_right(s: String, right_x: float, y: float, color: Color) -> void:
 	_text(s, Vector2(right_x - s.length() * 4 + 1, y), color)
+
+func pixel_line(a: Vector2, b: Vector2, color: Color) -> void:
+	_pixel_line(a, b, color)
 
 ## 画一个预渲染的中文标签；图集里没有的文字会被跳过并报一次警告。
 func label(s: String, pos: Vector2, color: Color) -> void:
@@ -568,13 +706,22 @@ func label(s: String, pos: Vector2, color: Color) -> void:
 	var r: Rect2 = Labels.RECTS[s]
 	draw_texture_rect_region(tex["labels"], Rect2(pos, r.size), r, color)
 
+func label_centered(s: String, center_x: float, y: float, color: Color) -> void:
+	if Labels.RECTS.has(s):
+		label(s, Vector2(center_x - int(Labels.RECTS[s].size.x / 2), y), color)
+	else:
+		label(s, Vector2(center_x, y), color)
+
 
 # ---- 绘制小工具 ----
-func _tex_frame(name: String, pos: Vector2, frame: int, count: int, mod := Color.WHITE) -> void:
+func _tex_frame(name: String, pos: Vector2, frame: int, count: int, mod := Color.WHITE, flip := false) -> void:
 	var tx: Texture2D = tex[name]
 	var w := tx.get_width() / count
-	draw_texture_rect_region(tx, Rect2(pos, Vector2(w, tx.get_height())),
-			Rect2(frame * w, 0, w, tx.get_height()), mod)
+	var h := tx.get_height()
+	var dst := Rect2(pos, Vector2(w, h))
+	if flip:
+		dst = Rect2(pos.x + w, pos.y, -w, h)   # 负宽度 = 水平翻转
+	draw_texture_rect_region(tx, dst, Rect2(frame * w, 0, w, h), mod)
 
 
 func _text(s: String, pos: Vector2, color: Color, shadow := false) -> void:
