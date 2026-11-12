@@ -18,6 +18,8 @@ var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fi
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
 var settings: Dictionary = {"pixel_scale": 3, "sfx_volume": 2, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
 var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0}
+## 小猫形象：各项是 data/cat.json 里对应列表的下标；created=false 时首次启动会弹出捏猫面板
+var cat: Dictionary = {"fur": 0, "pattern": 1, "hat": 1, "created": false}
 var window: Dictionary = {"has_pos": false, "x": 0, "y": 0}
 
 func new_id(prefix: String) -> String:
@@ -34,7 +36,7 @@ func to_dict() -> Dictionary:
 		"processed_sale_ids": processed_sale_ids.duplicate(),
 		"next_seq": next_seq, "pomodoro": pomodoro.duplicate(true),
 		"stats": stats.duplicate(true), "settings": settings.duplicate(true),
-		"upgrades": upgrades.duplicate(true),
+		"upgrades": upgrades.duplicate(true), "cat": cat.duplicate(true),
 		"window": window.duplicate(true),
 	}
 
@@ -55,6 +57,7 @@ func from_dict(d: Dictionary) -> bool:
 	_merge(settings, d.get("settings"))
 	_merge(window, d.get("window"))
 	_merge(upgrades, d.get("upgrades"))
+	_merge(cat, d.get("cat"))
 	# JSON 数字读回来是 float，统一成 int
 	for k in ["phase", "phase_end_ms", "cycle_done"]:
 		pomodoro[k] = int(pomodoro[k])

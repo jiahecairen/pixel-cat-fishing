@@ -39,3 +39,19 @@ static func load_balance(path: String = "res://data/balance.json") -> Dictionary
 			push_error("balance.json pomodoro.%s 必须 > 0" % k)
 			return {}
 	return b
+
+static func load_cat(path: String = "res://data/cat.json") -> Dictionary:
+	var c := load_json(path)
+	for list_name in ["furs", "patterns", "hats"]:
+		if not (c.get(list_name) is Array) or c[list_name].is_empty():
+			push_error("cat.json 缺少 " + list_name)
+			return {}
+		for item in c[list_name]:
+			if not (item is Dictionary and item.has("name")):
+				push_error("cat.json %s 里有条目缺 name" % list_name)
+				return {}
+	for f in c["furs"]:
+		if not (f.has("base") and f.has("shade") and f.has("light")):
+			push_error("cat.json 毛色缺 base/shade/light: " + str(f))
+			return {}
+	return c

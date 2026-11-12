@@ -13,6 +13,7 @@ const Platform := preload("res://platform/platform.gd")
 const Pal := preload("res://presentation/palette.gd")
 const Labels := preload("res://presentation/labels.gd")
 const Menu := preload("res://presentation/menu.gd")
+const Wardrobe := preload("res://presentation/wardrobe.gd")
 
 const ART := Vector2i(128, 96)
 const FONT_ORDER := "0123456789:/+x-"
@@ -27,6 +28,8 @@ const BTN_MAIN := Rect2(78, 3, 11, 11)
 const BTN_SELL := Rect2(89, 3, 11, 11)
 const BTN_MENU := Rect2(100, 3, 11, 11)
 const BTN_CLOSE := Rect2(100, 14, 11, 11)
+const BTN_CAT := Rect2(89, 14, 11, 11)
+const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed"]
 const DRAG_RECT := Rect2(30, 28, 90, 66)
 const WATER_POS := Vector2(2, 73)
 const BOAT_POS := Vector2(34, 62)
@@ -59,6 +62,8 @@ var _limits: Dictionary = {}
 var _missing_labels: Dictionary = {}
 var clock: Clock
 var menu: Menu
+var wardrobe: Wardrobe
+var cat_cfg: Dictionary = {}
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
 var _debug_last_state: int = -1
 
@@ -66,7 +71,8 @@ var _debug_last_state: int = -1
 func _ready() -> void:
 	var balance := ConfigLoader.load_balance()
 	var fish := ConfigLoader.load_fish()
-	if balance.is_empty() or fish.is_empty():
+	cat_cfg = ConfigLoader.load_cat()
+	if balance.is_empty() or fish.is_empty() or cat_cfg.is_empty():
 		_config_ok = false
 		push_error("配置加载失败，游戏无法启动。请检查 data/*.json")
 		get_tree().quit(1)
@@ -85,6 +91,8 @@ func _ready() -> void:
 	_limits = balance.get("settings_limits", {})
 	game = Game.new(balance, fish, state, clock, rng)
 	menu = Menu.new(self)
+	wardrobe = Wardrobe.new(self)
+	wardrobe.open = not state.cat.get("created", false)   # 第一次启动先捏猫
 	if OS.is_debug_build():
 		if OS.has_environment("CATFISH_SPEED"):
 			_debug_speed = maxf(1.0, OS.get_environment("CATFISH_SPEED").to_float())
@@ -93,11 +101,17 @@ func _ready() -> void:
 
 	for n in ["cat", "boat", "water", "tomato", "coin", "basket", "bobber", "bang", "zzz",
 			"font", "dots", "panel", "btn_play", "btn_stop", "btn_sell", "btn_skip", "btn_close",
-			"btn_menu", "btn_plus", "btn_minus", "pips", "hold", "labels", "sparkle", "splash"]:
+			"btn_menu", "btn_plus", "btn_minus", "pips", "hold", "labels", "sparkle", "splash",
+			"btn_left", "btn_right", "btn_cat"]:
 		tex[n] = load("res://assets/sprites/%s.png" % n)
 	for f in fish:
 		tex[f["sprite"]] = load("res://assets/sprites/%s.png" % f["sprite"])
 
+	for n in CAT_LAYERS:
+		tex["cat/" + n] = load("res://assets/cat/%s.png" % n)
+	for h in cat_cfg["hats"]:
+		if h.get("sprite", "") != "":
+			tex["cat/" + h["sprite"]] = load("res://assets/cat/%s.png" % h["sprite"])
 	for n in SFX:
 		sfx[n] = load("res://assets/sfx/%s.wav" % n)
 	for i in 4:
@@ -117,6 +131,11 @@ func _ready() -> void:
 		win.position = pos
 		_last_win_pos = pos
 	get_tree().auto_accept_quit = false
+	if OS.is_debug_build() and OS.has_environment("CATFISH_LOOK"):
+		var parts := OS.get_environment("CATFISH_LOOK").split(",")
+		if parts.size() == 3:
+			state.cat = {"fur": parts[0].to_int(), "pattern": parts[1].to_int(), "hat": parts[2].to_int(), "created": true}
+			wardrobe.open = false
 	if OS.is_debug_build() and OS.has_environment("CATFISH_MENU"):
 		menu.open = true
 		menu.tab = OS.get_environment("CATFISH_MENU").to_int()
@@ -165,6 +184,11 @@ func _sparkles(center: Vector2, count: int, spread: float, fall := false) -> voi
 		particles.append({"pos": pos, "vel": vel, "t0": t + randi() % 300, "life": randi_range(700, 1500)})
 
 
+## 菜单或捏猫面板开合后调用：更新可交互区域。
+func on_panel_toggled() -> void:
+	_update_polygon()
+
+
 func _update_polygon() -> void:
 	if adapter.is_overlay():
 		adapter.set_interactive_polygon(get_window(), _interactive_polygon())
@@ -179,7 +203,7 @@ func _interactive_polygon() -> PackedVector2Array:
 		p, Vector2(p.x + 98, p.y), Vector2(p.x + 98, d.position.y), Vector2(d.end.x, d.position.y),
 		d.end, Vector2(d.position.x, d.end.y), d.position, Vector2(p.x, d.position.y),
 	])
-	if menu != null and menu.open:
+	if (menu != null and menu.open) or (wardrobe != null and wardrobe.open):
 		pts = PackedVector2Array([p, Vector2(d.end.x, p.y), d.end, Vector2(p.x, d.end.y)])
 	for i in pts.size():
 		pts[i] *= px_scale
@@ -316,11 +340,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			_float("+%d" % gold, "coin", Vector2(36, 31))
 	elif BTN_MENU.has_point(p):
 		play("click")
+		if wardrobe.open:
+			wardrobe.close()
 		menu.open = not menu.open
+		_update_polygon()
+	elif BTN_CAT.has_point(p):
+		play("click")
+		menu.open = false
+		if wardrobe.open:
+			wardrobe.close()
+		else:
+			wardrobe.open = true
 		_update_polygon()
 	elif BTN_CLOSE.has_point(p):
 		_quit()
-	elif menu.click(p):
+	elif menu.click(p) or wardrobe.click(p):
 		pass
 	elif DRAG_RECT.has_point(p):
 		if adapter.start_window_drag(get_window()):
@@ -363,7 +397,7 @@ func _draw() -> void:
 	if hop_age < 600 and not on_break:
 		frame = 2   # 眯眼开心
 		cat_pos.y -= 2 if hop_age < 140 else (1 if hop_age < 280 else 0)
-	_tex_frame("cat", cat_pos, frame, 4)
+	draw_cat(cat_pos, frame)
 
 	draw_texture(tex["boat"], BOAT_POS + bob)
 	if on_break:
@@ -374,6 +408,7 @@ func _draw() -> void:
 		_tex_frame("splash", BOBBER_POS + Vector2(-3, 3), 0 if t - _splash_t0 < 180 else 1, 2)
 	_draw_hud(now)
 	menu.draw()
+	wardrobe.draw()
 	_draw_floats(t)
 	_draw_particles(t)
 
@@ -444,6 +479,7 @@ func _draw_hud(now: int) -> void:
 			Color.WHITE if can_sell else Color(1, 1, 1, 0.35))
 	_tex_frame("btn_menu", BTN_MENU.position, 1 if menu.open else 0, 2)
 	_tex_frame("btn_close", BTN_CLOSE.position, 0, 2)
+	_tex_frame("btn_cat", BTN_CAT.position, 1 if wardrobe.open else 0, 2)
 
 	draw_texture(tex["coin"], Vector2(20, 15))
 	_text(str(game.state.wallet_gold), Vector2(31, 17), Pal.L_Y)
@@ -481,6 +517,35 @@ func _draw_particles(t: int) -> void:
 				var small: bool = age > int(p["life"]) * 0.6 or (age / 120) % 2 == 1
 				_tex_frame("sparkle", pos, 1 if small else 0, 2)
 	particles = keep
+
+
+## 按存档里的形象分层画猫：毛色三层 + 花纹两层（白色蒙版乘上颜色）+ 固定层 + 帽子。
+func draw_cat(pos: Vector2, frame: int) -> void:
+	var look: Dictionary = game.state.cat
+	var furs: Array = cat_cfg["furs"]
+	var pats: Array = cat_cfg["patterns"]
+	var hats: Array = cat_cfg["hats"]
+	var fur: Dictionary = furs[posmod(int(look.get("fur", 0)), furs.size())]
+	var pat: Dictionary = pats[posmod(int(look.get("pattern", 0)), pats.size())]
+	var hat: Dictionary = hats[posmod(int(look.get("hat", 0)), hats.size())]
+	var base: Color = Pal.BY_KEY.get(fur["base"], Pal.L_F)
+	var shade: Color = Pal.BY_KEY.get(fur["shade"], Pal.U_F)
+	var light: Color = Pal.BY_KEY.get(fur["light"], Pal.L_L)
+	_tex_frame("cat/fur_base", pos, frame, 4, base)
+	_tex_frame("cat/fur_shade", pos, frame, 4, shade)
+	_tex_frame("cat/fur_light", pos, frame, 4, light)
+	_tex_frame("cat/pat_white", pos, frame, 4, Pal.L_W if pat.get("white", false) else light)
+	_tex_frame("cat/pat_stripe", pos, frame, 4, shade if pat.get("stripes", false) else base)
+	_tex_frame("cat/fixed", pos, frame, 4)
+	if hat.get("sprite", "") != "":
+		_tex_frame("cat/" + hat["sprite"], pos, frame, 4)
+
+
+func label_centered(s: String, center_x: float, y: float, color: Color) -> void:
+	if Labels.RECTS.has(s):
+		label(s, Vector2(center_x - int(Labels.RECTS[s].size.x / 2), y), color)
+	else:
+		label(s, Vector2(center_x, y), color)
 
 
 # ---- 给菜单用的公开绘制接口 ----

@@ -38,6 +38,7 @@ func _init() -> void:
 		test_game_focus(balance, fish)
 		test_game_free_mode(balance, fish)
 		test_upgrades_and_settings(balance, fish)
+		test_cat_config()
 		test_save()
 		test_bad_config()
 	print("%d checks, %d failed" % [_checks, _fails])
@@ -217,6 +218,28 @@ func test_upgrades_and_settings(balance: Dictionary, fish: Array) -> void:
 	check(g3.duration("focus_min") == 5 and g3.duration("long_break_min") == 15, "时长设置随存档恢复，未改的保持默认")
 	g3.start_focus(); clock.t += 5 * 60000
 	check(_types(g3.tick()).has("focus_done"), "5 分钟番茄按新时长完成")
+
+func test_cat_config() -> void:
+	print("cat config")
+	var c := ConfigLoader.load_cat()
+	check(not c.is_empty(), "cat.json 可加载")
+	var s := GameState.new()
+	check(not s.cat["created"], "新存档尚未捏猫（首次启动会弹出面板）")
+	for key_list in [["fur", "furs"], ["pattern", "patterns"], ["hat", "hats"]]:
+		check(int(c["default"][key_list[0]]) == int(s.cat[key_list[0]]), "默认形象与 cat.json 一致: " + key_list[0])
+		check(int(s.cat[key_list[0]]) < c[key_list[1]].size(), "默认下标在范围内: " + key_list[0])
+	for h in c["hats"]:
+		if h["sprite"] != "":
+			check(FileAccess.file_exists("res://assets/cat/%s.png" % h["sprite"]), "帽子素材存在: " + h["sprite"])
+	for layer in ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed"]:
+		check(FileAccess.file_exists("res://assets/cat/%s.png" % layer), "猫图层存在: " + layer)
+	s.cat = {"fur": 3, "pattern": 2, "hat": 0, "created": true}
+	var s2 := GameState.new(); s2.from_dict(JSON.parse_string(JSON.stringify(s.to_dict())))
+	check(s2.cat == {"fur": 3, "pattern": 2, "hat": 0, "created": true}, "形象随存档恢复")
+	# 第一阶段的旧存档没有 cat 字段：应保留默认形象且视为未捏猫
+	var old := s.to_dict(); old.erase("cat")
+	var s3 := GameState.new()
+	check(s3.from_dict(old) and not s3.cat["created"] and s3.cat["hat"] == 1, "旧存档兼容")
 
 func test_save() -> void:
 	print("save")

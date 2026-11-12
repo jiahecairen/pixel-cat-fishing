@@ -91,54 +91,161 @@ def save(c, name):
 
 
 # ---------------------------------------------------------------- 猫
-# 毛色用 f/F/l 三个槽位；未来定制形象 = 换这三个槽 + 换帽子图层。
-def cat(tail_up=False, eyes_closed=False, breathe=0, hat=True):
-    c = Canvas(32, 32)
-    by = breathe
-    # 尾巴
-    tail = [(6, 27), (5, 26), (4, 25), (3, 24), (3, 23)]
-    tail += [(3, 22), (4, 21)] if tail_up else [(2, 23), (2, 22)]
-    for x, y in tail:
-        c.rect(x, y, x + 1, y, "F")
-    # 身体
-    c.ellipse(13, 23 + by, 7, 7 - by, "f")
-    c.ellipse(10, 25, 4, 4, "F")          # 背侧暗部
-    c.ellipse(13, 23 + by, 5, 5 - by, "f")
-    c.ellipse(16.5, 25, 2.6, 3.6, "w")    # 肚皮
-    # 头
-    c.ellipse(18, 14 + by, 7.2, 6, "f")
-    c.rows(12, 7 + by, ["f....", "ff...", "fpf..", "fpff."])     # 左耳
-    c.rows(20, 7 + by, ["...f.", "..ff.", ".fpf.", "ffpf."])     # 右耳
-    c.ellipse(15, 12 + by, 3, 2, "l")     # 额头高光
-    c.ellipse(22, 16.5 + by, 3.2, 2.2, "w")  # 嘴套
-    c.set(25, 15 + by, "p")               # 鼻
-    c.pts([(12, 17 + by), (13, 18 + by), (12, 15 + by)], "F")  # 脸侧花纹
-    if eyes_closed:
-        c.pts([(20, 14 + by), (21, 14 + by), (22, 14 + by)], "K")
-    else:
-        c.rect(20, 13 + by, 21, 14 + by, "K")
-        c.set(20, 13 + by, "W")
-    # 前爪
-    c.rect(19, 22, 21, 23, "w")
-    c.set(18, 22, "f")
-    if hat:
+# 猫用"槽位"作画，运行时再上色，这样玩家可以自定义形象：
+#   f / F / l  毛色 基础 / 暗部 / 亮部
+#   1          花纹-白色区（肚皮、嘴套、爪子）：有白肚时画奶白，否则画毛色亮部
+#   2          花纹-条纹区：有条纹时画毛色暗部，否则画毛色基础
+# 帽子单独成层，盖在最上面。
+FUR_SLOTS = {"f": "fur_base", "F": "fur_shade", "l": "fur_light", "1": "pat_white", "2": "pat_stripe"}
+HATS = ["straw", "bucket", "beret"]
+STRIPES = [(8, 19), (8, 20), (8, 21), (11, 17), (11, 18), (11, 19), (14, 17), (14, 18)]
+HEAD_STRIPES = [(16, 9), (16, 10), (18, 8), (18, 9), (18, 10), (20, 9), (20, 10)]
+
+
+def draw_hat(c, hat, by):
+    if hat == "straw":
         c.rect(13, 5 + by, 23, 7 + by, "h")
         c.rect(14, 4 + by, 22, 4 + by, "h")
         c.rect(13, 7 + by, 23, 7 + by, "r")
         c.rect(9, 8 + by, 27, 8 + by, "h")
         c.rect(10, 9 + by, 26, 9 + by, "H")
         c.pts([(15, 5 + by), (16, 5 + by), (17, 4 + by)], "w")
+    elif hat == "bucket":
+        c.rect(14, 3 + by, 22, 3 + by, "g")
+        c.rect(13, 4 + by, 23, 6 + by, "g")
+        c.rect(13, 7 + by, 23, 7 + by, "G")
+        c.rect(11, 8 + by, 25, 8 + by, "g")
+        c.rect(10, 9 + by, 26, 9 + by, "G")
+        c.pts([(15, 4 + by), (16, 4 + by)], "W")
+    elif hat == "beret":
+        c.ellipse(17, 6 + by, 6.2, 2.6, "r")
+        c.rect(12, 8 + by, 22, 8 + by, "R")
+        c.pts([(17, 3 + by), (17, 2 + by)], "R")
+        c.pts([(14, 5 + by), (15, 4 + by)], "p")
+
+
+def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None):
+    c = Canvas(32, 32)
+    by = breathe
+    tail = [(6, 27), (5, 26), (4, 25), (3, 24), (3, 23)]
+    tail += [(3, 22), (4, 21)] if tail_up else [(2, 23), (2, 22)]
+    for x, y in tail:
+        c.rect(x, y, x + 1, y, "F")
+    c.ellipse(13, 23 + by, 7, 7 - by, "f")
+    c.ellipse(10, 25, 4, 4, "F")          # 背侧暗部
+    c.ellipse(13, 23 + by, 5, 5 - by, "f")
+    c.ellipse(16.5, 25, 2.6, 3.6, "1")    # 肚皮
+    c.ellipse(18, 14 + by, 7.2, 6, "f")   # 头
+    c.rows(12, 7 + by, ["f....", "ff...", "fpf..", "fpff."])     # 左耳
+    c.rows(20, 7 + by, ["...f.", "..ff.", ".fpf.", "ffpf."])     # 右耳
+    c.ellipse(15, 12 + by, 3, 2, "l")     # 额头高光
+    c.ellipse(22, 16.5 + by, 3.2, 2.2, "1")  # 嘴套
+    c.set(25, 15 + by, "p")               # 鼻
+    c.pts([(12, 17 + by), (13, 18 + by), (12, 15 + by)], "F")  # 脸侧花纹
+    for x, y in STRIPES + [(x, y + by) for x, y in HEAD_STRIPES]:
+        if c.get(x, y) == "f":
+            c.set(x, y, "2")
+    if eyes_closed:
+        c.pts([(20, 14 + by), (21, 14 + by), (22, 14 + by)], "K")
+    else:
+        c.rect(20, 13 + by, 21, 14 + by, "K")
+        c.set(20, 13 + by, "W")
+    c.rect(19, 22, 21, 23, "1")           # 前爪
+    c.set(18, 22, "f")
+    if hat:
+        draw_hat(c, hat, by)
     c.outline()
     return c
 
 
-def cat_sheet():
-    return sheet([
-        cat(),                                   # 0 坐-A
-        cat(tail_up=True),                       # 1 坐-B（摆尾）
-        cat(eyes_closed=True),                   # 2 打盹-A
-        cat(eyes_closed=True, breathe=1),        # 3 打盹-B（呼吸）
-    ])
+CAT_FRAMES = [dict(), dict(tail_up=True), dict(eyes_closed=True), dict(eyes_closed=True, breathe=1)]
+# 帧含义: 0 坐-A  1 坐-B（摆尾）  2 打盹-A / 眯眼  3 打盹-B（呼吸）
+
+
+def colorize(c, look):
+    """把槽位换成真实调色板键。look = (base, shade, light, white?, stripes?)"""
+    base, shade, light, white, stripes = look
+    m = {"f": base, "F": shade, "l": light, "1": "w" if white else light, "2": shade if stripes else base}
+    out = Canvas(c.w, c.h)
+    for y in range(c.h):
+        for x in range(c.w):
+            k = c.px[y][x]
+            out.px[y][x] = m.get(k, k)
+    return out
+
+
+DEFAULT_LOOK = ("f", "F", "l", True, False)
+
+
+def cat(hat="straw", look=DEFAULT_LOOK, **kw):
+    return colorize(cat_raw(hat=hat, **kw), look)
+
+
+def cat_sheet(hat="straw", look=DEFAULT_LOOK):
+    return sheet([cat(hat=hat, look=look, **f) for f in CAT_FRAMES])
+
+
+def cat_layers():
+    """导出运行时用的分层图：每个槽位一张白色蒙版（运行时乘上毛色），
+    一张固定层（描边、眼睛、鼻子、耳朵粉色），每顶帽子一张覆盖层。"""
+    out_dir = os.path.join(ROOT, "assets", "cat")
+    os.makedirs(out_dir, exist_ok=True)
+    bare = [cat_raw(**f) for f in CAT_FRAMES]
+
+    def write(name, canvases, as_mask):
+        im = Image.new("RGBA", (32 * len(canvases), 32), (0, 0, 0, 0))
+        for i, c in enumerate(canvases):
+            for y in range(32):
+                for x in range(32):
+                    k = c.px[y][x]
+                    if k is not None:
+                        im.putpixel((i * 32 + x, y), (255, 255, 255, 255) if as_mask else rgba(k))
+        im.save(os.path.join(out_dir, name + ".png"))
+
+    def only(c, pred):
+        o = Canvas(32, 32)
+        for y in range(32):
+            for x in range(32):
+                if c.px[y][x] is not None and pred(c.px[y][x]):
+                    o.px[y][x] = c.px[y][x]
+        return o
+
+    for slot, name in FUR_SLOTS.items():
+        write(name, [only(c, lambda k, s=slot: k == s) for c in bare], True)
+    write("fixed", [only(c, lambda k: k not in FUR_SLOTS) for c in bare], False)
+    for hat in HATS:
+        overlays = []
+        for f, b in zip(CAT_FRAMES, bare):
+            h = cat_raw(hat=hat, **f)
+            o = Canvas(32, 32)
+            for y in range(32):
+                for x in range(32):
+                    if h.px[y][x] != b.px[y][x]:
+                        assert h.px[y][x] is not None and h.px[y][x] not in FUR_SLOTS, "帽子层只能新增像素"
+                        o.px[y][x] = h.px[y][x]
+            overlays.append(o)
+        write("hat_" + hat, overlays, False)
+
+
+def cat_gallery():
+    """所有毛色 × 花纹 × 帽子的目检图（不进版本库）。"""
+    import json
+    cfg = json.load(open(os.path.join(ROOT, "data", "cat.json"), encoding="utf-8"))
+    for f in cfg["furs"]:
+        for k in ("base", "shade", "light"):
+            assert f[k] in PALETTE, f"cat.json 毛色用了调色板以外的键: {f}"
+    hats = [None] + HATS
+    assert len(cfg["hats"]) == len(hats), "cat.json 的帽子数量与生成器不一致"
+    cols = len(cfg["patterns"]) * len(hats)
+    g = Canvas(34 * cols, 34 * len(cfg["furs"]))
+    for r, f in enumerate(cfg["furs"]):
+        for pi, p in enumerate(cfg["patterns"]):
+            for hi, h in enumerate(hats):
+                look = (f["base"], f["shade"], f["light"], p["white"], p["stripes"])
+                g.blit(cat(hat=h, look=look), (pi * len(hats) + hi) * 34 + 1, r * 34 + 1)
+    im = Image.new("RGBA", (g.w, g.h), (143, 208, 240, 255))
+    im.alpha_composite(g.image())
+    im.resize((g.w * 3, g.h * 3), Image.NEAREST).save(os.path.join(os.path.dirname(__file__), "preview_cats.png"))
 
 
 # ---------------------------------------------------------------- 船
@@ -260,6 +367,9 @@ BTN = {
     "menu": [".......", ".wwwww.", ".......", ".wwwww.", ".......", ".wwwww.", "......."],
     "plus": [".......", "...g...", "...g...", ".ggggg.", "...g...", "...g...", "......."],
     "minus": [".......", ".......", ".......", ".rrrrr.", ".......", ".......", "......."],
+    "left": [".......", "...c...", "..cc...", ".ccc...", "..cc...", "...c...", "......."],
+    "right": [".......", "...c...", "...cc..", "...ccc.", "...cc..", "...c...", "......."],
+    "cat": [".f...f.", ".ff.ff.", ".fffff.", ".fKfKf.", ".ffpff.", "..fff..", "......."],
     "close": [".......", ".a...a.", "..a.a..", "...a...", "..a.a..", ".a...a.", "......."],
 }
 
@@ -339,6 +449,7 @@ LABELS = [
     "商店", "图鉴", "统计", "设置", "鱼竿", "鱼饵", "鱼篓", "已满级",
     "自由挂机钓得更快", "稀有鱼更容易上钩", "鱼篓容量加二", "金币可以升级装备",
     "？？？", "共钓到", "今日", "累计", "近七日", "专注", "短休", "长休", "大小", "音效",
+    "我的小猫", "给小猫选个样子", "完成",
 ]
 FONT_FILE = os.path.join(os.path.dirname(__file__), "fonts", "fusion-pixel-10px-proportional-zh_hans.otf.woff")
 
@@ -349,7 +460,9 @@ def labels():
     import json
     from PIL import ImageDraw, ImageFont
     names = list(LABELS)
-    for f in json.load(open(os.path.join(ROOT, "data", "fish.json"), encoding="utf-8"))["fish"]:
+    extra = json.load(open(os.path.join(ROOT, "data", "fish.json"), encoding="utf-8"))["fish"]
+    cat_cfg = json.load(open(os.path.join(ROOT, "data", "cat.json"), encoding="utf-8"))
+    for f in extra + cat_cfg["furs"] + cat_cfg["patterns"] + cat_cfg["hats"]:
         if f["name"] not in names:
             names.append(f["name"])
     font_ = ImageFont.truetype(FONT_FILE, 10)
@@ -456,6 +569,8 @@ def export_palette():
     for k, v in PALETTE.items():
         name = ("U_" if k.isupper() else "L_") + k.upper()
         lines.append(f'const {name} := Color("{v}")')
+    lines += ["", "## 按调色板键取色（data/cat.json 里的毛色用键来写）", "const BY_KEY := {"]
+    lines += [f'\t"{k}": Color("{v}"),' for k, v in PALETTE.items()] + ["}"]
     open(os.path.join(ROOT, "presentation", "palette.gd"), "w").write("\n".join(lines) + "\n")
 
 
@@ -485,4 +600,6 @@ if __name__ == "__main__":
     preview(m)
     export_palette()
     app_icon()
+    cat_layers()
+    cat_gallery()
     check(m)
