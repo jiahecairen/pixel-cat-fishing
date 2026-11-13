@@ -448,11 +448,13 @@ func _draw_sky(cam: Vector2, view: Vector2, t: int) -> void:
 	var cloud_tint := Color.WHITE.lerp(Pal.L_R.lerp(Pal.L_F, 0.35), clampf(warm * 1.1, 0.0, 0.85))
 	cloud_tint = cloud_tint.lerp(Pal.L_A, 0.45 if bool(sky["cloudy"]) else 0.0)
 	cloud_tint = cloud_tint.lerp(Pal.U_A, clampf(dark * 0.8, 0.0, 0.8))
-	var cloud_shift := fposmod(cam.x * 0.85 - t / 500.0, 150.0)
-	for i in range(-1, int(view.x / 150) + 2):
-		var cx := cam.x - cloud_shift + i * 150
-		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 20), cam.y + 14 + (i * 37) % 23 + maxf(0, view.y - 180) * 0.5), cloud_tint)
-		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 95), cam.y + 40 + (i * 53) % 17 + maxf(0, view.y - 180) * 0.5), cloud_tint)
+	# 云按"世界编号"取高度：编号随云一起滑过屏幕，不会在循环回绕的那一刻换高度（以前按屏幕里的第几朵取，回绕时云会上下一跳）
+	var cloud_base := cam.x * 0.85 - t / 500.0
+	var cloud_k0 := floori(cloud_base / 150.0)
+	for n in range(cloud_k0 - 1, cloud_k0 + int(view.x / 150) + 3):
+		var cx := cam.x + n * 150 - cloud_base
+		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 20), cam.y + 14 + posmod(n * 37, 23) + maxf(0, view.y - 180) * 0.5), cloud_tint)
+		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 95), cam.y + 40 + posmod(n * 53, 17) + maxf(0, view.y - 180) * 0.5), cloud_tint)
 	var hill_shift := fposmod(cam.x * 0.4, 64.0)
 	for i in range(-1, int(view.x / 64) + 2):
 		m.draw_texture(m.tex["hills"], Vector2(roundf(cam.x - hill_shift + i * 64), WATER_Y - 22))
