@@ -4,7 +4,7 @@ extends RefCounted
 
 const Pal := preload("res://presentation/palette.gd")
 
-const RECT := Rect2(15, 28, 98, 66)
+const RECT := Rect2(15, 28, 98, 68)
 const TABS := ["商店", "图鉴", "统计", "设置"]
 const UPGRADES := [
 	["rod", "鱼竿", "自由挂机钓得更快"],
@@ -14,9 +14,13 @@ const UPGRADES := [
 const SETTINGS := [["focus_min", "专注"], ["short_break_min", "短休"], ["long_break_min", "长休"]]
 ## 第 4 行放两个"点一下换一档"的设置：[键, 标签, 标签x, 数值x, 按钮x]
 const CYCLES := [["pixel_scale", "大小", 19, 40, 50], ["sfx_volume", "音效", 66, 87, 99]]
+## 第 5 行：开关 [键, 标签, 标签x, 状态x, 按钮x]
+const TOGGLES := [["real_weather", "真实天气", 19, 66, 99]]
 const CLOSE_RECT := Rect2(100, 30, 11, 11)   # 面板右上角的关闭按钮
 const ROW_Y := 44
 const ROW_H := 12
+const SET_ROW_Y := 43      # 设置页有 5 行，行距收紧到 10
+const SET_ROW_H := 10
 
 var open: bool = false
 var tab: int = 0
@@ -31,6 +35,9 @@ func _tab_rect(i: int) -> Rect2:
 
 func _plus_rect(row: int, x: float = 99) -> Rect2:
 	return Rect2(x, ROW_Y + row * ROW_H - 1, 11, 11)
+
+func _set_rect(row: int, x: float = 99) -> Rect2:
+	return Rect2(x, SET_ROW_Y + row * SET_ROW_H - 1, 11, 11)
 
 # ------------------------------------------------------------------ 输入
 ## 处理点击。返回 true 表示点在了菜单上（主节点不应再把它当成拖动）。
@@ -51,15 +58,19 @@ func click(p: Vector2) -> bool:
 		3:
 			for i in SETTINGS.size():
 				var dir := 0
-				if _plus_rect(i, 58).has_point(p):
+				if _set_rect(i, 58).has_point(p):
 					dir = -1
-				elif _plus_rect(i, 99).has_point(p):
+				elif _set_rect(i, 99).has_point(p):
 					dir = 1
 				if dir != 0:
 					m.game.adjust_duration(SETTINGS[i][0], dir)
 					m.play("click")
 			for c in CYCLES:
-				if _plus_rect(3, c[4]).has_point(p):
+				if _set_rect(3, c[4]).has_point(p):
+					m.cycle_setting(c[0])
+					m.play("click")
+			for c in TOGGLES:
+				if _set_rect(4, c[4]).has_point(p):
 					m.cycle_setting(c[0])
 					m.play("click")
 	return true
@@ -149,15 +160,21 @@ func _draw_stats() -> void:
 func _draw_settings() -> void:
 	var g = m.game
 	for i in SETTINGS.size():
-		var y: int = ROW_Y + i * ROW_H
+		var y: int = SET_ROW_Y + i * SET_ROW_H
 		m.label(SETTINGS[i][1], Vector2(19, y), Pal.L_W)
-		m.tex_frame("btn_minus", _plus_rect(i, 58).position, 0, 2)
-		m.tex_frame("btn_plus", _plus_rect(i, 99).position, 0, 2)
+		m.tex_frame("btn_minus", _set_rect(i, 58).position, 0, 2)
+		m.tex_frame("btn_plus", _set_rect(i, 99).position, 0, 2)
 		var s := str(g.duration(SETTINGS[i][0]))
 		m.text(s, Vector2(84 - s.length() * 2, y + 3), Pal.L_W)
-	var y4: int = ROW_Y + 3 * ROW_H
+	var y4: int = SET_ROW_Y + 3 * SET_ROW_H
 	for c in CYCLES:
 		m.label(c[1], Vector2(c[2], y4), Pal.L_W)
 		var v := int(g.state.settings.get(c[0], 0))
 		m.text(("x%d" % v) if c[0] == "pixel_scale" else str(v), Vector2(c[3], y4 + 3), Pal.L_W)
-		m.tex_frame("btn_plus", _plus_rect(3, c[4]).position, 0, 2)
+		m.tex_frame("btn_plus", _set_rect(3, c[4]).position, 0, 2)
+	var y5: int = SET_ROW_Y + 4 * SET_ROW_H
+	for c in TOGGLES:
+		m.label(c[1], Vector2(c[2], y5), Pal.L_W)
+		var on := int(g.state.settings.get(c[0], 0)) == 1
+		m.label("开" if on else "关", Vector2(c[3], y5), Pal.L_G if on else Pal.L_A)
+		m.tex_frame("btn_plus", _set_rect(4, c[4]).position, 0, 2)

@@ -10,8 +10,11 @@ func now_ms() -> int:
 
 ## 本地时间的秒数（Unix 秒 + 时区偏移），天气和昼夜用。
 func local_s() -> int:
-	var bias_s: int = int(Time.get_time_zone_from_system().get("bias", 0)) * 60
-	return now_ms() / 1000 + bias_s
+	return now_ms() / 1000 + bias_s()
+
+## 本地时间比 UTC 快多少秒（时区偏移，含夏令时）。
+func bias_s() -> int:
+	return int(Time.get_time_zone_from_system().get("bias", 0)) * 60
 
 func today_key() -> String:
 	return day_key(0)

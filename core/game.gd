@@ -38,7 +38,18 @@ var _last_cp_state: int = 0
 var _rng: RandomNumberGenerator
 var _chest_cfg: Dictionary = {}
 var _base_chest: float = 0.0     # 宝箱基础概率（幸运鱼饵生效时翻倍）
+var lat: float = 53.35            # 所在位置（按时区推算，由 main 在启动时设置）
+var lon: float = -6.26
+var city: String = ""
+var real_rain: bool = false       # 真实天气（由 io/weather_fetcher 写入）
+var real_cloudy: bool = false
+var real_at_ms: int = -1          # 最近一次拿到真实天气的时刻，-1 = 还没拿到
+var _sky_key: int = -1
+var _sky: Dictionary = {}
+var _day_key: int = -1
+var _day: Dictionary = {}
 var weather_override: int = -1    # 调试/测试：-1 按真实时间，0 强制晴，1 强制下雨
+var day_shift: int = 0              # 调试：日期往后挪几天
 var hour_override: float = -1.0   # 调试：>=0 时把"现在"当成这个钟点（0..24）
 var _raining: bool = false
 var _base_rarity: float = 0.0    # 鱼饵升级带来的稀有度加成（幸运鱼饵生效时再加）
@@ -87,11 +98,65 @@ func tick() -> Array:
 		dirty = true
 	return events
 
-## 本地时间秒数（调试时可以指定钟点）。
+## 本地时间秒数（调试时可以指定钟点，日期仍是今天）。
 func local_s() -> int:
 	if hour_override >= 0.0:
-		return int(hour_override * 3600.0)
-	return _clock.local_s()
+		var day0 := floori(float(_clock.local_s()) / 86400.0) * 86400
+		return day0 + int(hour_override * 3600.0) + day_shift * 86400
+	return _clock.local_s() + day_shift * 86400
+
+func utc_s() -> int:
+	return local_s() - _clock.bias_s()
+
+func set_location(la: float, lo: float, name: String) -> void:
+	lat = la
+	lon = lo
+	city = name
+	_sky_key = -1
+	_day_key = -1
+
+## 拿到一次真实天气（io 层调用）。
+func set_real_weather(raining: bool, cloudy: bool) -> void:
+	real_rain = raining
+	real_cloudy = cloudy
+	real_at_ms = _clock.now_ms()
+
+func real_weather_on() -> bool:
+	return int(state.settings.get("real_weather", 0)) == 1
+
+## 真实天气可用：开关开着、拿到过数据、且不超过 3 小时（断网太久就退回模拟）。
+func _real_valid() -> bool:
+	return real_weather_on() and real_at_ms >= 0 and _clock.now_ms() - real_at_ms < 3 * 3600 * 1000
+
+## 天空状态：天色（暗度/暖色）、太阳和月亮的位置、月相、是否阴天。每 20 秒才重算一次。
+func sky() -> Dictionary:
+	var u := utc_s()
+	var key := u / 20
+	if key == _sky_key and not _sky.is_empty():
+		return _sky
+	_sky_key = key
+	var alt := Astro.sun_altitude(lat, lon, float(u))
+	var dk := int(Astro.solar_day_start(lon, float(u)))
+	if dk != _day_key:
+		_day_key = dk
+		_day = Astro.sun_day(lat, lon, float(dk))
+	var dawn := Astro.solar_hour(lon, float(u)) < 12.0
+	var out := Weather.light(alt, dawn)
+	var rise := float(_day["rise"])
+	var sset := float(_day["set"])
+	var sun_u := -9.0
+	if rise >= 0.0 and sset > rise:
+		sun_u = (float(u) - rise) / (sset - rise)
+	elif alt > 0.0:
+		sun_u = 0.5
+	out["sun_u"] = sun_u
+	out["sun_alt"] = alt
+	out["sun_peak"] = float(_day["peak"])
+	out["moon_u"] = Astro.moon_u(lon, float(u))
+	out["moon_phase"] = Astro.moon_phase(float(u))
+	out["cloudy"] = _real_valid() and real_cloudy
+	_sky = out
+	return out
 
 func is_raining() -> bool:
 	return _raining
@@ -102,6 +167,8 @@ func _rain_cfg(key: String, fallback: float) -> float:
 func _compute_raining() -> bool:
 	if weather_override >= 0:
 		return weather_override == 1
+	if _real_valid():
+		return real_rain
 	return Weather.is_raining(local_s(), _rain_cfg("rain_block_chance", 0.0))
 
 func _tick() -> Array:

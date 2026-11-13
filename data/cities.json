@@ -1,0 +1,369 @@
+{
+ "default": {
+  "name": "都柏林",
+  "lat": 53.35,
+  "lon": -6.26
+ },
+ "cities": [
+  {
+   "tz": "Asia/Shanghai",
+   "name": "上海",
+   "lat": 31.23,
+   "lon": 121.47
+  },
+  {
+   "tz": "Asia/Chongqing",
+   "name": "重庆",
+   "lat": 29.56,
+   "lon": 106.55
+  },
+  {
+   "tz": "Asia/Harbin",
+   "name": "哈尔滨",
+   "lat": 45.8,
+   "lon": 126.53
+  },
+  {
+   "tz": "Asia/Urumqi",
+   "name": "乌鲁木齐",
+   "lat": 43.83,
+   "lon": 87.62
+  },
+  {
+   "tz": "Asia/Hong_Kong",
+   "name": "香港",
+   "lat": 22.32,
+   "lon": 114.17
+  },
+  {
+   "tz": "Asia/Macau",
+   "name": "澳门",
+   "lat": 22.2,
+   "lon": 113.55
+  },
+  {
+   "tz": "Asia/Taipei",
+   "name": "台北",
+   "lat": 25.03,
+   "lon": 121.57
+  },
+  {
+   "tz": "Asia/Tokyo",
+   "name": "东京",
+   "lat": 35.68,
+   "lon": 139.69
+  },
+  {
+   "tz": "Asia/Seoul",
+   "name": "首尔",
+   "lat": 37.57,
+   "lon": 126.98
+  },
+  {
+   "tz": "Asia/Singapore",
+   "name": "新加坡",
+   "lat": 1.35,
+   "lon": 103.82
+  },
+  {
+   "tz": "Asia/Bangkok",
+   "name": "曼谷",
+   "lat": 13.76,
+   "lon": 100.5
+  },
+  {
+   "tz": "Asia/Ho_Chi_Minh",
+   "name": "胡志明市",
+   "lat": 10.82,
+   "lon": 106.63
+  },
+  {
+   "tz": "Asia/Jakarta",
+   "name": "雅加达",
+   "lat": -6.21,
+   "lon": 106.85
+  },
+  {
+   "tz": "Asia/Kuala_Lumpur",
+   "name": "吉隆坡",
+   "lat": 3.14,
+   "lon": 101.69
+  },
+  {
+   "tz": "Asia/Manila",
+   "name": "马尼拉",
+   "lat": 14.6,
+   "lon": 120.98
+  },
+  {
+   "tz": "Asia/Kolkata",
+   "name": "新德里",
+   "lat": 28.61,
+   "lon": 77.21
+  },
+  {
+   "tz": "Asia/Calcutta",
+   "name": "新德里",
+   "lat": 28.61,
+   "lon": 77.21
+  },
+  {
+   "tz": "Asia/Karachi",
+   "name": "卡拉奇",
+   "lat": 24.86,
+   "lon": 67.01
+  },
+  {
+   "tz": "Asia/Dubai",
+   "name": "迪拜",
+   "lat": 25.2,
+   "lon": 55.27
+  },
+  {
+   "tz": "Asia/Tehran",
+   "name": "德黑兰",
+   "lat": 35.69,
+   "lon": 51.39
+  },
+  {
+   "tz": "Asia/Jerusalem",
+   "name": "耶路撒冷",
+   "lat": 31.77,
+   "lon": 35.22
+  },
+  {
+   "tz": "Europe/London",
+   "name": "伦敦",
+   "lat": 51.51,
+   "lon": -0.13
+  },
+  {
+   "tz": "Europe/Dublin",
+   "name": "都柏林",
+   "lat": 53.35,
+   "lon": -6.26
+  },
+  {
+   "tz": "Europe/Paris",
+   "name": "巴黎",
+   "lat": 48.86,
+   "lon": 2.35
+  },
+  {
+   "tz": "Europe/Berlin",
+   "name": "柏林",
+   "lat": 52.52,
+   "lon": 13.4
+  },
+  {
+   "tz": "Europe/Madrid",
+   "name": "马德里",
+   "lat": 40.42,
+   "lon": -3.7
+  },
+  {
+   "tz": "Europe/Rome",
+   "name": "罗马",
+   "lat": 41.9,
+   "lon": 12.5
+  },
+  {
+   "tz": "Europe/Amsterdam",
+   "name": "阿姆斯特丹",
+   "lat": 52.37,
+   "lon": 4.9
+  },
+  {
+   "tz": "Europe/Zurich",
+   "name": "苏黎世",
+   "lat": 47.38,
+   "lon": 8.54
+  },
+  {
+   "tz": "Europe/Stockholm",
+   "name": "斯德哥尔摩",
+   "lat": 59.33,
+   "lon": 18.07
+  },
+  {
+   "tz": "Europe/Helsinki",
+   "name": "赫尔辛基",
+   "lat": 60.17,
+   "lon": 24.94
+  },
+  {
+   "tz": "Europe/Warsaw",
+   "name": "华沙",
+   "lat": 52.23,
+   "lon": 21.01
+  },
+  {
+   "tz": "Europe/Moscow",
+   "name": "莫斯科",
+   "lat": 55.76,
+   "lon": 37.62
+  },
+  {
+   "tz": "Europe/Istanbul",
+   "name": "伊斯坦布尔",
+   "lat": 41.01,
+   "lon": 28.98
+  },
+  {
+   "tz": "Europe/Lisbon",
+   "name": "里斯本",
+   "lat": 38.72,
+   "lon": -9.14
+  },
+  {
+   "tz": "Europe/Kiev",
+   "name": "基辅",
+   "lat": 50.45,
+   "lon": 30.52
+  },
+  {
+   "tz": "Europe/Kyiv",
+   "name": "基辅",
+   "lat": 50.45,
+   "lon": 30.52
+  },
+  {
+   "tz": "Africa/Cairo",
+   "name": "开罗",
+   "lat": 30.04,
+   "lon": 31.24
+  },
+  {
+   "tz": "Africa/Johannesburg",
+   "name": "约翰内斯堡",
+   "lat": -26.2,
+   "lon": 28.05
+  },
+  {
+   "tz": "Africa/Lagos",
+   "name": "拉各斯",
+   "lat": 6.52,
+   "lon": 3.38
+  },
+  {
+   "tz": "Africa/Nairobi",
+   "name": "内罗毕",
+   "lat": -1.29,
+   "lon": 36.82
+  },
+  {
+   "tz": "America/New_York",
+   "name": "纽约",
+   "lat": 40.71,
+   "lon": -74.01
+  },
+  {
+   "tz": "America/Chicago",
+   "name": "芝加哥",
+   "lat": 41.88,
+   "lon": -87.63
+  },
+  {
+   "tz": "America/Denver",
+   "name": "丹佛",
+   "lat": 39.74,
+   "lon": -104.99
+  },
+  {
+   "tz": "America/Los_Angeles",
+   "name": "洛杉矶",
+   "lat": 34.05,
+   "lon": -118.24
+  },
+  {
+   "tz": "America/Phoenix",
+   "name": "凤凰城",
+   "lat": 33.45,
+   "lon": -112.07
+  },
+  {
+   "tz": "America/Anchorage",
+   "name": "安克雷奇",
+   "lat": 61.22,
+   "lon": -149.9
+  },
+  {
+   "tz": "America/Toronto",
+   "name": "多伦多",
+   "lat": 43.65,
+   "lon": -79.38
+  },
+  {
+   "tz": "America/Vancouver",
+   "name": "温哥华",
+   "lat": 49.28,
+   "lon": -123.12
+  },
+  {
+   "tz": "America/Mexico_City",
+   "name": "墨西哥城",
+   "lat": 19.43,
+   "lon": -99.13
+  },
+  {
+   "tz": "America/Sao_Paulo",
+   "name": "圣保罗",
+   "lat": -23.55,
+   "lon": -46.63
+  },
+  {
+   "tz": "America/Argentina/Buenos_Aires",
+   "name": "布宜诺斯艾利斯",
+   "lat": -34.6,
+   "lon": -58.38
+  },
+  {
+   "tz": "America/Bogota",
+   "name": "波哥大",
+   "lat": 4.71,
+   "lon": -74.07
+  },
+  {
+   "tz": "America/Lima",
+   "name": "利马",
+   "lat": -12.05,
+   "lon": -77.04
+  },
+  {
+   "tz": "Australia/Sydney",
+   "name": "悉尼",
+   "lat": -33.87,
+   "lon": 151.21
+  },
+  {
+   "tz": "Australia/Melbourne",
+   "name": "墨尔本",
+   "lat": -37.81,
+   "lon": 144.96
+  },
+  {
+   "tz": "Australia/Perth",
+   "name": "珀斯",
+   "lat": -31.95,
+   "lon": 115.86
+  },
+  {
+   "tz": "Australia/Brisbane",
+   "name": "布里斯班",
+   "lat": -27.47,
+   "lon": 153.03
+  },
+  {
+   "tz": "Pacific/Auckland",
+   "name": "奥克兰",
+   "lat": -36.85,
+   "lon": 174.76
+  },
+  {
+   "tz": "Pacific/Honolulu",
+   "name": "檀香山",
+   "lat": 21.31,
+   "lon": -157.86
+  }
+ ]
+}

@@ -17,6 +17,7 @@ class FakeClock:
 	var day: String = "2026-01-01"
 	func now_ms() -> int: return t
 	func today_key() -> String: return day
+	func bias_s() -> int: return 0
 	func local_s() -> int: return 43200 + 3 * 3600     # 本地 15:00，固定一个不下雨的时刻
 
 var _fails := 0
@@ -42,6 +43,7 @@ func _init() -> void:
 		test_upgrades_and_settings(balance, fish)
 		test_cat_config()
 		test_chest(balance, fish)
+		test_adapters()
 		test_weather(balance, fish)
 		test_inventory(balance, fish)
 		test_checkpoint(balance, fish)
@@ -413,6 +415,19 @@ func test_chest(balance: Dictionary, fish: Array) -> void:
 	var ev6 := _run(g6, c5, 4, 100)
 	check(_count(ev6, "chest") == 1, "提上来只开一次")
 
+func _utc(y: int, mo: int, d: int, h: int, mi: int) -> int:
+	return int(Time.get_unix_time_from_datetime_dict({"year": y, "month": mo, "day": d, "hour": h, "minute": mi, "second": 0}))
+
+func test_adapters() -> void:
+	print("adapters")
+	# 测试里用的是无窗口适配器，桌面适配器不会被加载；这里单独加载一次，确保它能编译
+	for path in ["res://platform/desktop_adapter.gd", "res://platform/platform_adapter.gd", "res://platform/platform.gd"]:
+		var sc = load(path)
+		check(sc != null and sc.can_instantiate() if sc != null and sc is GDScript else sc != null, "能加载 " + path)
+	var desk = load("res://platform/desktop_adapter.gd").new()
+	var tz: String = desk.timezone_name()
+	check(tz is String, "桌面适配器能读时区名 (%s)" % tz)
+
 func test_weather(balance: Dictionary, fish: Array) -> void:
 	print("weather")
 	var p: float = float(balance["weather"]["rain_block_chance"])
@@ -443,12 +458,51 @@ func test_weather(balance: Dictionary, fish: Array) -> void:
 		if Weather.is_raining(s, 0.0):
 			dry = false
 	check(dry, "概率 0 永远不下雨")
-	# 昼夜
-	check(is_equal_approx(Weather.daylight(12 * 3600)["dark"], 0.0), "中午不暗")
-	check(is_equal_approx(Weather.daylight(23 * 3600)["dark"], 1.0) and is_equal_approx(Weather.daylight(2 * 3600)["dark"], 1.0), "深夜最暗")
-	check(Weather.daylight(19 * 3600)["dark"] > 0.4 and Weather.daylight(19 * 3600)["dark"] < 0.6, "傍晚渐暗")
-	check(Weather.daylight(6 * 3600)["warm"] > 0.9 and Weather.daylight(6 * 3600)["dawn"], "清晨暖色")
-	check(not Weather.daylight(18 * 3600 + 1800)["dawn"] and Weather.daylight(18 * 3600 + 1800)["warm"] > 0.9, "黄昏暖色")
+	# 天文：都柏林 2026-11-13 日出 07:46、日落 16:31（格林尼治时间；用独立的 astral 库交叉核对过）
+	var dub_day := _utc(2026, 11, 13, 0, 0)
+	var dub_ev := Astro.sun_day(53.35, -6.26, float(Astro.solar_day_start(-6.26, float(dub_day + 12 * 3600))))
+	var rise_h: float = (float(dub_ev["rise"]) - float(dub_day)) / 3600.0
+	var set_h: float = (float(dub_ev["set"]) - float(dub_day)) / 3600.0
+	check(absf(rise_h - 7.777) < 0.15, "都柏林 11-13 日出约 07:46 (%.2f)" % rise_h)
+	check(absf(set_h - 16.52) < 0.15, "都柏林 11-13 日落约 16:31 (%.2f)" % set_h)
+	check(dub_ev["peak"] > 14.0 and dub_ev["peak"] < 24.0, "都柏林冬天太阳最高只有 14–24 度 (%.1f)" % dub_ev["peak"])
+	# 北京夏至：日出 04:46、日落 19:46（北京时间 = UTC+8，同样用 astral 核对）
+	var bj := Astro.sun_day(39.9, 116.4, float(Astro.solar_day_start(116.4, float(_utc(2026, 6, 21, 4, 0)))))
+	var bj_rise := (float(bj["rise"]) - float(_utc(2026, 6, 20, 16, 0))) / 3600.0
+	var bj_set := (float(bj["set"]) - float(_utc(2026, 6, 20, 16, 0))) / 3600.0
+	check(absf(bj_rise - 4.77) < 0.25 and absf(bj_set - 19.78) < 0.25, "北京夏至日出日落约 04:46 / 19:47 (%.2f / %.2f)" % [bj_rise, bj_set])
+	check(bj["peak"] > 70.0, "北京夏至太阳很高 (%.1f)" % bj["peak"])
+	# 极夜/极昼：特罗姆瑟 12 月没有日出，6 月没有日落
+	var tr := Astro.sun_day(69.65, 18.96, float(Astro.solar_day_start(18.96, float(_utc(2026, 12, 21, 12, 0)))))
+	check(tr["rise"] < 0.0 and tr["set"] < 0.0 and tr["peak"] < 0.0, "极夜没有日出日落")
+	var tr2 := Astro.sun_day(69.65, 18.96, float(Astro.solar_day_start(18.96, float(_utc(2026, 6, 21, 12, 0)))))
+	check(tr2["rise"] < 0.0 and tr2["set"] < 0.0 and tr2["peak"] > 0.0, "极昼没有日出日落（太阳一直在天上）")
+	# 月相：2024-01-25 17:54 UTC 满月，2024-02-09 22:59 UTC 新月
+	check(absf(Astro.moon_phase(float(_utc(2024, 1, 25, 17, 54))) - 0.5) < 0.03, "2024-01-25 满月")
+	var np := Astro.moon_phase(float(_utc(2024, 2, 9, 22, 59)))
+	check(np < 0.03 or np > 0.97, "2024-02-09 新月 (%.3f)" % np)
+	# 月亮位置：满月午夜在中天，新月中午在中天（但看不到亮面）
+	var fm := _utc(2024, 1, 25, 17, 54)
+	var mid := fm + int((24.0 - Astro.solar_hour(0.0, float(fm))) * 3600.0)       # 满月当晚（lon=0）的午夜
+	check(absf(Astro.moon_u(0.0, float(mid)) - 0.5) < 0.1, "满月午夜在天空正中")
+	check(Astro.moon_u(0.0, float(mid + 11 * 3600)) < -1.0, "满月到中午已落下")
+	# 天色：高度 → 暗度/暖色
+	check(is_equal_approx(Weather.light(30.0, false)["dark"], 0.0), "太阳高时不暗")
+	check(is_equal_approx(Weather.light(-20.0, false)["dark"], 1.0), "太阳深落到地平线下时最暗")
+	check(Weather.light(1.5, false)["warm"] > 0.99 and Weather.light(40.0, false)["warm"] == 0.0, "日出日落时暖色最浓，中午没有")
+	# 定位：按时区名找城市，找不到按偏移估
+	var tbl := Location.load_table()
+	var dub := Location.resolve("Europe/Dublin", 0, tbl)
+	check(dub["name"] == "都柏林" and absf(dub["lat"] - 53.35) < 0.1, "时区 Europe/Dublin → 都柏林")
+	var sh := Location.resolve("Asia/Shanghai", 8 * 3600, tbl)
+	check(sh["name"] == "上海" and sh["source"] == "tz", "时区 Asia/Shanghai → 上海")
+	var unk := Location.resolve("Mars/Olympus", 9 * 3600, tbl)
+	check(unk["source"] == "bias" and absf(unk["lon"] - 135.0) < 0.01, "不认识的时区按偏移估经度 (%.1f)" % unk["lon"])
+	# 真实天气：WMO 天气码解析
+	check(WeatherFetcher.parse('{"current":{"weather_code":61,"cloud_cover":90}}')["raining"], "天气码 61 = 下雨")
+	check(not WeatherFetcher.parse('{"current":{"weather_code":0,"cloud_cover":5}}')["raining"], "天气码 0 = 晴")
+	check(WeatherFetcher.parse('{"current":{"weather_code":3,"cloud_cover":100}}')["cloudy"], "天气码 3 = 阴")
+	check(WeatherFetcher.parse("乱码").is_empty() and WeatherFetcher.parse('{"current":{}}').is_empty(), "返回格式不对时不当成天气")
 	# 下雨对钓鱼的影响：咬钩快 5%，宝箱概率 ×0.95；雨停恢复
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(77))
@@ -463,6 +517,21 @@ func test_weather(balance: Dictionary, fish: Array) -> void:
 	check(g.is_raining() and got, "下雨时发出天气事件")
 	check(is_equal_approx(g.fishing.chest_chance, chest0 * 0.95), "下雨宝箱概率 ×0.95")
 	check(is_equal_approx(g.fishing.wait_multiplier, g._free_multiplier / 1.05) or is_equal_approx(g.fishing.wait_multiplier, 1.0 / 1.05), "下雨咬钩等待缩短到 1/1.05 (%f)" % g.fishing.wait_multiplier)
+	# 真实天气：开关关着时忽略；打开且拿到数据后用真实的；超过 3 小时没更新退回模拟
+	g.weather_override = -1
+	g.tick()
+	check(not g.is_raining(), "回到模拟天气（测试时刻不下雨）")
+	g.set_real_weather(true, true)
+	g.tick()
+	check(not g.is_raining() and not g.sky()["cloudy"], "开关关着时忽略真实天气")
+	g.state.settings["real_weather"] = 1
+	g._sky_key = -1
+	g.tick()
+	check(g.is_raining() and g.sky()["cloudy"], "开关打开后用真实天气")
+	clock.t += 4 * 3600 * 1000
+	g.tick()
+	check(not g.is_raining(), "真实天气超过 3 小时没更新，退回模拟")
+	g.state.settings["real_weather"] = 0
 	g.weather_override = 0
 	g.tick()
 	check(not g.is_raining() and is_equal_approx(g.fishing.chest_chance, chest0), "雨停后宝箱概率恢复")

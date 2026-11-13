@@ -49,6 +49,15 @@ func mouse_over_polygon(window: Window, points: PackedVector2Array) -> bool:
 	var local := Vector2(DisplayServer.mouse_get_position() - window.position)
 	return Geometry2D.is_point_in_polygon(local, points)
 
+func timezone_name() -> String:
+	# macOS / Linux：/etc/localtime 是指向 zoneinfo/地区/城市 的符号链接
+	var d := DirAccess.open("/etc")
+	var link := d.read_link("/etc/localtime") if d != null else ""
+	var i := link.find("zoneinfo/")
+	if i >= 0:
+		return link.substr(i + 9)
+	return OS.get_environment("TZ")
+
 func start_window_drag(window: Window) -> bool:
 	window.start_drag()
 	return true

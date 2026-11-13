@@ -263,39 +263,73 @@ func _disc(c: Vector2, r: int, color: Color) -> void:
 		m.draw_rect(Rect2(c.x - half, c.y + dy, half * 2 + 1, 1), color)
 
 func _draw_sky(cam: Vector2, view: Vector2, t: int) -> void:
-	var ls: int = m.game.local_s()
-	var h := Weather.hour(ls)
-	var warm: float = Weather.daylight(ls)["warm"]
-	var raining: bool = m.game.is_raining()
-	if raining:
-		warm *= 0.35          # 下雨天看不到什么晚霞
+	var g = m.game
+	var sky: Dictionary = g.sky()
+	var dark: float = sky["dark"]
+	var raining: bool = g.is_raining()
+	var overcast: bool = raining or bool(sky["cloudy"])
+	var warm: float = float(sky["warm"]) * (0.35 if overcast else 1.0)
+	var dawn: bool = sky["dawn"]
 	var sky_h := WATER_Y - 26 - cam.y
+	var horizon_y := WATER_Y - 20.0
 	m.draw_rect(Rect2(cam, view), Pal.L_C)
-	if warm > 0.01:
-		# 日出/日落：天空从上到下分成一条条色带（像素风的渐变），越靠近地平线越红越亮
-		var tops := [Pal.U_A, Pal.U_A.lerp(Pal.L_P, 0.5), Pal.L_P, Pal.L_R.lerp(Pal.L_P, 0.4), Pal.L_F, Pal.L_Y]
-		var n := tops.size()
+	# 天空分成一条条色带（像素风的渐变）：白天一色；日出日落越靠近地平线越红越亮；夜里深蓝
+	if warm > 0.01 or dark > 0.01:
+		var dusk := [Pal.U_A, Pal.U_A.lerp(Pal.L_P, 0.5), Pal.L_P, Pal.L_R.lerp(Pal.L_P, 0.4), Pal.L_F, Pal.L_Y]
+		var night := [Pal.U_K, Pal.U_K, Pal.U_K.lerp(Pal.U_B, 0.3), Pal.U_K.lerp(Pal.U_B, 0.5), Pal.U_B.lerp(Pal.U_K, 0.35), Pal.U_B.lerp(Pal.U_K, 0.2)]
+		var n := dusk.size()
 		for i in n:
 			var y0 := cam.y + sky_h * float(i) / n
 			var y1 := cam.y + sky_h * float(i + 1) / n
-			m.draw_rect(Rect2(cam.x, roundf(y0), view.x, roundf(y1) - roundf(y0) + 1), Pal.L_C.lerp(tops[i], clampf(warm * 1.05, 0.0, 1.0)))
-		m.draw_rect(Rect2(cam.x, WATER_Y - 26, view.x, 26), Pal.U_W.lerp(Pal.L_F if h >= 12.0 else Pal.L_P, clampf(warm, 0.0, 1.0) * 0.7))
-		# 太阳：傍晚慢慢沉到山后，清晨从山后升起
-		var sun_c := WATER_Y - 22.0
-		var sun_y: float
-		if h >= 12.0:
-			sun_y = sun_c - 40.0 + clampf((h - 17.0) / 2.5, 0.0, 1.0) * 52.0
-		else:
-			sun_y = sun_c + 12.0 - clampf((h - 4.5) / 2.5, 0.0, 1.0) * 52.0
-		var sx := roundf(cam.x + view.x * 0.7 - cam.x * 0.0)
-		var sa := clampf(warm * 1.3, 0.0, 1.0)
-		_disc(Vector2(sx, roundf(sun_y)), 15, Color(Pal.L_Y, 0.25 * sa))
-		_disc(Vector2(sx, roundf(sun_y)), 11, Color(Pal.L_F, sa))
-		_disc(Vector2(sx, roundf(sun_y)), 8, Color(Pal.L_Y, sa))
-	if warm <= 0.01:
-		m.draw_rect(Rect2(cam.x, WATER_Y - 26, view.x, 26), Pal.U_W)
-	# 远景视差：云最慢，山其次；日落时云被烧红
+			var c: Color = Pal.L_C.lerp(dusk[i], clampf(warm * 1.05, 0.0, 1.0))
+			c = c.lerp(night[i], clampf(dark * 1.1, 0.0, 1.0))
+			m.draw_rect(Rect2(cam.x, roundf(y0), view.x, roundf(y1) - roundf(y0) + 1), c)
+	var haze := Pal.U_W.lerp(Pal.L_P if dawn else Pal.L_F, clampf(warm, 0.0, 1.0) * 0.7)
+	m.draw_rect(Rect2(cam.x, WATER_Y - 26, view.x, 26), haze.lerp(Pal.U_B.lerp(Pal.U_K, 0.3), clampf(dark * 1.1, 0.0, 1.0)))
+	# 星星：夜里才有，阴天和下雨看不见；位置固定，闪烁
+	if dark > 0.35 and not overcast:
+		var star_a := clampf((dark - 0.35) / 0.4, 0.0, 1.0)
+		for i in 70:
+			var sx := cam.x + fposmod(float(Weather._h(i * 5 + 1) % 4096) / 4096.0 * (view.x + 40.0) - cam.x * 0.05, view.x)
+			var sy := cam.y + float(Weather._h(i * 5 + 2) % 4096) / 4096.0 * (sky_h - 12.0)
+			var tw := 0.55 + 0.45 * sin(t / (350.0 + (i % 5) * 120.0) + i)
+			m.draw_rect(Rect2(roundf(sx), roundf(sy), 1, 1), Color(Pal.U_W, star_a * tw))
+			if i % 9 == 0:   # 少数亮星画成小十字
+				m.draw_rect(Rect2(roundf(sx) - 1, roundf(sy), 3, 1), Color(Pal.U_W, star_a * tw * 0.5))
+				m.draw_rect(Rect2(roundf(sx), roundf(sy) - 1, 1, 3), Color(Pal.U_W, star_a * tw * 0.5))
+	if not overcast:
+		var amp := clampf(sky_h * 0.8, 40.0, 150.0)
+		# 太阳：沿一天里的轨迹走，冬天低、夏天高；日出前和日落后沉到山后
+		var su: float = sky["sun_u"]
+		if su > -1.0 and su < 2.0:
+			var peak: float = clampf(float(sky["sun_peak"]) / 70.0, 0.3, 1.0)
+			var u := clampf(su, -0.12, 1.12)
+			var sx := cam.x + view.x * lerpf(0.1, 0.9, u)
+			var sy: float
+			if su >= 0.0 and su <= 1.0:
+				sy = horizon_y - amp * peak * sin(PI * u)
+			else:
+				sy = horizon_y + minf(1.0, absf(su - clampf(su, 0.0, 1.0)) * 8.0) * 22.0
+			var sa := 1.0 - clampf(dark * 1.2, 0.0, 1.0) * 0.6
+			_disc(Vector2(roundf(sx), roundf(sy)), 15, Color(Pal.L_Y, 0.22 * sa))
+			_disc(Vector2(roundf(sx), roundf(sy)), 11, Color(Pal.L_F.lerp(Pal.L_Y, 1.0 - warm), sa))
+			_disc(Vector2(roundf(sx), roundf(sy)), 8, Color(Pal.L_Y, sa))
+		# 月亮：按月相画亮的那一边；位置按"月亮几点过中天"推（满月整夜都在，新月几乎看不到）
+		var mu: float = sky["moon_u"]
+		if mu > -1.0 and mu < 2.0:
+			var phase: float = sky["moon_phase"]
+			var mx := cam.x + view.x * lerpf(0.1, 0.9, clampf(mu, -0.1, 1.1))
+			var my: float
+			if mu >= 0.0 and mu <= 1.0:
+				my = horizon_y - amp * 0.8 * sin(PI * mu)
+			else:
+				my = horizon_y + 14.0
+			var moon_a := clampf(0.25 + dark * 0.9, 0.0, 1.0)     # 白天的月亮很淡
+			_moon(Vector2(roundf(mx), roundf(my)), 6, phase, g.lat < 0.0, moon_a)
+	# 远景视差：云最慢，山其次；日落时云被烧红，阴天变灰，夜里变暗
 	var cloud_tint := Color.WHITE.lerp(Pal.L_R.lerp(Pal.L_F, 0.35), clampf(warm * 1.1, 0.0, 0.85))
+	cloud_tint = cloud_tint.lerp(Pal.L_A, 0.45 if bool(sky["cloudy"]) else 0.0)
+	cloud_tint = cloud_tint.lerp(Pal.U_A, clampf(dark * 0.8, 0.0, 0.8))
 	var cloud_shift := fposmod(cam.x * 0.85 - t / 500.0, 150.0)
 	for i in range(-1, int(view.x / 150) + 2):
 		var cx := cam.x - cloud_shift + i * 150
@@ -304,6 +338,27 @@ func _draw_sky(cam: Vector2, view: Vector2, t: int) -> void:
 	var hill_shift := fposmod(cam.x * 0.4, 64.0)
 	for i in range(-1, int(view.x / 64) + 2):
 		m.draw_texture(m.tex["hills"], Vector2(roundf(cam.x - hill_shift + i * 64), WATER_Y - 22))
+
+## 月亮：先画一圈淡淡的暗面，再画亮的部分。phase 0 新月 / 0.25 上弦 / 0.5 满月 / 0.75 下弦；
+## 北半球盈月亮在右边，南半球左右相反（south = true）。
+func _moon(c: Vector2, r: int, phase: float, south: bool, alpha: float) -> void:
+	_disc(c, r, Color(Pal.U_A, 0.35 * alpha))
+	var k := cos(TAU * phase)
+	for dy in range(-r, r + 1):
+		var half := int(sqrt(float(r * r - dy * dy)) + 0.5)
+		var term := roundi(half * (k if phase < 0.5 else -k))      # 明暗分界线的 x
+		var x0: int
+		var x1: int
+		if phase < 0.5:
+			x0 = term; x1 = half          # 盈：亮在右边
+		else:
+			x0 = -half; x1 = term         # 亏：亮在左边
+		if south:
+			var nx0 := -x1
+			x1 = -x0
+			x0 = nx0
+		if x1 >= x0:
+			m.draw_rect(Rect2(c.x + x0, c.y + dy, x1 - x0 + 1, 1), Color(Pal.U_W, alpha))
 
 func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 	# 番茄休息时小猫原地打盹——但玩家正用方向键带着它走的时候除外，那时照常画走路

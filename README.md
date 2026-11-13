@@ -194,6 +194,8 @@ tests/         无界面单元测试
 | `CATFISH_ROOM=tackle` | 到镇上后直接进这间屋子（`tackle` / `tailor` / `home`） |
 | `CATFISH_NAP=1` | 配合 `CATFISH_ROOM=home`：进屋直接走到床边小睡（`2` 表示一直睡着，方便截图） |
 | `CATFISH_WEATHER=rain` / `clear` | 强制下雨 / 晴天 |
+| `CATFISH_DAYS=5` | 日期往后挪 5 天（看不同月相） |
+| `CATFISH_LOC=53.35,-6.26,都柏林` | 指定纬度,经度,名字（日出日落、月亮位置按它算） |
 | `CATFISH_HOUR=21` | 把现在当成这个钟点（0–24），看昼夜染色 |
 | `CATFISH_ACT_AT=200` | 在第 200 帧模拟按一次互动键 |
 | `CATFISH_SHOT=/tmp/a:60,120` | 在第 60、120 帧截图到 `/tmp/a_60.png` 等，然后退出 |

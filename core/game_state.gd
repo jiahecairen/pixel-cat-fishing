@@ -24,7 +24,7 @@ var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0
 var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}, "chests": 0}
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
 ## view_mode: 0 = 桌面迷你悬浮窗，1 = 全画面窗口
-var settings: Dictionary = {"view_mode": 1, "pixel_scale": 3, "sfx_volume": 2, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
+var settings: Dictionary = {"view_mode": 1, "pixel_scale": 3, "sfx_volume": 2, "real_weather": 0, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
 var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0}
 ## 小猫形象：各项是 data/cat.json 里对应列表的下标；created=false 时首次启动会弹出捏猫面板
 var cat: Dictionary = {"fur": 0, "pattern": 1, "hat": 1, "created": false}

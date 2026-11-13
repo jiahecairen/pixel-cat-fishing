@@ -174,6 +174,17 @@ func _ready() -> void:
 
 	adapter = Platform.create()
 	adapter.set_fps(FPS_NORMAL)
+	# 位置：按电脑时区推算城市（离线）；日出日落、月亮位置都用它
+	var loc := Location.resolve(adapter.timezone_name(), clock.bias_s(), Location.load_table())
+	game.set_location(loc["lat"], loc["lon"], loc["name"])
+	log.write("location", {"city": loc["name"], "source": loc["source"], "lat": snappedf(loc["lat"], 0.1), "lon": snappedf(loc["lon"], 0.1)})
+	var wf := WeatherFetcher.new()
+	add_child(wf)
+	wf.setup(game, log)
+	if OS.is_debug_build() and OS.has_environment("CATFISH_LOC"):         # 调试：纬度,经度,名字
+		var lp := OS.get_environment("CATFISH_LOC").split(",")
+		if lp.size() >= 2:
+			game.set_location(lp[0].to_float(), lp[1].to_float(), lp[2] if lp.size() > 2 else "")
 	get_tree().auto_accept_quit = false
 	_apply_view_mode()
 
@@ -220,6 +231,8 @@ func _apply_debug_env() -> void:
 		_debug_click = Vector2(xy[0].to_float(), xy[1].to_float())
 	if OS.has_environment("CATFISH_WEATHER"):     # 调试：rain / clear 强制天气
 		game.weather_override = 1 if OS.get_environment("CATFISH_WEATHER") == "rain" else 0
+	if OS.has_environment("CATFISH_DAYS"):        # 调试：把日期往后挪几天（看不同月相）
+		game.day_shift = OS.get_environment("CATFISH_DAYS").to_int()
 	if OS.has_environment("CATFISH_HOUR"):        # 调试：把现在当成这个钟点（0–24）
 		game.hour_override = OS.get_environment("CATFISH_HOUR").to_float()
 	if OS.has_environment("CATFISH_ROOM"):        # 调试：到镇上后直接进这间屋子（tackle / tailor / home）
@@ -870,9 +883,9 @@ func _draw_weather(t: int) -> void:
 	if mini:
 		r = Rect2(cam + MINI_SCENE.position, MINI_SCENE.size)
 	if not mini:
-		var dark := float(Weather.daylight(game.local_s())["dark"])
+		var dark := float(game.sky()["dark"])
 		if dark > 0.0:
-			draw_rect(r, Color(Pal.U_K, 0.42 * dark))
+			draw_rect(r, Color(Pal.U_K, 0.3 * dark))
 	if not game.is_raining():
 		return
 	if not mini:

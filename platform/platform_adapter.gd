@@ -35,6 +35,10 @@ func set_passthrough_all(_window: Window, _on: bool) -> void:
 func mouse_over_polygon(_window: Window, _points: PackedVector2Array) -> bool:
 	return false
 
+## IANA 时区名（如 "Europe/Dublin"）；取不到返回空字符串。
+func timezone_name() -> String:
+	return ""
+
 ## 让系统接管窗口拖动。返回 false 表示本平台不支持。
 func start_window_drag(_window: Window) -> bool:
 	return false

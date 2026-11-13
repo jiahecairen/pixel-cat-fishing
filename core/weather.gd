@@ -23,20 +23,11 @@ static func is_raining(local_s: int, block_chance: float) -> bool:
 	var off := local_s - block * BLOCK_S
 	return off >= start and off < start + length
 
-## 本地钟点（0..24 的小数）。
-static func hour(local_s: int) -> float:
-	return float(posmod(local_s, 86400)) / 3600.0
-
-## 昼夜：dark 0..1（夜里 1），warm 0..1（日出/日落前后的暖色），dawn 表示暖色是清晨的还是傍晚的。
-static func daylight(local_s: int) -> Dictionary:
-	var h := float(posmod(local_s, 86400)) / 3600.0
-	var dark := 0.0
-	if h >= 20.0 or h < 5.0:
-		dark = 1.0
-	elif h < 7.0:
-		dark = (7.0 - h) / 2.0
-	elif h >= 18.0:
-		dark = (h - 18.0) / 2.0
-	var warm := maxf(0.0, 1.0 - absf(h - 6.0) / 1.5)
-	var dusk_warm := maxf(0.0, 1.0 - absf(h - 18.5) / 1.5)
-	return {"dark": dark, "warm": maxf(warm, dusk_warm), "dawn": h < 12.0}
+## 由太阳高度（度）得到天色：dark 0..1（夜里 1，太阳在 +2° 以上为 0，-10° 以下为 1），
+## warm 0..1（日出日落前后的暖色，太阳在 +1.5° 附近最浓）。dawn 表示上午（太阳在升）。
+static func light(sun_alt: float, dawn: bool) -> Dictionary:
+	return {
+		"dark": clampf((2.0 - sun_alt) / 12.0, 0.0, 1.0),
+		"warm": maxf(0.0, 1.0 - absf(sun_alt - 1.5) / 7.0),
+		"dawn": dawn,
+	}
