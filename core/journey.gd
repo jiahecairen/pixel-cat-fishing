@@ -3,8 +3,9 @@ extends RefCounted
 ## 状态存在 GameState.journey 里，用墙上时间的截止时刻推进，重启后能接着走。
 ## 每次 advance 最多走一步，时间大跳跃（电脑睡眠）不会一口气卖光或吃光。
 
+## SOLD_OUT：鱼卖光了，小猫在摊位前等玩家点气泡再去钓鱼
 ## ROAM：完整窗口里玩家用方向键亲自带着小猫在镇上走（只追加在末尾，保持旧存档里的数值含义不变）
-enum Activity { FISHING, IDLE_FULL, SAIL_OUT, WALK_TO_STALL, VENDING, WALK_TO_BOAT, SAIL_BACK, ROAM }
+enum Activity { FISHING, IDLE_FULL, SAIL_OUT, WALK_TO_STALL, VENDING, WALK_TO_BOAT, SAIL_BACK, ROAM, SOLD_OUT }
 
 var _j: Dictionary     # 指向 GameState.journey
 var _cfg: Dictionary
@@ -32,7 +33,7 @@ func progress(now_ms: int) -> float:
 	return clampf(float(now_ms - int(_j["phase_start_ms"])) / float(span), 0.0, 1.0)
 
 func in_town() -> bool:
-	return activity() in [Activity.WALK_TO_STALL, Activity.VENDING, Activity.WALK_TO_BOAT, Activity.ROAM]
+	return activity() in [Activity.WALK_TO_STALL, Activity.VENDING, Activity.WALK_TO_BOAT, Activity.ROAM, Activity.SOLD_OUT]
 
 ## 自由走动时小猫的位置（世界坐标，由表现层写入）。
 func roam_x() -> int:
@@ -80,10 +81,21 @@ func depart(now_ms: int) -> bool:
 	_enter(Activity.SAIL_OUT, now_ms, int(_cfg["sail_ms"]))
 	return true
 
-## 鱼卖完了，收摊回船。
-func leave_stall(now_ms: int) -> void:
+## 鱼卖完了：停在摊位前，等玩家点"鱼卖光了"气泡。
+func sold_out(now_ms: int) -> void:
 	if activity() == Activity.VENDING:
+		_enter(Activity.SOLD_OUT, now_ms, 0)
+
+## 收摊回船（摆摊中或卖光后）。
+func leave_stall(now_ms: int) -> bool:
+	if activity() == Activity.VENDING or activity() == Activity.SOLD_OUT:
 		_enter(Activity.WALK_TO_BOAT, now_ms, int(_cfg["walk_ms"]))
+		return true
+	return false
+
+## 空篓子上岸：不去摊位，直接停在码头，让玩家自己逛。
+func dock_roam_x() -> int:
+	return int(_cfg.get("dock_roam_x", 552))
 
 func schedule_next_sale(now_ms: int) -> void:
 	_j["phase_start_ms"] = now_ms

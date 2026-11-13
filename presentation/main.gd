@@ -34,11 +34,11 @@ const FPS_DRAG := 60
 const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
-	"stall_front", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "cloud", "hills",
+	"stall_front", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
-	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_view"]
+	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 6
 
@@ -307,6 +307,13 @@ func _update_camera(dt: float) -> void:
 	# 世界底边对齐窗口底边，多出来的高度都给天空。
 	var cx := world.cat_pos.x + 16.0
 	var max_x := maxf(0.0, World.WORLD_END - view.x)
+	var sailing: int = game.journey.activity()
+	if sailing == Journey.Activity.SAIL_OUT or sailing == Journey.Activity.SAIL_BACK:
+		# 航行时镜头死死跟着船（小猫在画面里位置不变，船和水岸平滑滑过），不再用缓动，避免抖动
+		_cam_fx = clampf(cx - view.x * 0.5, 0.0, max_x)
+		_cam_snap = false
+		cam = Vector2(roundf(_cam_fx), FULL_MIN_H - view.y)
+		return
 	if _cam_snap:
 		_cam_fx = cx - view.x * 0.5
 		_cam_snap = false
@@ -375,6 +382,8 @@ func _interact() -> void:
 		_interact_inside()
 	elif j.on_boat():
 		_go_to_town()
+	elif j.activity() == Journey.Activity.SOLD_OUT:
+		_go_fishing()
 	elif j.activity() == Journey.Activity.ROAM:
 		var x := float(j.roam_x())
 		if world.near_pier(x):
@@ -769,7 +778,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_press_main()
 	elif BTN_TOWN.has_point(p):
 		_pressed_btn = "town"
-		_go_to_town()
+		_town_button()
 	elif BTN_MENU.has_point(p):
 		# 面板上只留"设置"。商店、图鉴、统计、换形象都要去镇上对应的房子里
 		play("click")
@@ -795,7 +804,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif bag.click(p) or menu.click(p) or wardrobe.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
-		_go_to_town()
+		_town_button()
 	elif mini and MINI_SCENE.has_point(p):
 		if adapter.start_window_drag(get_window()):
 			_dragging = true
@@ -832,6 +841,25 @@ func _draw_quit_confirm() -> void:
 	draw_rect(QUIT_NO, Pal.L_A)
 	draw_rect(Rect2(QUIT_NO.position.x, QUIT_NO.end.y - 2, QUIT_NO.size.x, 2), Pal.U_A)
 	label_centered("取消", QUIT_NO.position.x + QUIT_NO.size.x / 2, QUIT_NO.position.y + 1, Pal.U_K)
+
+
+## 海上 = 去小镇；在镇上 = 去钓鱼。
+func _town_button() -> void:
+	if game.journey.in_town():
+		_go_fishing()
+	else:
+		_go_to_town()
+
+
+func _go_fishing() -> void:
+	var x: float = world.cat_pos.x
+	if game.journey.activity() == Journey.Activity.ROAM:
+		x = float(game.journey.roam_x())
+	if game.go_fishing(x, world.frac_to_boat(x)):
+		log.write("go_fishing", {"basket": game.state.basket.size()})
+		play("click")
+	else:
+		play("deny")
 
 
 func _go_to_town() -> void:
@@ -927,8 +955,10 @@ func _draw_hud(now: int) -> void:
 	elif on_break:
 		main_btn = "btn_skip"
 	_tex_frame(main_btn, BTN_MAIN.position, 1 if _pressed_btn == "main" else 0, 2)
-	_tex_frame("btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
-			Color.WHITE if game.can_go_to_town() else Color(1, 1, 1, 0.35))
+	var in_town: bool = game.journey.in_town()
+	var town_ok: bool = game.can_go_fishing() if in_town else game.can_go_to_town()
+	_tex_frame("btn_fish" if in_town else "btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
+			Color.WHITE if town_ok else Color(1, 1, 1, 0.35))
 	_tex_frame("btn_gear", BTN_MENU.position, 1 if menu.open and menu.tab == 3 else 0, 2)
 	if adapter.is_overlay():
 		_tex_frame("btn_view", BTN_VIEW.position, 0, 2)
@@ -947,7 +977,8 @@ func _draw_hud(now: int) -> void:
 		var full: bool = game.economy.basket_full(game.state)
 		_text("%d/%d" % [game.state.basket.size(), game.state.basket_capacity], Vector2(69, 17),
 				Pal.L_R if full else Pal.L_W)
-	# 完整窗口里的操作提示
+	# 完整窗口里的操作提示（夜里天空是深色，换成浅色字）
+	var hint_col: Color = Pal.L_W if float(game.sky()["dark"]) > 0.35 else Pal.U_K
 	if not mini and not panel_open():
 		if interior != "":
 			label("方向键走动", Vector2(17, 30), Pal.L_W)
@@ -959,17 +990,19 @@ func _draw_hud(now: int) -> void:
 			elif World.SPOT_HINT.has(spot):
 				label(World.SPOT_HINT[spot], Vector2(17, 41), Pal.L_Y)
 		elif game.journey.in_town():
-			label("方向键走动", Vector2(17, 30), Pal.U_K)
-			if game.journey.activity() == Journey.Activity.ROAM:
+			label("方向键走动", Vector2(17, 30), hint_col)
+			if game.journey.activity() == Journey.Activity.SOLD_OUT:
+				label("空格键去钓鱼", Vector2(17, 41), hint_col)
+			elif game.journey.activity() == Journey.Activity.ROAM:
 				var rx := float(game.journey.roam_x())
 				var hint := "空格键互动"
 				if not world.door_near(rx).is_empty():
 					hint = "空格键进入"
 				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_stall(rx) and not world.near_pier(rx):
 					hint = "空格键聊天"
-				label(hint, Vector2(17, 41), Pal.U_K)
+				label(hint, Vector2(17, 41), hint_col)
 		elif game.can_go_to_town():
-			label("空格键去小镇", Vector2(17, 30), Pal.U_K)
+			label("空格键去小镇", Vector2(17, 30), hint_col)
 
 
 func _draw_floats(t: int) -> void:

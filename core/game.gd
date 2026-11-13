@@ -255,9 +255,9 @@ func skip_break() -> bool:
 	return false
 
 func can_go_to_town() -> bool:
-	return journey.can_depart() and not state.basket.is_empty() and not pomodoro.is_break()
+	return journey.can_depart() and not pomodoro.is_break()
 
-## 让小猫出发去小镇卖鱼（鱼篓没满也可以提前去）。
+## 让小猫出发去小镇（随时可以，鱼篓空着也行；休息时整个循环暂停，所以休息时不行）。
 func go_to_town() -> bool:
 	if not can_go_to_town():
 		return false
@@ -266,6 +266,27 @@ func go_to_town() -> bool:
 	journey.depart(now)
 	dirty = true
 	return true
+
+func can_go_fishing() -> bool:
+	return journey.in_town() and journey.activity() != Journey.Activity.WALK_TO_BOAT and not pomodoro.is_break()
+
+## 在镇上点"去钓鱼"：不管在哪（摊位前、卖光后、自由走动），都走回码头上船。
+## x 是小猫当前世界坐标，fraction_to_boat 是剩余路程占全程的比例。
+func go_fishing(x: float, fraction_to_boat: float) -> bool:
+	if not can_go_fishing():
+		return false
+	var now: int = _clock.now_ms()
+	var ok := false
+	match journey.activity():
+		Journey.Activity.SOLD_OUT:
+			ok = journey.leave_stall(now)
+		Journey.Activity.WALK_TO_STALL, Journey.Activity.VENDING:
+			ok = journey.begin_roam(x, now) and journey.end_roam(false, fraction_to_boat, now)
+		Journey.Activity.ROAM:
+			ok = journey.end_roam(false, fraction_to_boat, now)
+	if ok:
+		dirty = true
+	return ok
 
 func buy_upgrade(id: String) -> bool:
 	if not upgrades.buy(state, id):
@@ -347,13 +368,17 @@ func _tick_trip(now: int, events: Array) -> void:
 			if not sale.is_empty():
 				events.append({"type": "sale", "fish_id": sale["fish_id"], "gold": sale["gold"]})
 			if state.basket.is_empty():
-				journey.leave_stall(now)
+				journey.sold_out(now)
 				events.append({"type": "sold_out"})
 			else:
 				journey.schedule_next_sale(now)
+		"docked":
+			if state.basket.is_empty():       # 没鱼可卖：停在码头，让玩家自己逛
+				journey.begin_roam(journey.dock_roam_x(), now)
+			events.append({"type": "docked"})
 		"open":
 			if state.basket.is_empty():
-				journey.leave_stall(now)
+				journey.sold_out(now)
 			events.append({"type": "open"})
 		_:
 			events.append({"type": r})

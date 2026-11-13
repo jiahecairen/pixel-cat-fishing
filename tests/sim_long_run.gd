@@ -18,6 +18,8 @@ const STEP_MS := 200
 class FakeClock:
 	var t: int = 1_700_000_000_000
 	func now_ms() -> int: return t
+	func bias_s() -> int: return 0
+	func local_s() -> int: return 43200 + 3 * 3600
 	func today_key() -> String: return "2026-01-0%d" % (1 + int((t - 1_700_000_000_000) / 14_400_000))
 
 var fails: Array = []
@@ -53,6 +55,8 @@ func _init() -> void:
 			g.skip_break()
 		elif r < 0.0007:
 			g.go_to_town()
+		elif r < 0.0010 and g.can_go_fishing():     # 模拟玩家点气泡/去钓鱼按钮
+			g.go_fishing(act.randf_range(552.0, 700.0), 0.5)
 		elif r < 0.0023:
 			var id: String = ["rod", "bait", "basket"][act.randi() % 3]
 			var cost: int = g.upgrades.next_cost(g.state, id)
@@ -84,7 +88,7 @@ func _init() -> void:
 		require(s.wallet_gold == gold_in - spent, "金币对不上账: 钱包 %d, 收入 %d, 支出 %d" % [s.wallet_gold, gold_in, spent], i)
 		require(s.basket.size() <= s.basket_capacity, "鱼篓超容量 %d/%d" % [s.basket.size(), s.basket_capacity], i)
 		require(s.processed_catch_ids.size() <= GameState.MAX_PROCESSED_IDS and s.processed_sale_ids.size() <= GameState.MAX_PROCESSED_IDS, "幂等记录无限增长", i)
-		require(g.journey.activity() >= 0 and g.journey.activity() <= Journey.Activity.ROAM, "未知活动状态", i)
+		require(g.journey.activity() >= 0 and g.journey.activity() <= Journey.Activity.SOLD_OUT, "未知活动状态", i)
 		require(g.journey.on_boat() or not g.fishing.is_active(), "人在镇上却在钓鱼", i)
 		require(not (g.pomodoro.is_break() and g.fishing.is_active()), "休息时还在钓鱼", i)
 		require(g.in_focus() or s.session_haul.is_empty(), "不在专注但木箱里有鱼", i)

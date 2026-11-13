@@ -93,14 +93,15 @@ func update(now: int, t: int) -> void:
 			cat_pos = Vector2(roundf(lerpf(from, to, j.progress(now))), GROUND_Y - 30)
 		Journey.Activity.ROAM:
 			cat_pos = Vector2(j.roam_x(), GROUND_Y - 30)
-		Journey.Activity.VENDING:
+		Journey.Activity.VENDING, Journey.Activity.SOLD_OUT:
 			cat_pos = Vector2(STALL_CAT_X, GROUND_Y - 31)
 		_:
 			cat_pos = Vector2(boat_x + 10, boat_y(t) - 23)
 
-## 满篓气泡的点击区域（世界坐标）；不显示气泡时返回空矩形。
+## 气泡的点击区域（世界坐标）：满篓（去小镇）或卖光了（去钓鱼）；不显示气泡时返回空矩形。
 func bubble_rect(t: int) -> Rect2:
-	if m.game.journey.activity() != Journey.Activity.IDLE_FULL or m.game.pomodoro.is_break():
+	var a: int = m.game.journey.activity()
+	if (a != Journey.Activity.IDLE_FULL and a != Journey.Activity.SOLD_OUT) or m.game.pomodoro.is_break():
 		return Rect2()
 	return Rect2(cat_pos + Vector2(34, -11 - (t / 600) % 2), Vector2(19, 18))   # 在头的右上方，不被迷你视图的面板挡住
 
@@ -236,12 +237,16 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	m.draw_texture(m.tex["stall_back"], Vector2(STALL_X, GROUND_Y - 40))
 	var in_town: bool = not j.on_boat()
 	var bob_y := boat_y(t)
-	var behind_counter: bool = act == Journey.Activity.VENDING
+	var behind_counter: bool = act == Journey.Activity.VENDING or act == Journey.Activity.SOLD_OUT
 	if in_town and behind_counter:
 		_draw_town_cat(act, on_break, now, t)
 	m.draw_texture(m.tex["stall_front"], Vector2(STALL_X, GROUND_Y - 15))
 	if act == Journey.Activity.VENDING:
 		_draw_stall_goods()
+	if act == Journey.Activity.SOLD_OUT:
+		var sb := bubble_rect(t)
+		if sb.size.x > 0:
+			m.draw_texture(m.tex["bubble_sold"], sb.position)
 	_draw_strollers(t)
 	_draw_customer(t)
 	_draw_leaving(t)
@@ -375,7 +380,7 @@ func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 4, roam_flip)
 			if not m.game.state.basket.is_empty():
 				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if roam_flip else 3, 16 + ((t / 180) % 2 if roam_moving else 0)))
-		Journey.Activity.VENDING:
+		Journey.Activity.VENDING, Journey.Activity.SOLD_OUT:
 			var frame := (t / 700) % 2
 			var p := cat_pos
 			if t - hop_t0 < 500:

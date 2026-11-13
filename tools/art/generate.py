@@ -466,6 +466,17 @@ def bubble():
     return c
 
 
+def bubble_sold():
+    """卖光了气泡：点它让小猫回船去钓鱼。里面画一副鱼骨头。"""
+    c = Canvas(19, 18)
+    c.rect(2, 1, 16, 12, "W"); c.rect(1, 2, 17, 11, "W")
+    c.rows(4, 13, ["WWW", "WW.", "W.."])
+    c.rows(5, 4, ["..a.a.a..", "aaaaaaaaa", "..a.a.a.."])
+    c.rows(5, 9, [".hhhhhhh."])
+    c.outline()
+    return c
+
+
 def cloud():
     c = Canvas(30, 11)
     c.ellipse(9, 6, 7, 3.6, "W"); c.ellipse(17, 4.5, 7, 4, "W"); c.ellipse(23, 7, 5.5, 3, "W")
@@ -672,6 +683,7 @@ def zzz():
 BTN = {
     "play": ["..g....", "..gg...", "..ggg..", "..gggg.", "..ggg..", "..gg...", "..g...."],
     "stop": [".......", ".rrrrr.", ".rrrrr.", ".rrrrr.", ".rrrrr.", ".rrrrr.", "......."],
+    "fish": [".......", "..cc..c", ".cKccc.", "ccccccc", ".ccccc.", "..cc..c", "......."],
     "town": ["...r...", "..rrr..", ".rrrrr.", ".hhhhh.", ".hohch.", ".hohhh.", "......."],
     "view": ["ww...ww", "w.....w", "..www..", "..www..", "..www..", "w.....w", "ww...ww"],
     "skip": [".......", "c..c.c.", "cc.ccc.", "cccccc.", "cc.ccc.", "c..c.c.", "......."],
@@ -833,7 +845,7 @@ LABELS = [
     "自由挂机钓得更快", "稀有鱼更容易上钩", "鱼篓容量加二", "金币可以升级装备",
     "？？？", "共钓到", "今日", "累计", "近七日", "专注", "短休", "长休", "大小", "音效",
     "我的小猫", "给小猫选个样子", "完成",
-    "方向键走动", "空格键互动", "空格键去小镇",
+    "方向键走动", "空格键互动", "空格键去小镇", "空格键去钓鱼",
     "小猫的家", "裁缝铺", "渔具店", "空格键进入", "空格键聊天",
     "确定要退出吗", "退出", "取消", "宝箱",
     "物品栏", "使用", "空空如也", "生效中", "去钓宝箱吧",
@@ -908,6 +920,7 @@ def build():
         "stall_front": save(stall_front(), "stall_front"),
         "gameboy": save(gameboy(), "gameboy"),
         "bubble": save(bubble(), "bubble"),
+        "bubble_sold": save(bubble_sold(), "bubble_sold"),
         "cloud": save(cloud(), "cloud"),
         "hills": save(hills(), "hills"),
         "fish_crucian": save(fish("s", "S", "w", "S"), "fish_crucian"),

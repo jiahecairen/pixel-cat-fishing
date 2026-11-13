@@ -200,7 +200,8 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 	print("game: free mode（满篓等点击 / 偷吃 / 去小镇）")
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(5))
-	check(not g.go_to_town(), "空鱼篓不能出发")
+	check(g.can_go_to_town(), "空鱼篓也可以去小镇")
+	check(not g.can_go_fishing(), "在海上不能点去钓鱼")
 	var ev := _run(g, clock, 40 * 60, 500)
 	check(_count(ev, "basket_full") >= 1 and _count(ev, "depart") == 0, "满篓后原地等待，不会自己出发")
 	# 满篓后会偷吃：钓满 → 吃掉一条 → 接着钓
@@ -239,11 +240,35 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 	check(sold == 10 and g2.state.basket.is_empty(), "10 条鱼一条条卖完")
 	check(gaps.min() >= 8000 and gaps.max() <= 20500, "每条间隔 8–20 秒 (%d..%d)" % [gaps.min(), gaps.max()])
 	check(g2.state.wallet_gold == expect, "收入 = 鱼价之和 (%d)" % expect)
+	check(g2.journey.activity() == Journey.Activity.SOLD_OUT, "卖光后停在摊位前等玩家，不自己去钓鱼")
+	_run(g2, c2, 120)
+	check(g2.journey.activity() == Journey.Activity.SOLD_OUT and g2.journey.in_town(), "等多久都不会自己走")
+	check(g2.go_fishing(0.0, 1.0) and g2.journey.activity() == Journey.Activity.WALK_TO_BOAT, "点气泡后才走向码头")
 	trip = _run(g2, c2, 39)
 	check(_count(trip, "boarded") == 1 and _count(trip, "back") == 1, "走回码头并返航")
 	check(g2.journey.activity() == Journey.Activity.FISHING, "回到钓点")
 	_run(g2, c2, 5)
 	check(g2.fishing.is_active(), "自动继续钓鱼")
+	# 空篓子也能去小镇：上岸后停在码头自由走动，随时可以点去钓鱼
+	var ge := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(9))
+	var ce = ge._clock
+	check(ge.go_to_town(), "空篓子出发")
+	_run(ge, ce, 31)
+	check(ge.journey.activity() == Journey.Activity.ROAM and ge.journey.roam_x() == 552, "没鱼：上岸后停在码头自由走动")
+	_run(ge, ce, 120)
+	check(ge.journey.activity() == Journey.Activity.ROAM, "不会自己走开")
+	check(ge.can_go_fishing() and ge.go_fishing(552.0, 0.0), "点去钓鱼")
+	_run(ge, ce, 40)
+	check(ge.journey.activity() == Journey.Activity.FISHING, "返航后继续钓鱼")
+	# 摆摊中途点去钓鱼：带着没卖完的鱼回船
+	var gv := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(10))
+	var cv = gv._clock
+	for i in 3:
+		gv.economy.add_catch(gv.state, "v%d" % i, "bass", false)
+	gv.go_to_town(); _run(gv, cv, 45)
+	check(gv.journey.activity() == Journey.Activity.VENDING and gv.go_fishing(0.0, 1.0), "摆摊中也可以点去钓鱼")
+	check(gv.journey.activity() == Journey.Activity.WALK_TO_BOAT and gv.state.basket.size() == 3, "没卖的鱼还在篓里")
+	check(not gv.go_fishing(0.0, 1.0), "已经在走向码头，不能重复点")
 	# 航行途中进入休息：进度冻结，休息结束后接着走
 	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(2))
 	var c3 = g3._clock
@@ -275,7 +300,8 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 	ev6 = _run(g6, c6, 5)
 	check(_count(ev6, "open") == 1, "半程只用一半时间（4 秒）就到")
 	ev6 = _run(g6, c6, 100)
-	check(g6.state.wallet_gold == 15 and _count(ev6, "sale") == 3 and _count(ev6, "back") == 1, "卖完自动返航")
+	check(g6.state.wallet_gold == 15 and _count(ev6, "sale") == 3 and g6.journey.activity() == Journey.Activity.SOLD_OUT, "卖完停在摊位前")
+	check(g6.go_fishing(0.0, 1.0) and _count(_run(g6, c6, 45), "back") == 1, "点气泡后返航")
 	g6.state.basket.clear()
 	# 自由走动时在码头直接上船
 	for i in 2:

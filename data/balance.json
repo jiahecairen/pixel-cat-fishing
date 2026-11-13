@@ -93,6 +93,7 @@
   "town": {
     "sail_ms": 30000,
     "walk_ms": 8000,
+    "dock_roam_x": 552,
     "sale_min_ms": 8000,
     "sale_max_ms": 20000,
     "eat_min_ms": 180000,
