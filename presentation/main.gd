@@ -374,6 +374,8 @@ func _update_roam(dt: float) -> void:
 			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * game.move_speed() * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
 			world.room_flip = dir < 0
 		return
+	if dir != 0 and interior == "" and game.can_halt_sail():
+		game.halt_sail()                       # 方向键随时打断自动航行，船停在当前位置，接着手动划
 	if dir != 0 and game.can_steer() and interior == "":
 		# 在船上：方向键划船（每帧重新读回存档里的位置，避免和别处改动打架）
 		if absf(_boat_fx - float(j.boat_x())) > 1.5:
@@ -929,10 +931,15 @@ func _draw_quit_confirm() -> void:
 
 ## 海上 = 去小镇；在镇上 = 去钓鱼。
 func _town_button() -> void:
-	if game.can_turn_sail() or game.journey.activity() == Journey.Activity.SAIL_OUT or game.journey.activity() == Journey.Activity.SAIL_BACK:
-		if game.turn_sail():           # 航行途中掉头：去小镇的路上回钓点，回钓点的路上再去小镇
-			world.bird = {}
+	var act: int = game.journey.activity()
+	if act == Journey.Activity.SAIL_OUT:
+		if game.halt_sail():           # 去小镇的路上再点一下：船停在当前位置，不去了
 			play("click")
+		else:
+			play("deny")
+	elif act == Journey.Activity.SAIL_BACK:
+		if game.halt_sail() and game.go_to_town():      # 回钓点的路上点城镇图标：从这里直接转向小镇
+			play("cast")
 		else:
 			play("deny")
 	elif game.journey.in_town():
@@ -953,13 +960,36 @@ func _go_fishing() -> void:
 
 
 func _go_to_town() -> void:
+	var had_line: bool = game.line_out() and game.fishing.is_active()
 	if game.go_to_town():
-		world.bird = {}
+		if had_line:
+			world.retract_t0 = Time.get_ticks_msec()      # 先收杆再开船
 		log.write("go_to_town", {"basket": game.state.basket.size()})
 		_full_notified = false
 		play("cast")
 	else:
 		play("deny")
+
+
+## 回小镇按钮外圈的跑马灯：一段亮光顺时针绕着边转，再点一下（或按方向键）就停下。
+func _draw_marquee(r: Rect2, t: int) -> void:
+	var w := int(r.size.x)
+	var h := int(r.size.y)
+	var per := 2 * (w + h) - 4
+	var head := (t / 45) % per
+	for k in 10:
+		var idx := ((head - k) % per + per) % per
+		var pt: Vector2
+		if idx < w:
+			pt = Vector2(idx, 0)
+		elif idx < w + h - 1:
+			pt = Vector2(w - 1, idx - w + 1)
+		elif idx < 2 * w + h - 2:
+			pt = Vector2(w - 1 - (idx - (w + h - 2)), h - 1)
+		else:
+			pt = Vector2(0, h - 1 - (idx - (2 * w + h - 3)))
+		var c: Color = Pal.L_W if k < 3 else (Pal.L_Y if k < 7 else Pal.U_O)
+		draw_rect(Rect2(r.position + pt, Vector2.ONE), c)
 
 
 func _press_main() -> void:
@@ -1050,11 +1080,13 @@ func _draw_hud(now: int) -> void:
 	_tex_frame(main_btn, BTN_MAIN.position, 1 if _pressed_btn == "main" else 0, 2)
 	var in_town: bool = game.journey.in_town()
 	var act_now: int = game.journey.activity()
-	var show_fish: bool = in_town or act_now == Journey.Activity.SAIL_OUT       # 往小镇去的路上，图标就是"回去钓鱼"
+	var show_fish: bool = in_town
 	var sailing: bool = act_now == Journey.Activity.SAIL_OUT or act_now == Journey.Activity.SAIL_BACK
-	var town_ok: bool = game.can_turn_sail() if sailing else (game.can_go_fishing() if in_town else game.can_go_to_town())
+	var town_ok: bool = game.can_halt_sail() if sailing else (game.can_go_fishing() if in_town else game.can_go_to_town())
 	_tex_frame("btn_fish" if show_fish else "btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
 			Color.WHITE if town_ok else Color(1, 1, 1, 0.35))
+	if act_now == Journey.Activity.SAIL_OUT:
+		_draw_marquee(Rect2(BTN_TOWN.position - Vector2.ONE, BTN_TOWN.size + Vector2(2, 2)), Time.get_ticks_msec())
 	_tex_frame("btn_gear", BTN_MENU.position, 1 if menu.open and menu.tab == 3 else 0, 2)
 	if adapter.is_overlay():
 		_tex_frame("btn_view", BTN_VIEW.position, 0, 2)

@@ -232,3 +232,9 @@
 - 鸟：`bird_start` 生成 0–2 次换位路径，最终位置对应行为；新增 `idle_chance` 的 none 来访；偷鱼后 `anger_ms` 红色💢（新精灵 `anger`），`_tick_idle_full` 在生气期间不恢复钓鱼。
 - 水线 `WATER_Y+2`。调试变量 `CATFISH_BIRD=steal|gift|none`。
 - 测试 ALL TESTS PASS、SIM PASS；Linux 截图看过尾迹和三种鸟停位。Mac 实机待验，💢画面没截到。
+
+## v0.37（11-13）
+- `Journey.sail_curve` 速度曲线（加速 5%、匀速、减速 10%）、`sail_pos`、`halt_sail`；`Game.halt_sail` 取代掉头；方向键打断自动航行。
+- 回小镇按钮跑马灯 `_draw_marquee`；出发先收杆（`retract_t0`）；最后 10% 不画船桨。
+- 鸟：船动即惊飞（`bird["flee"]`，世界坐标）；`steer_to` 取消来访。V 形尾迹从船前端起。
+- 测试 ALL TESTS PASS、SIM PASS；Linux 截图看到跑马灯。Mac 实机待验。

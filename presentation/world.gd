@@ -93,7 +93,7 @@ func bobber_rest() -> Vector2:
 func update(now: int, t: int) -> void:
 	_update_customer(now)
 	var j: Journey = m.game.journey
-	var p := _ease(j.progress(now))
+	var p := Journey.sail_curve(j.progress(now))
 	match j.activity():
 		Journey.Activity.SAIL_OUT:
 			boat_x = lerpf(float(j.boat_x()), DOCK_X, p)
@@ -563,7 +563,7 @@ func _update_wake(t: int) -> void:
 		var v := boat_speed
 		while _wk_dist >= 4.0:
 			_wk_dist -= 4.0
-			_ripples.append({"k": "wake", "x": (boat_x - 1.0) if dir > 0.0 else (boat_x + 65.0), "y": float(WATER_Y + 4),
+			_ripples.append({"k": "wake", "x": (boat_x + 65.0) if dir > 0.0 else (boat_x - 1.0), "y": float(WATER_Y + 4),
 					"t0": t, "life": 1100 + int(minf(v, 90.0) * 14.0), "spread": clampf(1.0 + v / 16.0, 1.0, 3.4),
 					"len": 4.0 + minf(v / 7.0, 9.0), "dir": dir})
 	elif t - _wk_moved_t > 300 and t >= _wk_ring_at:        # 停着：每隔一会儿荡开一圈
@@ -639,13 +639,30 @@ func _draw_bird(t: int, bob_y: float) -> void:
 	bird["last"] = t
 	var d := int(bird["d"])
 	var act: int = m.game.bird_act_after_ms()      # 鸟停多久才送礼/偷鱼
+	var steal: bool = bird["kind"] == "steal"
+	var spots: Array = bird["spots"]
+	# 船开动了（划船 / 自动航行）：鸟被惊飞，从它此刻在世界里的位置飞走，不会像贴在船上一样跟着船
+	var sailing: bool = m.game.journey.activity() == Journey.Activity.SAIL_OUT or m.game.journey.activity() == Journey.Activity.SAIL_BACK
+	if (boat_moving or sailing) and not bird.has("flee"):
+		bird["flee"] = d
+		bird["from"] = bird.get("pos", _bird_spot(spots[0], bob_y))
+		bird["carry"] = d >= act and steal
+	if bird.has("flee"):
+		var fe := float(d - int(bird["flee"])) / 1800.0
+		if fe > 1.0:
+			bird = {}
+			return
+		var fpos: Vector2 = bird["from"] + Vector2(-120.0 * fe, -70.0 * fe - 25.0 * fe * fe)
+		m.tex_frame("bird_fly", (fpos + Vector2(-1, 1)).round(), (d / 90) % 2, 2)
+		var fitem: Dictionary = m.game.fish_by_id.get(bird["item"], {})
+		if bird["carry"] and m.tex.has(fitem.get("sprite", "")):
+			m.draw_texture(m.tex[fitem["sprite"]], (fpos + Vector2(-4, 8)).round())
+		return
+	var hops := spots.size() - 1
+	var perch := _bird_spot(spots[hops], bob_y)
 	if d > act + 3500:
 		bird = {}
 		return
-	var steal: bool = bird["kind"] == "steal"
-	var spots: Array = bird["spots"]
-	var hops := spots.size() - 1
-	var perch := _bird_spot(spots[hops], bob_y)
 	var item: Dictionary = m.game.fish_by_id.get(bird["item"], {}) if steal else m.game.inventory.by_id.get(bird["item"], {})
 	var item_tex: String = item.get("sprite", "")
 	const ARRIVE := 2500
@@ -653,6 +670,7 @@ func _draw_bird(t: int, bob_y: float) -> void:
 		var first := _bird_spot(spots[0], bob_y)
 		var k := _ease(float(d) / float(ARRIVE))
 		var pos := (first + Vector2(170, -70)).lerp(first, k) + Vector2(0, roundf(sin(d / 150.0) * (1.0 - k) * 3.0))
+		bird["pos"] = pos
 		m.tex_frame("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 110) % 2, 2)
 	elif d < act:
 		var seg := maxi(1, (act - ARRIVE - hops * BIRD_HOP_MS) / (hops + 1))
@@ -664,12 +682,14 @@ func _draw_bird(t: int, bob_y: float) -> void:
 			var b := _bird_spot(spots[idx + 1], bob_y)
 			var k := float(within - seg) / float(BIRD_HOP_MS)
 			var pos := a.lerp(b, k) + Vector2(0, -sin(k * PI) * 8.0)
+			bird["pos"] = pos
 			if b.x > a.x:
 				m.tex_frame_flipped("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 90) % 2, 2)
 			else:
 				m.tex_frame("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 90) % 2, 2)
 		else:
 			var here := _bird_spot(spots[idx], bob_y)
+			bird["pos"] = here
 			if (d / 1300) % 3 == 2:
 				m.tex_frame_flipped("bird_perch", here, 0, 1)        # 回头张望
 			else:
@@ -680,6 +700,7 @@ func _draw_bird(t: int, bob_y: float) -> void:
 			var fall := float(d - act) / 700.0
 			m.draw_texture(m.tex[item_tex], perch.lerp(Vector2(boat_x + 26, bob_y - 4), fall * fall).round())
 		var pos := perch + Vector2(-120.0 * e, -70.0 * e - 25.0 * e * e)
+		bird["pos"] = pos
 		m.tex_frame("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 100) % 2, 2)
 		if steal and m.tex.has(item_tex):                        # 叼着鱼飞走
 			m.draw_texture(m.tex[item_tex], (pos + Vector2(-4, 8)).round())
@@ -925,7 +946,8 @@ func _draw_boat_extras(act: int, on_break: bool, now: int, t: int) -> void:
 			if b.size.x > 0:
 				m.draw_texture(m.tex["bubble"], b.position)
 		Journey.Activity.SAIL_OUT, Journey.Activity.SAIL_BACK:
-			_draw_rowing(-1.0 if act == Journey.Activity.SAIL_BACK else 1.0, t)
+			if m.game.journey.progress(now) < 0.9:       # 快到了：收起船桨，靠惯性滑过去
+				_draw_rowing(-1.0 if act == Journey.Activity.SAIL_BACK else 1.0, t)
 
 ## 划桨动画：dir 是船前进的方向（1 向右 / -1 向左）。
 func _draw_rowing(dir: float, t: int) -> void:

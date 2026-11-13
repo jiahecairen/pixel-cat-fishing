@@ -21,16 +21,36 @@ func sail_scale() -> float:
 	var dist := absf(float(_cfg.get("dock_x", 512)) - float(boat_x()))
 	return clampf(dist / float(_cfg.get("sail_ref_dist", 252)), float(_cfg.get("sail_min_scale", 0.08)), 3.0)
 
-## 航行途中掉头：位置不跳，剩下的路程等于已经走过的路程。
-func turn_sail(now_ms: int) -> bool:
+## 航行的速度曲线：开头很快加速、中间匀速、最后一小段减速滑行（这时船桨已经收起）。返回走完的路程比例，u 是时间比例。
+static func sail_curve(u: float) -> float:
+	const A := 0.05
+	const B := 0.1
+	u = clampf(u, 0.0, 1.0)
+	var total := 1.0 - A / 2.0 - B / 2.0
+	var s: float
+	if u < A:
+		s = u * u / (2.0 * A)
+	elif u <= 1.0 - B:
+		s = A / 2.0 + (u - A)
+	else:
+		var r := 1.0 - u
+		s = total - r * r / (2.0 * B)
+	return s / total
+
+## 航行中船此刻的位置（世界坐标，船左端）。
+func sail_pos(now_ms: int) -> float:
+	var p := sail_curve(progress(now_ms))
+	var bx := float(boat_x())
+	var dock := float(_cfg.get("dock_x", 512))
+	return lerpf(bx, dock, p) if activity() == Activity.SAIL_OUT else lerpf(dock, bx, p)
+
+## 打断自动航行：船停在此刻的位置，回到钓鱼状态（竿是收着的，要玩家按互动键再甩）。
+func halt_sail(now_ms: int) -> bool:
 	var a := activity()
 	if a != Activity.SAIL_OUT and a != Activity.SAIL_BACK:
 		return false
-	var span := int(_j["phase_end_ms"]) - int(_j["phase_start_ms"])
-	var elapsed := clampi(now_ms - int(_j["phase_start_ms"]), 0, span)
-	_enter(Activity.SAIL_BACK if a == Activity.SAIL_OUT else Activity.SAIL_OUT, now_ms, span)
-	_j["phase_start_ms"] = now_ms - (span - elapsed)
-	_j["phase_end_ms"] = int(_j["phase_start_ms"]) + span
+	set_boat_x(sail_pos(now_ms))
+	_enter(Activity.FISHING, now_ms, 0)
 	return true
 
 func _init(journey_state: Dictionary, cfg: Dictionary, rng: RandomNumberGenerator) -> void:

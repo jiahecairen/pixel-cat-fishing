@@ -281,19 +281,18 @@ func go_to_town() -> bool:
 	dirty = true
 	return true
 
-## 航行途中随时能掉头：去小镇的路上点鱼图标回钓点，回钓点的路上点城镇图标再去小镇。休息时不行。
-func can_turn_sail() -> bool:
+## 自动航行（去小镇 / 回钓点）随时能打断：船停在当前位置，竿收着，按互动键再甩。休息时不行。
+func can_halt_sail() -> bool:
 	return (journey.activity() == Journey.Activity.SAIL_OUT or journey.activity() == Journey.Activity.SAIL_BACK) and not pomodoro.is_break()
 
-func turn_sail() -> bool:
-	if not can_turn_sail():
+func halt_sail() -> bool:
+	if not can_halt_sail():
 		return false
-	var was_out: bool = journey.activity() == Journey.Activity.SAIL_OUT
-	if not journey.turn_sail(_clock.now_ms()):
+	if not journey.halt_sail(_clock.now_ms()):
 		return false
-	if not was_out:                 # 掉头去小镇：和出发一样，鸟的来访作废
-		_cancel_bird()
-	state.journey["line_out"] = 1
+	state.journey["line_out"] = 0
+	fishing.stop(_clock.now_ms())
+	_cancel_bird()
 	dirty = true
 	return true
 
@@ -413,6 +412,7 @@ func steer_to(x: float) -> bool:
 	var nx := clampf(x, float(_water.get("boat_min_x", 30)), float(_water.get("boat_max_x", 440)))
 	if int(round(nx)) != journey.boat_x():
 		journey.set_boat_x(nx)
+		_cancel_bird()                 # 船在开，鸟停不住
 		dirty = true
 	return true
 
