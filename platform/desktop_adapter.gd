@@ -40,6 +40,15 @@ func set_interactive_polygon(window: Window, points: PackedVector2Array) -> void
 	window.mouse_passthrough = false
 	window.mouse_passthrough_polygon = points
 
+func set_passthrough_all(window: Window, on: bool) -> void:
+	window.mouse_passthrough = on
+
+func mouse_over_polygon(window: Window, points: PackedVector2Array) -> bool:
+	if points.size() < 3:
+		return false
+	var local := Vector2(DisplayServer.mouse_get_position() - window.position)
+	return Geometry2D.is_point_in_polygon(local, points)
+
 func start_window_drag(window: Window) -> bool:
 	window.start_drag()
 	return true

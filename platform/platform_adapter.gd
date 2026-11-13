@@ -27,6 +27,14 @@ func enter_full(_window: Window, _size: Vector2i) -> void:
 func set_interactive_polygon(_window: Window, _points: PackedVector2Array) -> void:
 	pass
 
+## 整窗鼠标穿透开关（隐藏迷你窗时用，打开后窗口完全不拦截点击）。
+func set_passthrough_all(_window: Window, _on: bool) -> void:
+	pass
+
+## 当前鼠标是否落在窗口的可交互多边形内（屏幕坐标，窗口没焦点也能判断）。
+func mouse_over_polygon(_window: Window, _points: PackedVector2Array) -> bool:
+	return false
+
 ## 让系统接管窗口拖动。返回 false 表示本平台不支持。
 func start_window_drag(_window: Window) -> bool:
 	return false

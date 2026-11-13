@@ -88,6 +88,10 @@ var _next_player: int = 0
 var _last_fs: int = -1
 var _pressed_btn: String = ""
 var _dragging: bool = false
+var _mini_pts := PackedVector2Array()   # 迷你窗可交互多边形（窗口像素）
+var _mini_shown: bool = true            # 迷你窗当前是否显示（鼠标移入才显示）
+var _mini_hide_at: int = 0              # 鼠标移出后，到这个时刻才真正隐藏
+var _mini_hover_off: bool = false       # 调试：CATFISH_NOHOVER 关闭"移入才显示"
 var _last_win_pos := Vector2i.ZERO
 var _pos_stable_since: int = 0
 var _config_ok: bool = true
@@ -179,6 +183,7 @@ func _apply_debug_env() -> void:
 	var st := game.state
 	if OS.has_environment("CATFISH_SPEED"):
 		_debug_speed = maxf(1.0, OS.get_environment("CATFISH_SPEED").to_float())
+	_mini_hover_off = OS.has_environment("CATFISH_NOHOVER")
 	if OS.has_environment("CATFISH_SHOT"):
 		var sp := OS.get_environment("CATFISH_SHOT").split(":")
 		if sp.size() == 2:
@@ -234,6 +239,11 @@ func _apply_view_mode() -> void:
 	var win := get_window()
 	mini = adapter.is_overlay() and int(game.state.settings.get("view_mode", 1)) == 0
 	_cam_snap = true
+	_mini_shown = true
+	_mini_hide_at = Time.get_ticks_msec() + 2000   # 刚切到迷你窗时先显示 2 秒，方便找到它
+	visible = true
+	if adapter.is_overlay():
+		adapter.set_passthrough_all(win, false)
 	if mini:
 		px_scale = adapter.pixel_scale(int(game.state.settings.get("pixel_scale", 3)))
 		view = Vector2(MINI_VIEW)
@@ -428,6 +438,7 @@ func _update_polygon() -> void:
 	])
 	for i in pts.size():
 		pts[i] *= px_scale
+	_mini_pts = pts
 	adapter.set_interactive_polygon(get_window(), pts)
 
 
@@ -497,6 +508,7 @@ func _process(dt: float) -> void:
 	_fishing_feedback()
 	_debug_trace()
 	_track_window()
+	_update_mini_hover()
 	_layout()
 	world.update(game.now_ms(), Time.get_ticks_msec())
 	_update_camera(dt)
@@ -543,6 +555,33 @@ func _fishing_feedback() -> void:
 			play("bite")
 		Fishing.State.REELING:
 			play("reel")
+
+
+## 迷你窗默认隐形（整窗鼠标穿透，不挡后面的应用）；鼠标移到小猫所在区域才显示。
+## 鼠标移出后再停留 0.8 秒，防止边缘抖动；拖动窗口时保持显示。
+func _update_mini_hover() -> void:
+	if not mini or _mini_hover_off or not bool(game.state.settings.get("mini_hover", true)):
+		if mini and not _mini_shown:
+			_set_mini_shown(true)
+		elif not mini:
+			visible = true
+			modulate.a = 1.0
+		return
+	var now := Time.get_ticks_msec()
+	if _dragging or adapter.mouse_over_polygon(get_window(), _mini_pts):
+		_mini_hide_at = now + 800
+		if not _mini_shown:
+			_set_mini_shown(true)
+	elif _mini_shown and now >= _mini_hide_at:
+		_set_mini_shown(false)
+
+
+func _set_mini_shown(on: bool) -> void:
+	_mini_shown = on
+	visible = on
+	adapter.set_passthrough_all(get_window(), not on)
+	if on:
+		queue_redraw()
 
 
 func _track_window() -> void:
