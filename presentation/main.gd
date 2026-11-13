@@ -241,9 +241,6 @@ func _apply_view_mode() -> void:
 	_cam_snap = true
 	_mini_shown = true
 	_mini_hide_at = Time.get_ticks_msec() + 2000   # 刚切到迷你窗时先显示 2 秒，方便找到它
-	visible = true
-	if adapter.is_overlay():
-		adapter.set_passthrough_all(win, false)
 	if mini:
 		px_scale = adapter.pixel_scale(int(game.state.settings.get("pixel_scale", 3)))
 		view = Vector2(MINI_VIEW)
@@ -436,10 +433,16 @@ func _update_polygon() -> void:
 		p, Vector2(p.x + PANEL_SIZE.x, p.y), Vector2(p.x + PANEL_SIZE.x, s.end.y),
 		Vector2(s.position.x, s.end.y), s.position, Vector2(p.x, s.position.y),
 	])
+	var scene_only := PackedVector2Array([
+		s.position, Vector2(s.end.x, s.position.y), s.end, Vector2(s.position.x, s.end.y),
+	])
 	for i in pts.size():
 		pts[i] *= px_scale
+	for i in scene_only.size():
+		scene_only[i] *= px_scale
 	_mini_pts = pts
-	adapter.set_interactive_polygon(get_window(), pts)
+	# 菜单隐藏时，菜单所在的透明区域不拦截点击；鼠标移入仍由全局坐标判断
+	adapter.set_interactive_polygon(get_window(), pts if _mini_shown else scene_only)
 
 
 # ------------------------------------------------------------------ 主循环
@@ -557,18 +560,15 @@ func _fishing_feedback() -> void:
 			play("reel")
 
 
-## 迷你窗默认隐形（整窗鼠标穿透，不挡后面的应用）；鼠标移到小猫所在区域才显示。
-## 鼠标移出后再停留 0.8 秒，防止边缘抖动；拖动窗口时保持显示。
+## 迷你窗：鼠标不在窗口上时，只隐藏上方的菜单（HUD 面板），小猫和场景一直显示。
+## 鼠标移出后再停留 0.8 秒才隐藏，防止边缘抖动；拖动窗口或打开面板时保持显示。
 func _update_mini_hover() -> void:
-	if not mini or _mini_hover_off or not bool(game.state.settings.get("mini_hover", true)):
-		if mini and not _mini_shown:
-			_set_mini_shown(true)
-		elif not mini:
-			visible = true
-			modulate.a = 1.0
+	if not mini:
 		return
+	var always: bool = _mini_hover_off or not bool(game.state.settings.get("mini_hover", true))
 	var now := Time.get_ticks_msec()
-	if _dragging or adapter.mouse_over_polygon(get_window(), _mini_pts):
+	if always or _dragging or panel_open() or _confirm_quit \
+			or adapter.mouse_over_polygon(get_window(), _mini_pts):
 		_mini_hide_at = now + 800
 		if not _mini_shown:
 			_set_mini_shown(true)
@@ -578,10 +578,8 @@ func _update_mini_hover() -> void:
 
 func _set_mini_shown(on: bool) -> void:
 	_mini_shown = on
-	visible = on
-	adapter.set_passthrough_all(get_window(), not on)
-	if on:
-		queue_redraw()
+	_update_polygon()
+	queue_redraw()
 
 
 func _track_window() -> void:
@@ -830,7 +828,8 @@ func _draw() -> void:
 		world.draw(cam, view, mini, now, t)
 		_draw_floats(t)
 	draw_set_transform(ui_off)
-	_draw_hud(now)
+	if not mini or _mini_shown:
+		_draw_hud(now)
 	menu.draw()
 	wardrobe.draw()
 	bag.draw()
