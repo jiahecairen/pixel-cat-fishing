@@ -5,7 +5,7 @@ extends RefCounted
 const Pal := preload("res://presentation/palette.gd")
 
 const RECT := Rect2(15, 28, 98, 68)
-const TABS := ["商店", "图鉴", "统计", "设置"]
+const TABS := ["商店", "图鉴", "统计", "设置", "状态"]
 const UPGRADES := [
 	["rod", "鱼竿", "自由挂机钓得更快"],
 	["bait", "鱼饵", "稀有鱼更容易上钩"],
@@ -90,6 +90,7 @@ func draw() -> void:
 		1: _draw_dex()
 		2: _draw_stats()
 		3: _draw_settings()
+		4: _draw_status()
 
 func _draw_shop() -> void:
 	var g = m.game
@@ -187,3 +188,29 @@ func _draw_settings() -> void:
 		var on := int(g.state.settings.get(c[0], 0)) == 1
 		m.label("开" if on else "关", Vector2(c[3], y5), Pal.L_G if on else Pal.L_A)
 		m.tex_frame("btn_plus", _set_rect(4, c[4]).position, 0, 2)
+
+## 小猫状态：左边是小猫，右边装备栏（鱼竿、鱼线、鱼钩、鱼饵），底下一行金币、钓到的鱼、完成的番茄。
+## 没有血量、攻击力这类数值——这是个钓鱼游戏。
+const EQUIP := [["鱼竿", "rod"], ["鱼线", "line"], ["鱼钩", "hook"]]
+
+func _draw_status() -> void:
+	var g = m.game
+	m.draw_rect(Rect2(17, 42, 34, 34), Pal.U_A)
+	m.draw_rect(Rect2(18, 43, 32, 32), Pal.U_B)
+	m.draw_cat(Vector2(18, 44), 0)
+	for i in EQUIP.size():
+		var y: int = 43 + i * 10
+		m.label(EQUIP[i][0], Vector2(56, y), Pal.L_A)
+		m.label(g.equipment_name(EQUIP[i][1]), Vector2(82, y), Pal.L_W)
+	m.label("鱼饵", Vector2(56, 73), Pal.L_A)
+	if g.bait_active():
+		m.label("幸运", Vector2(82, 73), Pal.L_Y)
+	else:
+		m.label("空", Vector2(82, 73), Pal.L_A)
+	m.draw_rect(Rect2(17, 84, 94, 1), Pal.U_A)
+	m.draw_texture(m.tex["coin"], Vector2(19, 85))
+	m.text(str(g.state.wallet_gold), Vector2(30, 88), Pal.L_Y)
+	m.label("钓到", Vector2(54, 85), Pal.L_A)
+	m.text(str(int(g.state.stats["total_fish"])), Vector2(75, 88), Pal.L_W)
+	m.draw_texture(m.tex["tomato"], Vector2(92, 85))
+	m.text(str(int(g.state.stats["total_pomodoros"])), Vector2(103, 88), Pal.L_W)

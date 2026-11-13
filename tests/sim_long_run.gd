@@ -77,8 +77,11 @@ func _init() -> void:
 				gold_in += int(g.use_item(owned[act.randi() % owned.size()])["gold"])
 		elif r < 0.00565:
 			clock.t += act.randi_range(60_000, 3 * 3600_000)    # 电脑睡了一觉
+		elif r < 0.0060:
+			g.change_move_speed(1 if act.randf() < 0.5 else -1)   # 随手按 [ ] 全局加速
 		# ---- 推进 ----
 		var before_fish: int = int(g.state.stats["total_fish"])
+		g.fast_forward(float(STEP_MS))
 		for e in g.tick():
 			counts[e["type"]] = counts.get(e["type"], 0) + 1
 			if e["type"] in ["sale", "focus_done", "chest"]:

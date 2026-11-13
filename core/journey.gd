@@ -10,19 +10,10 @@ enum Activity { FISHING, IDLE_FULL, SAIL_OUT, WALK_TO_STALL, VENDING, WALK_TO_BO
 var _j: Dictionary     # 指向 GameState.journey
 var _cfg: Dictionary
 var _rng: RandomNumberGenerator
-var speed: float = 1.0      # 移动倍速（航行、走路的用时除以它）。只在测试时调快，不存档
 
-## 改倍速：正在进行的航行/走路也按新速度继续（进度保持连续）。
-func set_speed(new_speed: float, now_ms: int) -> void:
-	new_speed = maxf(0.25, new_speed)
-	if activity() in [Activity.SAIL_OUT, Activity.SAIL_BACK, Activity.WALK_TO_STALL, Activity.WALK_TO_BOAT]:
-		var k := speed / new_speed
-		_j["phase_start_ms"] = now_ms - int(float(now_ms - int(_j["phase_start_ms"])) * k)
-		_j["phase_end_ms"] = now_ms + int(float(maxi(0, int(_j["phase_end_ms"]) - now_ms)) * k)
-	speed = new_speed
-
+## 时长换算。全局加速由 Game 把所有截止时刻前移实现，这里不再有倍速。
 func _dur(key: String, scale: float = 1.0) -> int:
-	return int(float(_cfg[key]) * scale / speed)
+	return int(float(_cfg[key]) * scale)
 
 func _init(journey_state: Dictionary, cfg: Dictionary, rng: RandomNumberGenerator) -> void:
 	_j = journey_state

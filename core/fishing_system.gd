@@ -65,6 +65,13 @@ func progress(now_ms: int) -> float:
 	return clampf(float(now_ms - state_start_ms) / float(span), 0.0, 1.0)
 
 ## 推进状态机。返回本次产生的鱼 id（没有则为空字符串）。
+## 平移所有截止时刻（休息暂停、全局加速用）。
+func shift(delta_ms: int) -> void:
+	if state_start_ms > 0:
+		state_start_ms += delta_ms
+	if deadline_ms > 0:
+		deadline_ms += delta_ms
+
 func advance(now_ms: int) -> String:
 	if not is_active() or now_ms < deadline_ms:
 		return ""

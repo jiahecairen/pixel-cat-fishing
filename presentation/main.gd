@@ -39,7 +39,7 @@ const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
-	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view"]
+	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 6
 
@@ -51,6 +51,7 @@ const BTN_TOWN := Rect2(89, 3, 11, 11)
 const BTN_MENU := Rect2(100, 3, 11, 11)     # 齿轮：只打开设置
 const BTN_VIEW := Rect2(111, 3, 11, 11)
 const BTN_BAG := Rect2(100, 14, 11, 11)      # 物品栏
+const BTN_STATUS := Rect2(89, 14, 11, 11)    # 小猫状态
 const BTN_CLOSE := Rect2(111, 14, 11, 11)
 # 退出确认框
 const QUIT_BOX := Rect2(15, 30, 110, 36)
@@ -246,7 +247,7 @@ func _apply_debug_env() -> void:
 	if OS.has_environment("CATFISH_BIRD"):         # 调试：一开局就有鸟来
 		st.effects["bird_next_ms"] = 1
 	if OS.has_environment("CATFISH_MOVE"):
-		game.journey.set_speed(OS.get_environment("CATFISH_MOVE").to_float(), 0)
+		game.time_scale = maxf(1.0, OS.get_environment("CATFISH_MOVE").to_float())
 	if OS.has_environment("CATFISH_ROAM_AT"):
 		_debug_dir_from = OS.get_environment("CATFISH_ROAM_AT").to_int()
 	if OS.has_environment("CATFISH_ROAM"):
@@ -551,6 +552,7 @@ func _process(dt: float) -> void:
 	if _debug_speed > 1.0:
 		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
 	_update_power()
+	game.fast_forward(dt * 1000.0)        # [ ] 全局加速：把所有截止时刻前移
 	for e in game.tick():
 		log.write(e["type"], e)
 		_on_event(e)
@@ -771,6 +773,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif event.keycode == KEY_BRACKETRIGHT or event.keycode == KEY_BRACKETLEFT:
 				game.change_move_speed(1 if event.keycode == KEY_BRACKETRIGHT else -1)   # ] 加快 [ 减慢（测试用）
 				play("click")
+			elif event.keycode == KEY_C and not wardrobe.open:
+				toggle_status()            # C 开关小猫状态
 			elif event.keycode == KEY_TAB or event.keycode == KEY_I:
 				toggle_bag()               # Tab / I 开关物品栏
 			elif bag.open:
@@ -823,6 +827,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			menu.tab = 3
 			menu.open = true
 		_update_polygon()
+	elif BTN_STATUS.has_point(p):
+		toggle_status()
 	elif BTN_VIEW.has_point(p):
 		play("click")
 		toggle_view_mode()
@@ -852,6 +858,20 @@ func _quit_button_visible() -> bool:
 ## 有任何面板（菜单、换形象、物品栏）开着。
 func panel_open() -> bool:
 	return menu.open or wardrobe.open or bag.open
+
+
+## 小猫状态页（菜单的第 5 页）：已经开着就关，否则打开。
+func toggle_status() -> void:
+	play("click")
+	if wardrobe.open:
+		wardrobe.close()
+	bag.open = false
+	if menu.open and menu.tab == 4:
+		menu.open = false
+	else:
+		menu.tab = 4
+		menu.open = true
+	_update_polygon()
 
 
 func toggle_bag() -> void:
@@ -996,6 +1016,7 @@ func _draw_hud(now: int) -> void:
 	if adapter.is_overlay():
 		_tex_frame("btn_view", BTN_VIEW.position, 0, 2)
 	_tex_frame("btn_bag", BTN_BAG.position, 1 if bag.open else 0, 2)
+	_tex_frame("btn_cat", BTN_STATUS.position, 1 if menu.open and menu.tab == 4 else 0, 2)
 	if _quit_button_visible():
 		_tex_frame("btn_close", BTN_CLOSE.position, 1 if _confirm_quit else 0, 2)
 

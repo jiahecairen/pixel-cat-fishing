@@ -11,6 +11,7 @@ const Pomodoro := preload("res://core/pomodoro.gd")
 const ConfigLoader := preload("res://io/config_loader.gd")
 const SaveService := preload("res://io/save_service.gd")
 const EventLog := preload("res://io/event_log.gd")
+const World := preload("res://presentation/world.gd")
 
 class FakeClock:
 	var t: int = 1_000_000
@@ -48,6 +49,7 @@ func _init() -> void:
 		test_water(balance, fish)
 		test_birds(balance, fish)
 		test_inventory(balance, fish)
+		test_stall_walk(balance, fish)
 		test_checkpoint(balance, fish)
 		test_event_log()
 		test_save()
@@ -150,6 +152,15 @@ func _run(g, clock, seconds: float, step_ms: int = 250) -> Array:
 	var all: Array = []
 	for i in int(seconds * 1000.0 / step_ms):
 		clock.t += step_ms
+		all.append_array(g.tick())
+	return all
+
+## 按 gs 当前的倍速跑 seconds 秒：每 250 毫秒真实时间先快进再推进一帧。
+func _run_ff(g, clock, seconds: float, step_ms: int = 250) -> Array:
+	var all: Array = []
+	for i in int(seconds * 1000.0 / step_ms):
+		clock.t += step_ms
+		g.fast_forward(float(step_ms))
 		all.append_array(g.tick())
 	return all
 
@@ -272,19 +283,40 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 	check(gv.journey.activity() == Journey.Activity.VENDING and gv.go_fishing(0.0, 1.0), "摆摊中也可以点去钓鱼")
 	check(gv.journey.activity() == Journey.Activity.WALK_TO_BOAT and gv.state.basket.size() == 3, "没卖的鱼还在篓里")
 	check(not gv.go_fishing(0.0, 1.0), "已经在走向码头，不能重复点")
-	# 测试倍速：航行和走路按倍速缩短，进行中的航行进度保持连续
+	# 全局加速：fast_forward 把所有截止时刻前移，航行、钓鱼、番茄钟一起变快，存档里仍是真实时间
 	var gs := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(11))
 	var cs = gs._clock
 	gs.economy.add_catch(gs.state, "s1", "bass", false)
 	check(gs.change_move_speed(1) == 2.0 and gs.change_move_speed(1) == 4.0 and gs.change_move_speed(-1) == 2.0, "倍速 1→2→4→2")
-	gs.go_to_town(); _run(gs, cs, 14)
-	check(gs.journey.activity() == Journey.Activity.SAIL_OUT, "2 倍速：14 秒还在航行")
+	gs.go_to_town()
+	_run_ff(gs, cs, 14)
+	check(gs.journey.activity() == Journey.Activity.SAIL_OUT, "2 倍速：14 秒还在航行（共 30 秒，快进后约 28 秒）")
 	var prog_before: float = gs.journey.progress(cs.t)
 	gs.change_move_speed(1)
 	check(absf(gs.journey.progress(cs.t) - prog_before) < 0.01, "航行中改倍速，进度不跳 (%.2f)" % gs.journey.progress(cs.t))
-	var ev_s := _run(gs, cs, 5)
+	var ev_s := _run_ff(gs, cs, 5)
 	check(_count(ev_s, "docked") == 1, "4 倍速：剩下的航行很快就到")
 	check(gs.change_move_speed(-9) == 1.0 and gs.change_move_speed(99) == 16.0, "倍速到头不越界")
+	# 快进对番茄钟也生效：25 分钟的专注在 4 倍速下约 6.3 分钟完成，而真实时间的存档时刻没有错位
+	var gp := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(12))
+	var cp = gp._clock
+	gp.change_move_speed(1); gp.change_move_speed(1)
+	gp.start_focus()
+	var ev_p := _run_ff(gp, cp, 6 * 60)
+	check(_count(ev_p, "focus_done") == 0, "4 倍速 6 分钟：专注还没结束")
+	ev_p = _run_ff(gp, cp, 60)
+	check(_count(ev_p, "focus_done") == 1, "4 倍速 7 分钟：专注完成了")
+	check(int(gp.state.pomodoro["phase_end_ms"]) <= cp.t + 6 * 60000, "存档里的结束时刻是真实时间，不是虚拟时间")
+	# 休息期间加速：番茄钟走得快，但旅程和钓鱼保持暂停
+	var gb := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(13))
+	var cb = gb._clock
+	gb.state.pomodoro["phase"] = Pomodoro.Phase.SHORT_BREAK
+	gb.state.pomodoro["phase_end_ms"] = cb.t + 300000
+	_run(gb, cb, 1)
+	var dl_before: int = gb.fishing.deadline_ms
+	gb.change_move_speed(1)
+	_run_ff(gb, cb, 10)
+	check(gb.fishing.deadline_ms == dl_before and int(gb.state.pomodoro["phase_end_ms"]) < cb.t + 300000 - 9000, "休息中加速：番茄钟变快，钓鱼保持暂停")
 	# 航行途中进入休息：进度冻结，休息结束后接着走
 	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(2))
 	var c3 = g3._clock
@@ -706,6 +738,39 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var old: Dictionary = g.state.to_dict(); old.erase("inventory"); old.erase("effects")
 	var s5 := GameState.new()
 	check(s5.from_dict(old) and s5.inventory.is_empty() and s5.effects["bell_sales"] == 0, "旧存档没有物品栏字段也能读")
+
+func test_stall_walk(balance: Dictionary, fish: Array) -> void:
+	print("摊位：绕到柜台后面 + 状态页数据")
+	var w := World.new(null)
+	var rl: Dictionary = w.stall_route(700.0)
+	check(rl["corner"] == World.CORNER_L and is_equal_approx(float(rl["l1"]) + float(rl["l2"]), float(World.STALL_CAT_X - 700)), "从左边来：绕左端，路程不变")
+	var rr: Dictionary = w.stall_route(World.STALL_X + 60.0)
+	check(rr["corner"] == World.CORNER_R, "从右边来：绕右端")
+	check(is_equal_approx(w.frac_to_stall(float(World.WALK_FROM_X)), 1.0), "码头到摊位全程比例 = 1")
+	var p0: Dictionary = w._walk_pose(true, -1.0, 0.0)
+	var p1: Dictionary = w._walk_pose(true, -1.0, 1.0)
+	check(absf(p0["x"] - World.WALK_FROM_X) < 0.5 and not p0["behind"], "去摊位：起点在码头、在柜台前")
+	check(absf(p1["x"] - World.STALL_CAT_X) < 0.5 and p1["behind"] and absf(p1["y"] - (World.GROUND_Y - 29)) < 0.5, "去摊位：终点在柜台后，和摆摊位置对上")
+	var pm: Dictionary = w._walk_pose(true, -1.0, 0.99)
+	var seen_front := false
+	var seen_behind := false
+	var prev_x := -1.0
+	var jump_ok := true
+	for i in 101:
+		var q: Dictionary = w._walk_pose(true, -1.0, float(i) / 100.0)
+		seen_front = seen_front or not q["behind"]
+		seen_behind = seen_behind or q["behind"]
+		if prev_x >= 0.0 and absf(q["x"] - prev_x) > 12.0:
+			jump_ok = false
+		prev_x = q["x"]
+	check(seen_front and seen_behind and jump_ok, "去摊位：先在柜台前、后在柜台后，没有瞬移")
+	var b0: Dictionary = w._walk_pose(false, -1.0, 0.0)
+	var b1: Dictionary = w._walk_pose(false, -1.0, 1.0)
+	check(b0["behind"] and absf(b0["x"] - World.STALL_CAT_X) < 0.5 and not b1["behind"] and absf(b1["x"] - World.WALK_FROM_X) < 0.5, "回码头：从柜台后出来，走到码头")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(5))
+	check(g.equipment_name("rod") == "树枝" and g.equipment_name("line") == "棉线" and g.equipment_name("hook") == "铁钩", "装备栏默认名字")
+	g.state.upgrades["rod"] = 2
+	check(g.equipment_name("rod") == "玻纤" and not g.bait_active(), "鱼竿随升级换名字；没有幸运鱼饵时鱼饵格为空")
 
 func test_checkpoint(balance: Dictionary, fish: Array) -> void:
 	print("fishing checkpoint")

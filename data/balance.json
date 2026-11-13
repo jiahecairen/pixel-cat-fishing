@@ -210,10 +210,26 @@
     ]
   },
   "birds": {
-    "min_ms": 240000,
-    "max_ms": 540000,
-    "steal_chance": 0.35,
+    "min_ms": 180000,
+    "max_ms": 480000,
+    "steal_chance": 0.3,
     "act_after_ms": 6000,
     "bottle_chance": 0.5
+  },
+  "equipment": {
+    "rod": [
+      "树枝",
+      "竹竿",
+      "玻纤",
+      "碳素",
+      "合金",
+      "金竿"
+    ],
+    "line": [
+      "棉线"
+    ],
+    "hook": [
+      "铁钩"
+    ]
   }
 }

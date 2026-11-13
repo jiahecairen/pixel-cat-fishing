@@ -21,6 +21,10 @@ const ROAM_MIN_X := 552               # 自由走动的范围（小猫贴图左�
 const ROAM_MAX_X := 1340
 const WORLD_END := 1388               # 世界右边界，镜头不会越过
 const ROAM_SPEED := 70.0              # 自由走动速度（像素/秒）
+const CORNER_L := STALL_X - 29        # 绕过柜台的两个拐点：到这里小猫的身体不再和柜台重叠
+const CORNER_R := STALL_X + 43
+const LIFT := 3
+const ZONE_BLEND := 28.0              # 水域分界处颜色过渡的半宽（像素）                       # 绕到柜台后面时抬高几像素（更靠里）
 const NEAR := 16                      # 离摊位/码头多近算"到了"
 ## 可以进去的房子：[门的中心 x, 名字, 用途]
 const DOORS := [[674, "小猫的家", "home"], [828, "裁缝铺", "tailor"], [898, "渔具店", "tackle"]]
@@ -56,6 +60,7 @@ var hop_t0: int = -100000
 var chest_open_t0: int = -100000   # 宝箱被打开的时刻
 var leaving: Array = []       # 买完离开的顾客: {kind, t0}
 var walk_flip: bool = false   # 自动行走时是否朝左
+var walk_behind: bool = false # 自动行走时小猫正在柜台后面（绕过摊位的那一段）
 var roam_flip: bool = false   # 自由走动时是否朝左
 var roam_moving: bool = false
 var customer_kind: int = 0        # 当前这一单的顾客样子
@@ -94,16 +99,16 @@ func update(now: int, t: int) -> void:
 		_:
 			boat_x = DOCK_X
 	boat_x = roundf(boat_x)
+	walk_behind = false
 	match j.activity():
 		Journey.Activity.WALK_TO_STALL, Journey.Activity.WALK_TO_BOAT:
 			# 默认从码头走到摊位（或反过来）；如果是玩家松手后接管，则从松手的位置出发
-			var to_stall: bool = j.activity() == Journey.Activity.WALK_TO_STALL
-			var from: float = j.walk_from() if j.walk_from() >= 0 else (WALK_FROM_X if to_stall else STALL_CAT_X)
-			var to: float = STALL_CAT_X if to_stall else WALK_FROM_X
-			walk_flip = to < from
-			cat_pos = Vector2(roundf(lerpf(from, to, j.progress(now))), GROUND_Y - 30)
+			var pose := _walk_pose(j.activity() == Journey.Activity.WALK_TO_STALL, float(j.walk_from()), j.progress(now))
+			walk_flip = pose["flip"]
+			walk_behind = pose["behind"]
+			cat_pos = Vector2(roundf(pose["x"]), roundf(pose["y"]))
 		Journey.Activity.ROAM:
-			cat_pos = Vector2(j.roam_x(), GROUND_Y - 30)
+			cat_pos = Vector2(j.roam_x(), GROUND_Y - 28)
 		Journey.Activity.VENDING, Journey.Activity.SOLD_OUT:
 			cat_pos = Vector2(STALL_CAT_X, GROUND_Y - 29)      # 脚踩在地面上
 		_:
@@ -116,9 +121,45 @@ func bubble_rect(t: int) -> Rect2:
 		return Rect2()
 	return Rect2(cat_pos + Vector2(34, -11 - (t / 600) % 2), Vector2(19, 18))   # 在头的右上方，不被迷你视图的面板挡住
 
+## 小猫从 x 绕进柜台后面的路线：先在柜台前走到最近的一端，再绕进去走到摊位后面。
+func stall_route(from_x: float) -> Dictionary:
+	var dl := absf(from_x - CORNER_L) + float(STALL_CAT_X - CORNER_L)
+	var dr := absf(CORNER_R - from_x) + float(CORNER_R - STALL_CAT_X)
+	var corner: float = CORNER_L if dl <= dr else CORNER_R
+	return {"corner": corner, "l1": absf(corner - from_x), "l2": absf(STALL_CAT_X - corner)}
+
+## 自动走路时小猫此刻的位置。from < 0 表示默认起点。返回 {x, y, flip, behind}。
+## 去摊位：在柜台前走到柜台一端 → 抬高几像素"绕过去" → 在柜台后面走到摊位；回码头反过来。
+func _walk_pose(to_stall: bool, from: float, prog: float) -> Dictionary:
+	var front_y := float(GROUND_Y - 28)
+	if to_stall:
+		var f := from if from >= 0.0 else float(WALK_FROM_X)
+		var r := stall_route(f)
+		var corner: float = r["corner"]
+		var l1: float = r["l1"]
+		var l2: float = r["l2"]
+		var s := prog * (l1 + l2)
+		if s < l1:
+			var d := signf(corner - f)
+			return {"x": f + d * s, "y": front_y - float(LIFT) * clampf((s - (l1 - 12.0)) / 12.0, 0.0, 1.0),
+					"flip": d < 0.0, "behind": false}
+		var d2 := signf(STALL_CAT_X - corner)
+		return {"x": corner + d2 * (s - l1), "y": lerpf(front_y - LIFT, float(GROUND_Y - 29), clampf((s - l1) / maxf(l2, 1.0), 0.0, 1.0)),
+				"flip": d2 < 0.0, "behind": true}
+	if from >= 0.0:                          # 玩家松手后接管：直接在柜台前走回码头
+		return {"x": lerpf(from, WALK_FROM_X, prog), "y": front_y, "flip": float(WALK_FROM_X) < from, "behind": false}
+	var b1 := float(STALL_CAT_X - CORNER_L)   # 先在柜台后面走到左端，再绕出来
+	var b2 := float(CORNER_L - WALK_FROM_X)
+	var s2 := prog * (b1 + b2)
+	if s2 < b1:
+		return {"x": STALL_CAT_X - s2, "y": lerpf(float(GROUND_Y - 29), front_y - LIFT, s2 / b1), "flip": true, "behind": true}
+	return {"x": CORNER_L - (s2 - b1), "y": front_y - float(LIFT) * (1.0 - clampf((s2 - b1) / 12.0, 0.0, 1.0)),
+			"flip": true, "behind": false}
+
 ## 从 x 走到摊位 / 码头的路程，占"码头↔摊位"全程的比例。
 func frac_to_stall(x: float) -> float:
-	return absf(x - STALL_CAT_X) / float(STALL_CAT_X - WALK_FROM_X)
+	var r := stall_route(x)
+	return (float(r["l1"]) + float(r["l2"])) / float(STALL_CAT_X - WALK_FROM_X)
 
 func frac_to_boat(x: float) -> float:
 	return absf(x - WALK_FROM_X) / float(STALL_CAT_X - WALK_FROM_X)
@@ -164,7 +205,7 @@ func _draw_strollers(t: int) -> void:
 		var at := stroller_at(i, t)
 		var talking := i == chat_who and t - chat_t0 < 3500
 		var name := "villager_%d" % int(STROLLERS[i][0])
-		var pos := Vector2(float(at[0]), GROUND_Y - 21)
+		var pos := Vector2(float(at[0]), GROUND_Y - 19)
 		# 居民贴图本身面朝左：朝左走直接画，朝右走才翻转（之前写反了，看起来像倒着走）
 		if at[1]:
 			m.tex_frame(name, pos, 0 if talking else (t / 220) % 2, 2)
@@ -175,7 +216,7 @@ func _draw_strollers(t: int) -> void:
 func _draw_chat(t: int) -> void:
 	if chat_who < 0 or t - chat_t0 >= 3500 or m.label_width(chat_line) <= 0:
 		return
-	var pos := Vector2(chat_x, GROUND_Y - 21)
+	var pos := Vector2(chat_x, GROUND_Y - 19)
 	var w: float = m.label_width(chat_line) + 6
 	var box := Rect2(roundf(pos.x + 8 - w / 2), pos.y - 17, w, 13)
 	m.draw_rect(box.grow(1), Pal.U_K)
@@ -245,7 +286,7 @@ func _draw_market_stalls(t: int) -> void:
 func _draw_shoppers(t: int) -> void:
 	for k in SHOPPERS.size():
 		var s := shopper_at(k, t)
-		var pos := Vector2(float(s["x"]), GROUND_Y - 21)
+		var pos := Vector2(float(s["x"]), GROUND_Y - 19)
 		var name := "villager_%d" % int(SHOPPERS[k][0])
 		var frame := 0 if s["dwell"] else (t / 220) % 2
 		if s["facing_right"]:
@@ -335,18 +376,14 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 		m.draw_rect(Rect2(left, WATER_Y + 20, sea_right - left, maxf(0, bottom - WATER_Y - 20)), Pal.U_B)
 	# 水域着色：深水区偏暗，浅滩偏亮；分界处各漂一个浮标
 	if not mini:
-		for z in m.game.zone_bounds(SHORE_X):
-			var zl := maxf(left, float(z["x0"]))
-			var zr := minf(right, float(z["x1"]))
-			if zr <= zl:
-				continue
-			var tint := Color(0, 0, 0, 0)
-			if z["id"] == "deep":
-				tint = Color(Pal.U_K, 0.22)
-			elif z["id"] == "shallow":
-				tint = Color(Pal.L_C, 0.2)
-			if tint.a > 0.0:
-				m.draw_rect(Rect2(zl, WATER_Y, zr - zl, maxf(0, bottom - WATER_Y)), tint)
+		var zones: Array = m.game.zone_bounds(SHORE_X)
+		# 水域颜色在分界处慢慢过渡（每 4 像素一列，按距离分界线的远近淡入淡出），不再是一刀切
+		var x := floorf(left / 4.0) * 4.0
+		while x < sea_right:
+			for tint in _zone_tints(x + 2.0, zones):
+				m.draw_rect(Rect2(x, WATER_Y, 4, maxf(0, bottom - WATER_Y)), tint)
+			x += 4.0
+		for z in zones:
 			var bx := float(z["x1"])
 			if z["id"] != "shallow" and bx > left - 4 and bx < right + 4:
 				var bob := 1 if (t / 700 + int(bx)) % 2 == 0 else 0
@@ -376,7 +413,7 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	m.draw_texture(m.tex["stall_back"], Vector2(STALL_X, GROUND_Y - 40))
 	var in_town: bool = not j.on_boat()
 	var bob_y := boat_y(t)
-	var behind_counter: bool = act == Journey.Activity.VENDING or act == Journey.Activity.SOLD_OUT
+	var behind_counter: bool = act == Journey.Activity.VENDING or act == Journey.Activity.SOLD_OUT or walk_behind
 	if in_town and behind_counter:
 		_draw_town_cat(act, on_break, now, t)
 	m.draw_texture(m.tex["stall_front"], Vector2(STALL_X, GROUND_Y - 11))
@@ -394,11 +431,13 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 		_draw_town_cat(act, on_break, now, t)
 	_draw_chat(t)
 
-	# 船
+	# 船：鱼篓在船舱里、小猫背后（先画）→ 小猫 → 船身（盖住鱼篓和小猫的下半截）→ 龙头 → 吃水线和水纹
+	_draw_boat_basket(bob_y, not in_town)
 	if not in_town:
 		_draw_boat_cat(act, on_break, now, t)
 	m.draw_texture(m.tex["boat"], Vector2(boat_x, bob_y))
-	_draw_boat_gear(bob_y, not in_town)
+	m.draw_texture(m.tex["boat_head"], Vector2(boat_x - 2, bob_y - 17))
+	_draw_waterline(bob_y, t)
 	if not in_town:
 		_draw_boat_extras(act, on_break, now, t)
 		_draw_bird(t, bob_y)
@@ -406,10 +445,10 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 # ------------------------------------------------------------------ 鸟和船上的东西
 const BASKET_SLOTS := 12
 
-## 船尾的龙头，和船头旁边的鱼篓（鱼按篓子装了多少堆起来；人在镇上时鱼在猫身上，篓子空着）。
-func _draw_boat_gear(bob_y: float, show_fish: bool) -> void:
-	m.draw_texture(m.tex["boat_head"], Vector2(boat_x - 2, bob_y - 17))
-	var o := Vector2(boat_x + 42, bob_y - 1)
+## 船舱里的鱼篓（在小猫背后、龙头旁边，下半截被船身盖住）；鱼按篓子装了多少堆起来，满了堆成小山。
+## 人在镇上时鱼在猫身上，船上的篓子是空的。
+func _draw_boat_basket(bob_y: float, show_fish: bool) -> void:
+	var o := Vector2(boat_x + 9, bob_y - 3)
 	m.draw_texture(m.tex["boat_basket_back"], o + Vector2(0, -4))
 	var g = m.game
 	var size: int = g.state.basket.size() if show_fish else 0
@@ -423,6 +462,64 @@ func _draw_boat_gear(bob_y: float, show_fish: bool) -> void:
 			m.draw_rect(Rect2(p.x, p.y, 3, 2), col)
 			m.draw_rect(Rect2(p.x, p.y + 1, 3, 1), col.darkened(0.25))
 	m.draw_texture(m.tex["boat_basket"], o)
+
+## 水域染色：返回世界坐标 cx 处叠在海上的半透明色（分界处前后 ZONE_BLEND 像素内淡入淡出）。
+func _zone_tints(cx: float, zones: Array) -> Array:
+	var out: Array = []
+	for zi in zones.size():
+		var z: Dictionary = zones[zi]
+		var base := Color(0, 0, 0, 0)
+		if z["id"] == "deep":
+			base = Color(Pal.U_K, 0.22)
+		elif z["id"] == "shallow":
+			base = Color(Pal.L_C, 0.2)
+		if base.a <= 0.0:
+			continue
+		var w := 1.0
+		if zi > 0:
+			w *= _ease(clampf((cx - (float(z["x0"]) - ZONE_BLEND)) / (2.0 * ZONE_BLEND), 0.0, 1.0))
+		if zi < zones.size() - 1:
+			w *= 1.0 - _ease(clampf((cx - (float(z["x1"]) - ZONE_BLEND)) / (2.0 * ZONE_BLEND), 0.0, 1.0))
+		if w > 0.01:
+			base.a *= w
+			out.append(base)
+	return out
+
+## 船吃水：水面盖住船底，水线上一圈起伏的白沫；船头船尾向外荡开水纹，划船时船尾拖出尾迹。
+func _draw_waterline(bob_y: float, t: int) -> void:
+	var x0 := boat_x - 1.0
+	var w := 66.0
+	var top := float(WATER_Y - 3)
+	var zones: Array = m.game.zone_bounds(SHORE_X)
+	# 盖住船底的水：颜色要和这里的海一致（含水域染色），按 3 像素一列画
+	var cx := x0
+	while cx < x0 + w:
+		var col: Color = Pal.L_B
+		for tint in _zone_tints(cx + 1.5, zones):
+			col = col.lerp(Color(tint, 1.0), tint.a)
+		var rel := cx - x0
+		var y0 := top + (3.0 if rel < 3.0 or rel > w - 6.0 else (2.0 if rel < 6.0 or rel > w - 9.0 else 0.0))
+		m.draw_rect(Rect2(cx, y0, minf(3.0, x0 + w - cx), float(WATER_Y + 10) - y0), col)
+		cx += 3.0
+	for k in int((w - 12.0) / 3.0):                                 # 水线上的白沫，一格格错开起伏
+		var wave := (k + t / 260) % 2 == 0
+		m.draw_rect(Rect2(x0 + 6.0 + k * 3.0, top - (1 if wave else 0) + 1, 3, 1), Pal.L_W if wave else Pal.L_C)
+	m.draw_rect(Rect2(x0 + 6.0, WATER_Y + 3, 14, 1), Pal.L_C)    # 船身下面透出的水纹
+	m.draw_rect(Rect2(x0 + 30.0 + float((t / 500) % 3) * 2.0, WATER_Y + 5, 12, 1), Pal.L_C)
+	for k in 3:                                                      # 向外荡开的水纹（淡出）
+		var ph := fposmod(float(t) / 2600.0 + float(k) / 3.0, 1.0)
+		var col := Color(Pal.L_W, (1.0 - ph) * 0.7)
+		var y := float(WATER_Y + 1 + k * 2)
+		m.draw_rect(Rect2(x0 - 3.0 - ph * 14.0 - 6.0, y, 6.0 + ph * 4.0, 1), col)
+		m.draw_rect(Rect2(x0 + w + 3.0 + ph * 14.0, y, 6.0 + ph * 4.0, 1), col)
+	if boat_moving or m.game.journey.activity() in [Journey.Activity.SAIL_OUT, Journey.Activity.SAIL_BACK]:
+		var dir := 1.0
+		if m.game.journey.activity() == Journey.Activity.SAIL_BACK or (boat_moving and boat_dir < 0.0):
+			dir = -1.0
+		for k in 4:                                                  # 尾迹：从船尾向后拖出去的几道长纹
+			var ph := fposmod(float(t) / 900.0 + float(k) / 4.0, 1.0)
+			var tail_x := (x0 - 4.0 - ph * 26.0) if dir > 0.0 else (x0 + w + 4.0 + ph * 26.0 - 10.0)
+			m.draw_rect(Rect2(tail_x, WATER_Y + 2 + (k % 2) * 3, 10.0 - ph * 4.0, 1), Color(Pal.L_W, (1.0 - ph) * 0.8))
 
 var _fish_colors: Dictionary = {}
 func _fish_color(fish_id: String) -> Color:
@@ -447,7 +544,7 @@ func _draw_bird(t: int, bob_y: float) -> void:
 		bird = {}
 		return
 	var steal: bool = bird["kind"] == "steal"
-	var perch := Vector2(boat_x + 45, bob_y - 17) if steal else Vector2(boat_x - 1, bob_y - 27)
+	var perch := Vector2(boat_x + 12, bob_y - 18) if steal else Vector2(boat_x - 1, bob_y - 27)
 	var item: Dictionary = m.game.fish_by_id.get(bird["item"], {}) if steal else m.game.inventory.by_id.get(bird["item"], {})
 	var item_tex: String = item.get("sprite", "")
 	if d < 2500:
@@ -627,7 +724,7 @@ func _draw_stall_goods() -> void:
 func _draw_customer(t: int) -> void:
 	if approach_visible:
 		var arrived := approach_x <= STALL_X + 50
-		m.tex_frame("villager_%d" % customer_kind, Vector2(approach_x, GROUND_Y - 21), 0 if arrived else (t / 200) % 2, 2)
+		m.tex_frame("villager_%d" % customer_kind, Vector2(approach_x, GROUND_Y - 19), 0 if arrived else (t / 200) % 2, 2)
 
 ## 离开的顾客：买到鱼的拎着鱼走；没买成的（小猫被玩家带走了）空手掉头回去。
 func _draw_leaving(t: int) -> void:
@@ -639,7 +736,7 @@ func _draw_leaving(t: int) -> void:
 			keep.append(c)
 			if m.tex.has(c["fish"]):      # 鱼先画，人在鱼前面
 				m.draw_texture(m.tex[c["fish"]], Vector2(x + 6, GROUND_Y - 12))
-			m.tex_frame_flipped("villager_%d" % int(c["kind"]), Vector2(x, GROUND_Y - 21), (t / 200) % 2, 2)
+			m.tex_frame_flipped("villager_%d" % int(c["kind"]), Vector2(x, GROUND_Y - 19), (t / 200) % 2, 2)
 	leaving = keep
 
 func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:

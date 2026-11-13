@@ -280,19 +280,55 @@ func go_to_town() -> bool:
 	return true
 
 const MOVE_SPEEDS := [1.0, 2.0, 4.0, 8.0, 16.0]
+var time_scale: float = 1.0            # 全局加速倍数（测试用，不存档）
+var _ff_rest: float = 0.0              # 加速时不足 1 毫秒的零头
 
-## 测试用：把航行和走路调快（不存档，重开恢复 1 倍）。direction 为 +1 / -1，到头不循环。
+## 测试用：整个游戏加速（钓鱼、航行、走路、番茄钟、鸟全部一起快）。direction 为 +1 / -1，到头不循环。
 func move_speed() -> float:
-	return journey.speed
+	return time_scale
 
 func change_move_speed(direction: int) -> float:
-	var i := MOVE_SPEEDS.find(journey.speed)
+	var i := MOVE_SPEEDS.find(time_scale)
 	if i < 0:
 		i = 0
 	i = clampi(i + direction, 0, MOVE_SPEEDS.size() - 1)
-	journey.set_speed(MOVE_SPEEDS[i], _clock.now_ms())
-	dirty = true
-	return journey.speed
+	time_scale = MOVE_SPEEDS[i]
+	return time_scale
+
+## 每帧由表现层调用，传入这一帧真实经过的毫秒数。加速时把所有"截止时刻"往前挪，
+## 效果等同于时间流得更快，但存档里记的仍是真实墙上时间，退出后不会留下错位。
+func fast_forward(real_dt_ms: float) -> void:
+	if time_scale <= 1.0:
+		return
+	_ff_rest += real_dt_ms * (time_scale - 1.0)
+	var delta := int(_ff_rest)
+	if delta <= 0:
+		return
+	_ff_rest -= float(delta)
+	_advance_deadlines(-delta)
+
+## 把所有按墙上时间记的截止时刻平移 delta_ms（正数往后推、负数往前拉）。
+func _advance_deadlines(delta_ms: int) -> void:
+	if int(state.pomodoro["phase_end_ms"]) > 0:
+		state.pomodoro["phase_end_ms"] = int(state.pomodoro["phase_end_ms"]) + delta_ms
+	if int(state.journey["paused_at_ms"]) != 0:
+		return                                   # 休息中：旅程和钓鱼整体暂停，不跟着走
+	journey.shift(delta_ms)
+	fishing.shift(delta_ms)
+	for k in ["bird_next_ms", "bird_act_ms", "lucky_until_ms"]:
+		if int(state.effects[k]) > 0:
+			state.effects[k] = int(state.effects[k]) + delta_ms
+
+## 装备栏里某一格显示的名字（鱼竿随升级等级变，鱼线、鱼钩暂时只有一档）。
+func equipment_name(slot: String) -> String:
+	var names: Array = _cfg.get("equipment", {}).get(slot, [])
+	if names.is_empty():
+		return "-"
+	return String(names[clampi(int(state.upgrades.get(slot, 0)), 0, names.size() - 1)])
+
+## 幸运鱼饵生效中（鱼饵格显示用）。
+func bait_active() -> bool:
+	return int(state.effects["lucky_until_ms"]) > _clock.now_ms()
 
 ## 船所在位置属于哪片水域（"deep" / "normal" / "shallow"）。
 func zone_id(x: float) -> String:
