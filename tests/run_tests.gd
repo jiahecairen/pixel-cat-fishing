@@ -47,6 +47,7 @@ func _init() -> void:
 		test_adapters()
 		test_weather(balance, fish)
 		test_water(balance, fish)
+		test_sail_turn(balance, fish)
 		test_birds(balance, fish)
 		test_inventory(balance, fish)
 		test_stall_walk(balance, fish)
@@ -667,7 +668,7 @@ func test_water(balance: Dictionary, fish: Array) -> void:
 	var zb := g.zone_bounds(640.0)
 	check(zb.size() == 3 and zb[0]["x0"] == 0.0 and zb[2]["x1"] == 640.0 and zb[1]["x0"] == zb[0]["x1"], "水域范围首尾相接")
 	check(g.can_steer() and g.steer_to(120.0) and g.journey.boat_x() == 120, "钓鱼时可以划船")
-	check(g.steer_to(-50.0) and g.journey.boat_x() == 30 and g.steer_to(9999.0) and g.journey.boat_x() == 440, "划船范围有边界")
+	check(g.steer_to(-50.0) and g.journey.boat_x() == 30 and g.steer_to(9999.0) and g.journey.boat_x() == 512, "划船范围有边界（右端是码头）")
 	check(not g.line_out() and g.fishing.state == Fishing.State.IDLE, "划船先收杆")
 	var c0: FakeClock = g._clock
 	_run(g, c0, 30)
@@ -681,7 +682,41 @@ func test_water(balance: Dictionary, fish: Array) -> void:
 	var c: FakeClock = g._clock
 	g.steer_to(200.0)
 	_run(g, c, 100)
-	check(g.journey.boat_x() == 440, "往返小镇不改变船的位置")
+	check(g.journey.boat_x() == 512, "往返小镇不改变船的位置")
+
+func test_sail_turn(balance: Dictionary, fish: Array) -> void:
+	print("sail: 航行时长按路程折算、途中掉头")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(33))
+	var c: FakeClock = g._clock
+	_run(g, c, 2)
+	g.steer_to(260.0)
+	g.go_to_town()
+	var far: int = int(g.state.journey["phase_end_ms"]) - int(g.state.journey["phase_start_ms"])
+	g.journey.turn_sail(c.now_ms())
+	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(34))
+	var c2: FakeClock = g2._clock
+	_run(g2, c2, 2)
+	g2.steer_to(500.0)
+	g2.go_to_town()
+	var near: int = int(g2.state.journey["phase_end_ms"]) - int(g2.state.journey["phase_start_ms"])
+	check(near < far / 10 and near >= int(float(far) * 0.07), "离码头近航行时间按比例缩短 (远 %d / 近 %d)" % [far, near])
+	# 掉头：途中位置连续、剩余路程等于已走路程
+	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(35))
+	var c3: FakeClock = g3._clock
+	_run(g3, c3, 2)
+	check(g3.go_to_town() and g3.journey.activity() == Journey.Activity.SAIL_OUT, "出发")
+	c3.t += 9000
+	var p_before: float = g3.journey.progress(c3.now_ms())
+	check(g3.can_turn_sail() and g3.turn_sail() and g3.journey.activity() == Journey.Activity.SAIL_BACK, "航行中可以掉头")
+	var p_after: float = g3.journey.progress(c3.now_ms())
+	check(absf((1.0 - p_before) - p_after) < 0.01, "掉头后位置不跳 (%.3f → %.3f)" % [p_before, p_after])
+	_run(g3, c3, 60)
+	check(g3.journey.activity() == Journey.Activity.FISHING and g3.line_out(), "回头的船回到钓点继续钓鱼")
+	g3.go_to_town()
+	c3.t += 5000
+	g3.turn_sail()
+	g3.turn_sail()
+	check(g3.journey.activity() == Journey.Activity.SAIL_OUT, "来回掉头两次还是往小镇去")
 
 func test_birds(balance: Dictionary, fish: Array) -> void:
 	print("birds: 鸟来访（送礼 / 偷鱼）")
@@ -692,7 +727,8 @@ func test_birds(balance: Dictionary, fish: Array) -> void:
 	var gifts: Array = ev.filter(func(e): return e["type"] == "bird_gift")
 	var steals: Array = ev.filter(func(e): return e["type"] == "bird_steal")
 	check(visits.size() >= 15 and visits.size() <= 50, "3 小时来了 %d 次鸟（平均 4–9 分钟一次）" % visits.size())
-	check(gifts.size() + steals.size() >= visits.size() - 1 and gifts.size() > 0, "来访后都会生效 (送 %d / 偷 %d / 来 %d)" % [gifts.size(), steals.size(), visits.size()])
+	var nones: Array = visits.filter(func(e): return e["kind"] == "none")
+	check(gifts.size() + steals.size() + nones.size() >= visits.size() - 1 and gifts.size() > 0, "来访后都会生效 (送 %d / 偷 %d / 来 %d)" % [gifts.size(), steals.size(), visits.size()])
 	for e in steals:
 		check(e["fish_id"] != "koi" and e["fish_id"] != "arowana", "鸟不偷稀有鱼")
 	# 篓子空着不会来偷

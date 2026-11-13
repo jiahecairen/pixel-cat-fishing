@@ -15,6 +15,24 @@ var _rng: RandomNumberGenerator
 func _dur(key: String, scale: float = 1.0) -> int:
 	return int(float(_cfg[key]) * scale)
 
+## 航行时长按路程折算：sail_ms 对应从默认钓点到码头的路程，船停得离码头近就按比例缩短（太近也不低于 sail_min_scale），
+## 这样不管船在哪儿，航行速度都差不多，不会出现最后一小段慢得像爬。
+func sail_scale() -> float:
+	var dist := absf(float(_cfg.get("dock_x", 512)) - float(boat_x()))
+	return clampf(dist / float(_cfg.get("sail_ref_dist", 252)), float(_cfg.get("sail_min_scale", 0.08)), 3.0)
+
+## 航行途中掉头：位置不跳，剩下的路程等于已经走过的路程。
+func turn_sail(now_ms: int) -> bool:
+	var a := activity()
+	if a != Activity.SAIL_OUT and a != Activity.SAIL_BACK:
+		return false
+	var span := int(_j["phase_end_ms"]) - int(_j["phase_start_ms"])
+	var elapsed := clampi(now_ms - int(_j["phase_start_ms"]), 0, span)
+	_enter(Activity.SAIL_BACK if a == Activity.SAIL_OUT else Activity.SAIL_OUT, now_ms, span)
+	_j["phase_start_ms"] = now_ms - (span - elapsed)
+	_j["phase_end_ms"] = int(_j["phase_start_ms"]) + span
+	return true
+
 func _init(journey_state: Dictionary, cfg: Dictionary, rng: RandomNumberGenerator) -> void:
 	_j = journey_state
 	_cfg = cfg
@@ -89,7 +107,7 @@ func resume_fishing(now_ms: int) -> void:
 func depart(now_ms: int) -> bool:
 	if not can_depart():
 		return false
-	_enter(Activity.SAIL_OUT, now_ms, _dur("sail_ms"))
+	_enter(Activity.SAIL_OUT, now_ms, _dur("sail_ms", sail_scale()))
 	return true
 
 ## 鱼卖完了：停在摊位前，等玩家点"鱼卖光了"气泡。
@@ -148,7 +166,7 @@ func advance(now_ms: int) -> String:
 				return "sale"
 		Activity.WALK_TO_BOAT:
 			if now_ms >= int(_j["phase_end_ms"]):
-				_enter(Activity.SAIL_BACK, now_ms, _dur("sail_ms"))
+				_enter(Activity.SAIL_BACK, now_ms, _dur("sail_ms", sail_scale()))
 				return "boarded"
 		Activity.SAIL_BACK:
 			if now_ms >= int(_j["phase_end_ms"]):

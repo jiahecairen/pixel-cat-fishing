@@ -39,7 +39,7 @@ const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
-	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat"]
+	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 6
 
@@ -222,6 +222,10 @@ func _apply_debug_env() -> void:
 		var ids: Array = game.fish_by_id.keys()
 		for i in OS.get_environment("CATFISH_FILL").to_int():
 			game.economy.add_catch(st, st.new_id("c"), ids[i % ids.size()], false)
+	if OS.has_environment("CATFISH_BIRD"):        # 调试：让一只鸟（steal / gift / none）立刻来访
+		var bk := OS.get_environment("CATFISH_BIRD")
+		var bi: String = String(game.fish_by_id.keys()[0]) if bk == "steal" else ("bottle" if bk == "gift" else "")
+		world.call_deferred("bird_start", bk, bi, Time.get_ticks_msec())
 	if OS.has_environment("CATFISH_CHEST"):       # 调试：每一竿都钓到宝箱
 		game.set_chest_chance(1.0)
 	if OS.has_environment("CATFISH_ITEMS"):       # 调试：开局每种物品给这么多个，并打开物品栏
@@ -925,7 +929,13 @@ func _draw_quit_confirm() -> void:
 
 ## 海上 = 去小镇；在镇上 = 去钓鱼。
 func _town_button() -> void:
-	if game.journey.in_town():
+	if game.can_turn_sail() or game.journey.activity() == Journey.Activity.SAIL_OUT or game.journey.activity() == Journey.Activity.SAIL_BACK:
+		if game.turn_sail():           # 航行途中掉头：去小镇的路上回钓点，回钓点的路上再去小镇
+			world.bird = {}
+			play("click")
+		else:
+			play("deny")
+	elif game.journey.in_town():
 		_go_fishing()
 	else:
 		_go_to_town()
@@ -1039,8 +1049,11 @@ func _draw_hud(now: int) -> void:
 		main_btn = "btn_skip"
 	_tex_frame(main_btn, BTN_MAIN.position, 1 if _pressed_btn == "main" else 0, 2)
 	var in_town: bool = game.journey.in_town()
-	var town_ok: bool = game.can_go_fishing() if in_town else game.can_go_to_town()
-	_tex_frame("btn_fish" if in_town else "btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
+	var act_now: int = game.journey.activity()
+	var show_fish: bool = in_town or act_now == Journey.Activity.SAIL_OUT       # 往小镇去的路上，图标就是"回去钓鱼"
+	var sailing: bool = act_now == Journey.Activity.SAIL_OUT or act_now == Journey.Activity.SAIL_BACK
+	var town_ok: bool = game.can_turn_sail() if sailing else (game.can_go_fishing() if in_town else game.can_go_to_town())
+	_tex_frame("btn_fish" if show_fish else "btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
 			Color.WHITE if town_ok else Color(1, 1, 1, 0.35))
 	_tex_frame("btn_gear", BTN_MENU.position, 1 if menu.open and menu.tab == 3 else 0, 2)
 	if adapter.is_overlay():

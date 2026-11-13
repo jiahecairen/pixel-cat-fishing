@@ -104,6 +104,7 @@ func update(now: int, t: int) -> void:
 		_:
 			boat_x = DOCK_X
 	boat_x = roundf(boat_x)
+	_update_wake(t)
 	walk_behind = false
 	if j.activity() != Journey.Activity.ROAM:
 		roam_behind = false
@@ -349,7 +350,7 @@ func _draw_market_gate(left: float, right: float) -> void:
 
 func on_sale(fish_id: String) -> void:
 	var f: Dictionary = m.game.fish_by_id.get(fish_id, {})
-	leaving.append({"kind": customer_kind, "t0": Time.get_ticks_msec(), "x0": float(STALL_X + 50), "fish": f.get("sprite", "")})
+	leaving.append({"kind": customer_kind, "t0": Time.get_ticks_msec(), "x0": float(STALL_X + 50), "fish": f.get("sprite", ""), "v": maxf(1.0, m.game.time_scale)})
 	approach_visible = false
 
 ## 这一单的顾客：每单换一位（不连续重复），在这一单的后半段从右边走过来。
@@ -360,7 +361,7 @@ func _update_customer(now: int) -> void:
 	var selling: bool = j.activity() == Journey.Activity.VENDING and not g.pomodoro.is_break() and not g.state.basket.is_empty()
 	if not selling:
 		if approach_visible:
-			leaving.append({"kind": customer_kind, "t0": Time.get_ticks_msec(), "x0": approach_x, "fish": ""})
+			leaving.append({"kind": customer_kind, "t0": Time.get_ticks_msec(), "x0": approach_x, "fish": "", "v": maxf(1.0, m.game.time_scale)})
 			approach_visible = false
 		return
 	var phase := int(g.state.journey["phase_start_ms"])
@@ -513,7 +514,7 @@ func _zone_tints(cx: float, zones: Array) -> Array:
 func _draw_waterline(bob_y: float, t: int) -> void:
 	var x0 := boat_x - 1.0
 	var w := 66.0
-	var top := float(WATER_Y + 1)          # 水线和浮漂入水的位置持平，船身只露出水面以上的部分
+	var top := float(WATER_Y + 2)          # 水线和浮漂入水的位置持平，船身只露出水面以上的部分
 	var zones: Array = m.game.zone_bounds(SHORE_X)
 	# 盖住船底的水：颜色要和这里的海一致（含水域染色），按 3 像素一列画
 	var cx := x0
@@ -530,20 +531,73 @@ func _draw_waterline(bob_y: float, t: int) -> void:
 		m.draw_rect(Rect2(x0 + 6.0 + k * 3.0, top - (1 if wave else 0) + 1, 3, 1), Pal.L_W if wave else Pal.L_C)
 	m.draw_rect(Rect2(x0 + 6.0, WATER_Y + 3, 14, 1), Pal.L_C)    # 船身下面透出的水纹
 	m.draw_rect(Rect2(x0 + 30.0 + float((t / 500) % 3) * 2.0, WATER_Y + 5, 12, 1), Pal.L_C)
-	for k in 3:                                                      # 向外荡开的水纹（淡出）
-		var ph := fposmod(float(t) / 2600.0 + float(k) / 3.0, 1.0)
-		var col := Color(Pal.L_W, (1.0 - ph) * 0.7)
-		var y := float(WATER_Y + 1 + k * 2)
-		m.draw_rect(Rect2(x0 - 3.0 - ph * 14.0 - 6.0, y, 6.0 + ph * 4.0, 1), col)
-		m.draw_rect(Rect2(x0 + w + 3.0 + ph * 14.0, y, 6.0 + ph * 4.0, 1), col)
-	if boat_moving or m.game.journey.activity() in [Journey.Activity.SAIL_OUT, Journey.Activity.SAIL_BACK]:
-		var dir := 1.0
-		if m.game.journey.activity() == Journey.Activity.SAIL_BACK or (boat_moving and boat_dir < 0.0):
-			dir = -1.0
-		for k in 4:                                                  # 尾迹：从船尾向后拖出去的几道长纹
-			var ph := fposmod(float(t) / 900.0 + float(k) / 4.0, 1.0)
-			var tail_x := (x0 - 4.0 - ph * 26.0) if dir > 0.0 else (x0 + w + 4.0 + ph * 26.0 - 10.0)
-			m.draw_rect(Rect2(tail_x, WATER_Y + 2 + (k % 2) * 3, 10.0 - ph * 4.0, 1), Color(Pal.L_W, (1.0 - ph) * 0.8))
+	_draw_ripples(t)
+
+# ------------------------------------------------------------------ 水纹
+## 水纹都钉在世界坐标上，船开走以后留在原地慢慢散开：
+##   静止时船头船尾各荡开一圈圈横向水纹；划船/航行时船尾一路留下"V"形尾迹（越往后越宽），船越快越宽越长。
+## 每一道水纹的透明度都是 半透明 → 不透明 → 半透明，最后散掉。
+var _ripples: Array = []
+var _wk_prev_x: float = -1.0
+var _wk_prev_t: int = 0
+var _wk_dist: float = 0.0
+var _wk_ring_at: int = 0
+var _wk_moved_t: int = -100000
+var _wk_ring_k: int = 0
+var boat_speed: float = 0.0            # 船的实际速度（像素/秒，平滑过）
+
+func _update_wake(t: int) -> void:
+	if _wk_prev_x < 0.0 or t - _wk_prev_t > 400:
+		_wk_prev_x = boat_x
+		_wk_prev_t = t
+		return
+	var dt := maxi(1, t - _wk_prev_t)
+	var dx := boat_x - _wk_prev_x
+	_wk_prev_x = boat_x
+	_wk_prev_t = t
+	boat_speed = lerpf(boat_speed, absf(dx) / float(dt) * 1000.0, 0.12)
+	if absf(dx) > 0.01:
+		_wk_moved_t = t
+		_wk_dist += absf(dx)
+		var dir := 1.0 if dx > 0.0 else -1.0
+		var v := boat_speed
+		while _wk_dist >= 4.0:
+			_wk_dist -= 4.0
+			_ripples.append({"k": "wake", "x": (boat_x - 1.0) if dir > 0.0 else (boat_x + 65.0), "y": float(WATER_Y + 4),
+					"t0": t, "life": 1100 + int(minf(v, 90.0) * 14.0), "spread": clampf(1.0 + v / 16.0, 1.0, 3.4),
+					"len": 4.0 + minf(v / 7.0, 9.0), "dir": dir})
+	elif t - _wk_moved_t > 300 and t >= _wk_ring_at:        # 停着：每隔一会儿荡开一圈
+		_wk_ring_at = t + 870
+		var y := float(WATER_Y + 1 + (_wk_ring_k % 3) * 2)
+		_wk_ring_k += 1
+		_ripples.append({"k": "ring", "x": boat_x + 2.0, "y": y, "t0": t, "life": 2600, "side": -1.0})
+		_ripples.append({"k": "ring", "x": boat_x + 62.0, "y": y, "t0": t, "life": 2600, "side": 1.0})
+
+func _draw_ripples(t: int) -> void:
+	var keep: Array = []
+	for r in _ripples:
+		var age := t - int(r["t0"])
+		var life: int = r["life"]
+		if age >= life or _ripples.size() > 120:
+			continue
+		keep.append(r)
+		var f := float(age) / float(life)
+		var col := Color(Pal.L_W, 0.2 + 0.7 * sin(PI * f))
+		if r["k"] == "ring":
+			var wd := 6.0 + f * 4.0
+			var x: float = float(r["x"]) + float(r["side"]) * f * 14.0
+			m.draw_rect(Rect2(x if r["side"] > 0.0 else x - wd, float(r["y"]), wd, 1), col)
+		else:
+			var dir: float = r["dir"]
+			var len: float = float(r["len"]) * (0.6 + 0.4 * f)
+			var xc: float = float(r["x"]) - dir * f * 10.0
+			var x0 := xc if dir < 0.0 else xc - len
+			var sp := roundf(float(r["spread"]) * f)
+			var y: float = float(r["y"])
+			m.draw_rect(Rect2(x0, y - sp, len, 1), col)
+			if sp > 0.0:
+				m.draw_rect(Rect2(x0, y + sp, len, 1), col)
+	_ripples = keep
 
 var _fish_colors: Dictionary = {}
 func _fish_color(fish_id: String) -> Color:
@@ -555,32 +609,71 @@ func _fish_color(fish_id: String) -> Color:
 		_fish_colors[fish_id] = col
 	return _fish_colors[fish_id]
 
-func bird_start(kind: String, item: String, t: int) -> void:
-	bird = {"kind": kind, "item": item, "t0": t}
+const BIRD_HOP_MS := 600
+const BIRD_SPOTS := ["basket", "bow", "stern"]
 
-## 来访的鸟：飞来 → 停下张望 → 送礼（物品落进船里）或叼走一条鱼 → 飞走。
-## 送礼的鸟停在龙头上；偷鱼的鸟停在鱼篓边上。
+## 鸟最后停在哪儿决定它干什么：鱼篓 = 偷鱼，船头 = 送礼，船尾（小猫面前）= 什么也不做。
+## 起点随机，中途换 0~2 次位置，所以看它一开始停哪儿猜不出结果。
+func bird_start(kind: String, item: String, t: int) -> void:
+	var final: String = {"steal": "basket", "gift": "bow"}.get(kind, "stern")
+	var spots: Array = [final]
+	for i in randi() % 3:
+		var opts: Array = BIRD_SPOTS.filter(func(n): return n != spots[0])
+		spots.push_front(opts[randi() % opts.size()])
+	bird = {"kind": kind, "item": item, "t0": t, "d": 0.0, "last": t, "spots": spots}
+
+func _bird_spot(name: String, bob_y: float) -> Vector2:
+	match name:
+		"basket":
+			return Vector2(boat_x + 12, bob_y - 18)
+		"bow":
+			return Vector2(boat_x - 1, bob_y - 27)
+	return Vector2(boat_x + 52, bob_y - 7)
+
+## 来访的鸟：飞来 → 停下张望（可能换几个位置）→ 在最后的位置送礼 / 叼走一条鱼 / 什么也不做 → 飞走。
+## 鸟的时间按游戏加速走（和游戏里"到点生效"的时刻对得上），不然加速时画面和结算会错开。
 func _draw_bird(t: int, bob_y: float) -> void:
 	if bird.is_empty():
 		return
-	var d: int = t - int(bird["t0"])
+	bird["d"] = float(bird["d"]) + float(clampi(t - int(bird["last"]), 0, 100)) * maxf(1.0, m.game.time_scale)
+	bird["last"] = t
+	var d := int(bird["d"])
 	var act: int = m.game.bird_act_after_ms()      # 鸟停多久才送礼/偷鱼
 	if d > act + 3500:
 		bird = {}
 		return
 	var steal: bool = bird["kind"] == "steal"
-	var perch := Vector2(boat_x + 12, bob_y - 18) if steal else Vector2(boat_x - 1, bob_y - 27)
+	var spots: Array = bird["spots"]
+	var hops := spots.size() - 1
+	var perch := _bird_spot(spots[hops], bob_y)
 	var item: Dictionary = m.game.fish_by_id.get(bird["item"], {}) if steal else m.game.inventory.by_id.get(bird["item"], {})
 	var item_tex: String = item.get("sprite", "")
-	if d < 2500:
-		var k := _ease(float(d) / 2500.0)
-		var pos := (perch + Vector2(170, -70)).lerp(perch, k) + Vector2(0, roundf(sin(d / 150.0) * (1.0 - k) * 3.0))
+	const ARRIVE := 2500
+	if d < ARRIVE:
+		var first := _bird_spot(spots[0], bob_y)
+		var k := _ease(float(d) / float(ARRIVE))
+		var pos := (first + Vector2(170, -70)).lerp(first, k) + Vector2(0, roundf(sin(d / 150.0) * (1.0 - k) * 3.0))
 		m.tex_frame("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 110) % 2, 2)
 	elif d < act:
-		if (d / 1300) % 3 == 2:
-			m.tex_frame_flipped("bird_perch", perch, 0, 1)        # 回头张望
+		var seg := maxi(1, (act - ARRIVE - hops * BIRD_HOP_MS) / (hops + 1))
+		var u := d - ARRIVE
+		var idx := mini(u / (seg + BIRD_HOP_MS), hops)
+		var within := u - idx * (seg + BIRD_HOP_MS)
+		if idx < hops and within >= seg:                    # 换位置：飞过去
+			var a := _bird_spot(spots[idx], bob_y)
+			var b := _bird_spot(spots[idx + 1], bob_y)
+			var k := float(within - seg) / float(BIRD_HOP_MS)
+			var pos := a.lerp(b, k) + Vector2(0, -sin(k * PI) * 8.0)
+			if b.x > a.x:
+				m.tex_frame_flipped("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 90) % 2, 2)
+			else:
+				m.tex_frame("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 90) % 2, 2)
 		else:
-			m.draw_texture(m.tex["bird_perch"], perch)
+			var here := _bird_spot(spots[idx], bob_y)
+			if (d / 1300) % 3 == 2:
+				m.tex_frame_flipped("bird_perch", here, 0, 1)        # 回头张望
+			else:
+				m.draw_texture(m.tex["bird_perch"], here)
 	else:
 		var e := float(d - act) / 3500.0
 		if not steal and m.tex.has(item_tex) and d < act + 700:       # 东西掉进船里
@@ -755,9 +848,9 @@ func _draw_customer(t: int) -> void:
 func _draw_leaving(t: int) -> void:
 	var keep: Array = []
 	for c in leaving:
-		var age: int = t - int(c["t0"])
+		var age: float = float(t - int(c["t0"])) * float(c.get("v", 1.0))      # 加速时离开得也快，免得几位顾客叠在一起
 		var x: float = float(c["x0"]) + roundf(age * 0.028)
-		if age < 6000 and x < STALL_X + 190:
+		if age < 6000.0 and x < STALL_X + 190:
 			keep.append(c)
 			if m.tex.has(c["fish"]):      # 鱼先画，人在鱼前面
 				m.draw_texture(m.tex[c["fish"]], Vector2(x + 6, GROUND_Y - 12))
@@ -770,6 +863,8 @@ func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:
 	var flip := act == Journey.Activity.SAIL_BACK or (boat_moving and boat_dir < 0)
 	if on_break:
 		frame = 2 + (t / 1100) % 2
+	elif m.game.angry():
+		frame = (t / 700) % 2                  # 被鸟偷了鱼：醒着，气鼓鼓
 	elif act == Journey.Activity.IDLE_FULL:
 		if t - eat_t0 < 1600:
 			frame = 2
@@ -802,6 +897,10 @@ func _draw_boat_extras(act: int, on_break: bool, now: int, t: int) -> void:
 	if on_break:
 		m.draw_texture(m.tex["zzz"], cat_pos + Vector2(32, -2 - (t / 500) % 3))
 		return
+	if m.game.angry() and not boat_moving:
+		m.draw_texture(m.tex["anger"], (cat_pos + Vector2(9 + (t / 90) % 2, -12)).round())
+		if act == Journey.Activity.IDLE_FULL:
+			return
 	if t - retract_t0 < RETRACT_MS and not boat_moving:
 		_draw_retract(t)
 		return

@@ -956,6 +956,14 @@ def tangle():
     return c
 
 
+def anger():
+    """鸟偷了鱼以后小猫头上冒出的红色💢。11×11。"""
+    c = Canvas(11, 11)
+    c.rows(0, 0, ["rrr.....rrr", "rR.......Rr", "r.........r", "...........", "...........",
+                  "...........", "...........", "...........", "r.........r", "rR.......Rr", "rrr.....rrr"])
+    return c
+
+
 def slot(selected=False):
     """物品栏的一个格子（22×22）：0=普通 1=选中"""
     c = Canvas(22, 22)
@@ -1088,6 +1096,7 @@ def build():
         "bobber": save(bobber(), "bobber"),
         "bang": save(bang(), "bang"),
         "tangle": save(tangle(), "tangle"),
+        "anger": save(anger(), "anger"),
         "zzz": save(zzz(), "zzz"),
         "font": save(font(), "font"),
         "dots": save(dots(), "dots"),

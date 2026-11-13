@@ -224,3 +224,11 @@
 - 摊位：立柱画在猫前面；摊位里按方向键猫留在柜台后（`world.roam_behind`），走出才回前面；已在柜台后时直接走到位。
 - 迷你窗：顶栏左移 6 居中（`MINI_HUD_DX`），`MINI_SCENE` 改为整宽；鸟停留 `act_after_ms` 10000；尺寸改 "cm"；鸟礼物不再重复飘字。
 - 测试 281 项 ALL TESTS PASS、SIM PASS；Linux 截图看过迷你窗。Mac 实机待验，摊位绕行画面没截图。
+
+## v0.36（11-13）验收修改
+- 船可划到码头（`boat_max_x` 512）；`Journey.sail_scale` 按路程折算航行时长；`Journey.turn_sail` / `Game.turn_sail` 航行中掉头，按钮图标随方向变化。
+- 水纹重做：`World._ripples` 世界坐标水纹，静止圈 + 速度相关 V 形尾迹，透明度 sin 曲线。
+- 加速时顾客离开动画按 `time_scale` 缩放（之前按真实时间，多位顾客叠在一起）；鸟的动画时间也按加速走，避免与结算错开（"同时偷和送"的成因：加速下两次来访画面重叠）。
+- 鸟：`bird_start` 生成 0–2 次换位路径，最终位置对应行为；新增 `idle_chance` 的 none 来访；偷鱼后 `anger_ms` 红色💢（新精灵 `anger`），`_tick_idle_full` 在生气期间不恢复钓鱼。
+- 水线 `WATER_Y+2`。调试变量 `CATFISH_BIRD=steal|gift|none`。
+- 测试 ALL TESTS PASS、SIM PASS；Linux 截图看过尾迹和三种鸟停位。Mac 实机待验，💢画面没截到。

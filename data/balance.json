@@ -129,6 +129,9 @@
   },
   "town": {
     "sail_ms": 30000,
+    "dock_x": 512,
+    "sail_ref_dist": 252,
+    "sail_min_scale": 0.08,
     "walk_ms": 8000,
     "dock_roam_x": 552,
     "sale_min_ms": 8000,
@@ -250,7 +253,7 @@
   ],
   "water": {
     "boat_min_x": 30,
-    "boat_max_x": 440,
+    "boat_max_x": 512,
     "zones": [
       {
         "id": "deep",
@@ -271,6 +274,8 @@
     "max_ms": 480000,
     "steal_chance": 0.3,
     "act_after_ms": 10000,
+    "idle_chance": 0.2,
+    "anger_ms": 1500,
     "bottle_chance": 0.5
   },
   "equipment": {
