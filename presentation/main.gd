@@ -996,7 +996,9 @@ func _draw_hud(now: int) -> void:
 			elif game.journey.activity() == Journey.Activity.ROAM:
 				var rx := float(game.journey.roam_x())
 				var hint := "空格键互动"
-				if not world.door_near(rx).is_empty():
+				if world.near_pier(rx):
+					hint = "空格键去钓鱼"
+				elif not world.door_near(rx).is_empty():
 					hint = "空格键进入"
 				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_stall(rx) and not world.near_pier(rx):
 					hint = "空格键聊天"
