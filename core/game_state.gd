@@ -17,7 +17,7 @@ var pomodoro: Dictionary = {"phase": 0, "phase_end_ms": 0, "cycle_done": 0}
 ## 钓鱼断点（见 FishingSystem.checkpoint）
 var fishing_checkpoint: Dictionary = {"state": 0, "state_start_ms": 0, "deadline_ms": 0, "hooked_fish": ""}
 var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0, "next_eat_ms": 0, "paused_at_ms": 0, "sales": 0, "roam_x": 0, "walk_from": -1}
-var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}}
+var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}, "chests": 0}
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
 ## view_mode: 0 = 桌面迷你悬浮窗，1 = 全画面窗口
 var settings: Dictionary = {"view_mode": 1, "pixel_scale": 3, "sfx_volume": 2, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}

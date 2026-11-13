@@ -8,7 +8,10 @@ var state: int = State.IDLE
 var state_start_ms: int = 0
 var deadline_ms: int = 0
 var wait_multiplier: float = 1.0
+const CHEST := "chest"            # 钓上来的不是鱼而是宝箱时，hooked_fish 取这个值
+
 var hooked_fish: String = ""
+var chest_chance: float = 0.0     # 每一竿钓到宝箱的概率（来自 balance.json 的 chest.chance）
 var rarity_bonus: float = 0.0     # 鱼饵升级：稀有鱼权重 ×(1 + rarity_bonus × rarity)
 
 var _cfg: Dictionary
@@ -28,7 +31,7 @@ func checkpoint() -> Dictionary:
 func restore(cp: Dictionary) -> bool:
 	var s := int(cp.get("state", State.IDLE))
 	var fish := str(cp.get("hooked_fish", ""))
-	var known := fish == ""
+	var known := fish == "" or fish == CHEST
 	for f in _fish:
 		if f["id"] == fish:
 			known = true
@@ -70,7 +73,11 @@ func advance(now_ms: int) -> String:
 			var hi := float(_cfg["bite_max_ms"])
 			_enter(State.WAITING, now_ms, int(_rng.randf_range(lo, hi) * wait_multiplier))
 		State.WAITING:
-			hooked_fish = _roll_fish()
+			# chest_chance 为 0 时不消耗随机数，保持没有宝箱时的随机序列不变
+			if chest_chance > 0.0 and _rng.randf() < chest_chance:
+				hooked_fish = CHEST
+			else:
+				hooked_fish = _roll_fish()
 			_enter(State.HOOKED, now_ms, int(_cfg["hooked_ms"]))
 		State.HOOKED:
 			_enter(State.REELING, now_ms, int(_cfg["reel_ms"]))

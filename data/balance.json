@@ -92,5 +92,28 @@
     "sale_max_ms": 20000,
     "eat_min_ms": 180000,
     "eat_max_ms": 300000
+  },
+  "chest": {
+    "chance": 0.04,
+    "tiers": [
+      {
+        "name": "small",
+        "weight": 70,
+        "gold_min": 20,
+        "gold_max": 60
+      },
+      {
+        "name": "medium",
+        "weight": 25,
+        "gold_min": 80,
+        "gold_max": 150
+      },
+      {
+        "name": "big",
+        "weight": 5,
+        "gold_min": 300,
+        "gold_max": 500
+      }
+    ]
   }
 }

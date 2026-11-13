@@ -117,6 +117,8 @@ func _draw_dex() -> void:
 			m.label("？？？", Vector2(39, y), Pal.L_A)
 	m.label("共钓到", Vector2(19, 82), Pal.L_A)
 	m.text(str(int(g.state.stats["total_fish"])), Vector2(52, 85), Pal.L_W)
+	m.label("宝箱", Vector2(74, 82), Pal.L_A)
+	m.text(str(int(g.state.stats.get("chests", 0))), Vector2(97, 85), Pal.L_Y)
 
 func _draw_stats() -> void:
 	var g = m.game

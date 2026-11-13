@@ -42,6 +42,7 @@ var eat_t0: int = -100000
 var eat_fish: String = ""
 var splash_t0: int = -100000
 var hop_t0: int = -100000
+var chest_open_t0: int = -100000   # 宝箱被打开的时刻
 var leaving: Array = []       # 买完离开的顾客: {kind, t0}
 var walk_flip: bool = false   # 自动行走时是否朝左
 var roam_flip: bool = false   # 自由走动时是否朝左
@@ -415,16 +416,27 @@ func _draw_fishing(t: int, now: int) -> void:
 	if bobber != Vector2.INF:
 		m.pixel_line(tip_abs, bobber + Vector2(2, 0), Pal.L_W)
 		m.draw_texture(m.tex["bobber"], bobber)
-	if fish_tex != null:
+	if (fs == Fishing.State.REELING or fs == Fishing.State.SETTLEMENT) and m.game.fishing.hooked_fish != "":
 		if fs == Fishing.State.REELING:
 			m.pixel_line(tip_abs, fish_pos + Vector2(16, 5), Pal.L_W)
-		m.draw_texture(fish_tex, fish_pos)
+		_draw_hooked(fish_pos, t)
 	if t - splash_t0 < 360:
 		m.tex_frame("splash", rest + Vector2(-3, 3), 0 if t - splash_t0 < 180 else 1, 2)
 
 func _hooked_tex() -> Texture2D:
+	if m.game.fishing.hooked_fish == Fishing.CHEST:
+		return null      # 宝箱是两帧的图，由 _draw_hooked 单独画
 	var f: Dictionary = m.game.fish_by_id.get(m.game.fishing.hooked_fish, {})
 	return m.tex.get(f.get("sprite", ""), null)
+
+## 画钓上来的东西：鱼，或者宝箱（提上来时关着，结算时打开）。
+func _draw_hooked(pos: Vector2, t: int) -> void:
+	if m.game.fishing.hooked_fish == Fishing.CHEST:
+		m.tex_frame("chest", pos + Vector2(0, -3), 1 if t - chest_open_t0 < 2500 else 0, 2)
+	else:
+		var tx := _hooked_tex()
+		if tx != null:
+			m.draw_texture(tx, pos)
 
 ## 横向平铺一行瓦片，两端按 x_from / x_to 精确裁切。
 func _tile_row(name: String, frame: int, count: int, y: float, x_from: float, x_to: float) -> void:

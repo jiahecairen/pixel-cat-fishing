@@ -71,7 +71,7 @@ func _init() -> void:
 		var before_fish: int = int(g.state.stats["total_fish"])
 		for e in g.tick():
 			counts[e["type"]] = counts.get(e["type"], 0) + 1
-			if e["type"] in ["sale", "focus_done"]:
+			if e["type"] in ["sale", "focus_done", "chest"]:
 				gold_in += int(e["gold"])
 		max_jump_catch = maxi(max_jump_catch, int(g.state.stats["total_fish"]) - before_fish)
 		# ---- 不变量 ----

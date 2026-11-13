@@ -51,6 +51,16 @@ func sell_basket(s: GameState, sale_id: String) -> int:
 	s.revision += 1
 	return gold
 
+## 打开钓上来的宝箱：金币直接入账，不占鱼篓也不进木箱。同一个 id 只生效一次。
+func open_chest(s: GameState, chest_id: String, gold: int) -> bool:
+	if chest_id in s.processed_catch_ids or gold < 0:
+		return false
+	_remember(s.processed_catch_ids, chest_id)
+	s.wallet_gold += gold
+	s.stats["chests"] = int(s.stats.get("chests", 0)) + 1
+	s.revision += 1
+	return true
+
 ## 摆摊卖出鱼篓里的一条鱼。返回 {"fish_id", "gold"}；没卖成返回空字典。
 func sell_one(s: GameState, sale_id: String, multiplier: float = 1.0) -> Dictionary:
 	if sale_id in s.processed_sale_ids or s.basket.is_empty():

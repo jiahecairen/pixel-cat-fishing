@@ -6,7 +6,7 @@
 
 | 项目 | 命令 | 结果 |
 |---|---|---|
-| 单元测试 131 项 | `godot --headless --path . --script res://tests/run_tests.gd` | 通过 |
+| 单元测试 143 项 | `godot --headless --path . --script res://tests/run_tests.gd` | 通过 |
 | 8 小时逻辑模拟 | `godot --headless --path . --script res://tests/sim_long_run.gd` | 通过 |
 | 工程无报错启动 | `godot --headless --path . --quit-after 30` | 通过 |
 | 导出包可加载 | 用 Linux 引擎加载导出的 `.pck` | 通过 |

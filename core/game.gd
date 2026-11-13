@@ -33,6 +33,8 @@ var _pomo_cfg: Dictionary
 var _base_capacity: int = 10
 var _free_multiplier: float = 2.0
 var _last_cp_state: int = 0
+var _rng: RandomNumberGenerator
+var _chest_cfg: Dictionary = {}
 
 func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock, rng: RandomNumberGenerator) -> void:
 	_cfg = balance
@@ -44,6 +46,9 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 		fish_by_id[f["id"]] = f
 	economy = Economy.new(fish_table)
 	fishing = FishingSystem.new(balance["fishing"], fish_table, rng)
+	_rng = rng
+	_chest_cfg = balance.get("chest", {})
+	fishing.chest_chance = float(_chest_cfg.get("chance", 0.0)) if not _chest_cfg.get("tiers", []).is_empty() else 0.0
 	journey = Journey.new(state.journey, balance["town"], rng)
 	# 番茄钟用一份"生效配置"：默认值来自 balance.json，玩家在设置里改过的时长覆盖它
 	_pomo_cfg = balance["pomodoro"].duplicate(true)
@@ -200,7 +205,12 @@ func _tick_fishing(now: int, events: Array) -> void:
 	if not fishing.is_active():
 		fishing.start(now)
 	var fish_id := fishing.advance(now)
-	if fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
+	if fish_id == FishingSystem.CHEST:
+		var loot := _roll_chest()
+		if economy.open_chest(state, state.new_id("c"), int(loot["gold"])):
+			events.append({"type": "chest", "gold": loot["gold"], "tier": loot["tier"]})
+			dirty = true
+	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
 		events.append({"type": "catch", "fish_id": fish_id})
 		dirty = true
 
@@ -236,6 +246,21 @@ func _tick_trip(now: int, events: Array) -> void:
 			events.append({"type": "open"})
 		_:
 			events.append({"type": r})
+
+## 决定宝箱里有什么。现在只有金币，按档位权重抽；以后有了物品栏，在这里加物品。
+func _roll_chest() -> Dictionary:
+	var tiers: Array = _chest_cfg.get("tiers", [])
+	var total := 0.0
+	for t in tiers:
+		total += float(t["weight"])
+	var r := _rng.randf() * total
+	var pick: Dictionary = tiers[-1]
+	for t in tiers:
+		r -= float(t["weight"])
+		if r < 0.0:
+			pick = t
+			break
+	return {"tier": pick.get("name", ""), "gold": _rng.randi_range(int(pick["gold_min"]), int(pick["gold_max"]))}
 
 func _finish_focus(is_long: bool) -> Dictionary:
 	var pc: Dictionary = _pomo_cfg

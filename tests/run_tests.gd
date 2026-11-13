@@ -40,6 +40,7 @@ func _init() -> void:
 		test_game_free_mode(balance, fish)
 		test_upgrades_and_settings(balance, fish)
 		test_cat_config()
+		test_chest(balance, fish)
 		test_checkpoint(balance, fish)
 		test_event_log()
 		test_save()
@@ -151,6 +152,7 @@ func test_game_focus(balance: Dictionary, fish: Array) -> void:
 	print("game: focus（木箱结算）")
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(3))
+	g.fishing.chest_chance = 0.0      # 这组用例要精确对账鱼的收入，宝箱另有专门的用例
 	check(g.start_focus(), "开始专注")
 	var ev := _run(g, clock, 25 * 60 + 1)
 	var caught := _count(ev, "catch")
@@ -353,6 +355,60 @@ func test_cat_config() -> void:
 	var old := s.to_dict(); old.erase("cat")
 	var s3 := GameState.new()
 	check(s3.from_dict(old) and not s3.cat["created"] and s3.cat["hat"] == 1, "旧存档兼容")
+
+func test_chest(balance: Dictionary, fish: Array) -> void:
+	print("treasure chest")
+	check(is_equal_approx(float(balance["chest"]["chance"]), 0.04), "默认 4% 概率")
+	# 概率调到 100%：每一竿都是宝箱
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(21))
+	g.fishing.chest_chance = 1.0
+	var ev := _run(g, clock, 30 * 60, 500)
+	var chests: Array = ev.filter(func(e): return e["type"] == "chest")
+	check(chests.size() >= 10 and _count(ev, "catch") == 0, "每一竿都钓到宝箱 (%d 个)" % chests.size())
+	var sum := 0
+	var ok := true
+	var tiers := {}
+	for e in chests:
+		sum += int(e["gold"])
+		tiers[e["tier"]] = true
+		var t: Dictionary = balance["chest"]["tiers"].filter(func(x): return x["name"] == e["tier"])[0]
+		if e["gold"] < int(t["gold_min"]) or e["gold"] > int(t["gold_max"]):
+			ok = false
+	check(ok, "每个宝箱的金币都在所属档位的范围内")
+	check(g.state.wallet_gold == sum, "宝箱金币直接入账 (%d)" % sum)
+	check(g.state.basket.is_empty() and g.state.session_haul.is_empty() and g.state.stats["total_fish"] == 0, "宝箱不占鱼篓、不进木箱、不算进钓鱼数")
+	check(g.state.stats["chests"] == chests.size(), "宝箱计数正确")
+	check(not g.economy.open_chest(g.state, g.state.processed_catch_ids[-1], 999) and g.state.wallet_gold == sum, "同一个宝箱不能开两次")
+	# 专注时也能钓到，同样直接入账
+	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(22))
+	g2.fishing.chest_chance = 1.0
+	g2.start_focus()
+	var ev2 := _run(g2, g2._clock, 10 * 60, 500)
+	check(_count(ev2, "chest") > 0 and g2.state.session_haul.is_empty() and g2.state.wallet_gold > 0, "专注时钓到宝箱也直接入账，不进木箱")
+	# 默认概率下：宝箱是少数，鱼照常
+	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(23))
+	g3.start_focus(); g3.state.pomodoro["phase_end_ms"] = g3._clock.t + 100 * 3600000
+	var ev3 := _run(g3, g3._clock, 20 * 3600, 1000)
+	var c3 := _count(ev3, "chest"); var f3 := _count(ev3, "catch")
+	var rate := float(c3) / float(c3 + f3)
+	check(c3 > 0 and rate > 0.015 and rate < 0.08, "默认概率下宝箱占比约 4%% (%d/%d = %.3f)" % [c3, c3 + f3, rate])
+	# 没配置宝箱时完全不会出现
+	var b2: Dictionary = balance.duplicate(true); b2.erase("chest")
+	var g4 := Game.new(b2, fish, GameState.new(), FakeClock.new(), _rng(24))
+	check(g4.fishing.chest_chance == 0.0, "没有 chest 配置时概率为 0")
+	# 咬钩后、提竿前重启：断点里的宝箱能恢复，且只开一次
+	var g5 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(25))
+	g5.fishing.chest_chance = 1.0
+	var c5 = g5._clock
+	var guard := 0
+	while g5.fishing.state != Fishing.State.HOOKED and guard < 2000:
+		guard += 1; c5.t += 100; g5.tick()
+	var s6 := GameState.new(); s6.from_dict(JSON.parse_string(JSON.stringify(g5.state.to_dict())))
+	var g6 := Game.new(balance, fish, s6, c5, _rng(26))
+	check(g6.fishing.hooked_fish == Fishing.CHEST, "重启后钩上的宝箱还在")
+	var ev6 := _run(g6, c5, 4, 100)
+	check(_count(ev6, "chest") == 1, "提上来只开一次")
 
 func test_checkpoint(balance: Dictionary, fish: Array) -> void:
 	print("fishing checkpoint")

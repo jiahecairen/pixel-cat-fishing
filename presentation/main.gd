@@ -34,7 +34,7 @@ const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
 	"stall_front", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "cloud", "hills",
-	"tomato", "coin", "basket", "hold", "room_door", "room_window", "counter", "shelf_tackle",
+	"tomato", "coin", "basket", "hold", "chest", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_view"]
@@ -133,6 +133,8 @@ func _ready() -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
+	if OS.is_debug_build() and OS.has_environment("CATFISH_SEED"):   # 调试：固定随机种子，让每次运行的时间点一致
+		rng.seed = OS.get_environment("CATFISH_SEED").to_int()
 	clock = Clock.new()
 	_limits = balance.get("settings_limits", {})
 	game = Game.new(balance, fish, state, clock, rng)
@@ -188,6 +190,8 @@ func _apply_debug_env() -> void:
 		var ids: Array = game.fish_by_id.keys()
 		for i in OS.get_environment("CATFISH_FILL").to_int():
 			game.economy.add_catch(st, st.new_id("c"), ids[i % ids.size()], false)
+	if OS.has_environment("CATFISH_CHEST"):       # 调试：每一竿都钓到宝箱
+		game.fishing.chest_chance = 1.0
 	if OS.has_environment("CATFISH_BREAK"):       # 调试：开局直接处于番茄休息中
 		st.pomodoro["phase"] = Pomodoro.Phase.SHORT_BREAK
 		st.pomodoro["phase_end_ms"] = game.now_ms() + 3600000
@@ -557,6 +561,12 @@ func _on_event(e: Dictionary) -> void:
 				_sparkles(_world_to_view(world.cat_pos + Vector2(17, -10)), 12, 8.0)
 			else:
 				play("catch")
+		"chest":
+			world.hop_t0 = t
+			world.chest_open_t0 = t
+			play("rare")
+			_sparkles(_world_to_view(world.cat_pos + Vector2(17, -12)), 16 if e["tier"] == "big" else 9, 9.0)
+			_float("+%d" % e["gold"], "coin", world.cat_pos + Vector2(30, -4))
 		"basket_full":
 			if not _full_notified:
 				_full_notified = true

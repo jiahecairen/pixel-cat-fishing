@@ -34,6 +34,16 @@ static func load_balance(path: String = "res://data/balance.json") -> Dictionary
 	if float(f.get("bite_min_ms", 0)) <= 0 or float(f.get("bite_max_ms", 0)) < float(f.get("bite_min_ms", 0)):
 		push_error("balance.json 咬钩时间范围非法")
 		return {}
+	# 宝箱是可选的；写了就要写对
+	var chest = b.get("chest", {})
+	if chest is Dictionary and chest.has("tiers"):
+		if float(chest.get("chance", -1)) < 0.0 or float(chest.get("chance", 2)) > 1.0 or not chest["tiers"] is Array:
+			push_error("balance.json chest.chance 必须在 0–1 之间，tiers 必须是数组")
+			return {}
+		for t in chest["tiers"]:
+			if not (t is Dictionary) or float(t.get("weight", 0)) <= 0 or int(t.get("gold_min", -1)) < 0 or int(t.get("gold_max", -1)) < int(t.get("gold_min", 0)):
+				push_error("balance.json chest.tiers 有非法条目: " + str(t))
+				return {}
 	var town = b.get("town")
 	if not town is Dictionary:
 		push_error("balance.json 缺少 town")

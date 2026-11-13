@@ -706,6 +706,28 @@ def hold():
     return c
 
 
+def chest(open_=False):
+    """钓上来的宝箱：0=关着 1=打开（露出金币）"""
+    c = Canvas(18, 16)
+    c.rect(2, 8, 15, 14, "o")
+    c.rect(2, 8, 15, 8, "O"); c.rect(2, 13, 15, 14, "O")
+    for x in (4, 13):
+        c.rect(x, 8, x, 14, "y")
+    if open_:
+        c.rect(2, 2, 15, 4, "o"); c.rect(2, 2, 15, 2, "n")
+        for x in (4, 13):
+            c.rect(x, 2, x, 4, "y")
+        c.rect(3, 5, 14, 7, "y")
+        c.pts([(5, 5), (9, 6), (12, 5)], "W"); c.pts([(7, 7), (11, 7)], "H")
+    else:
+        c.rect(2, 4, 15, 7, "o"); c.rect(3, 3, 14, 3, "o"); c.rect(3, 3, 14, 3, "n")
+        for x in (4, 13):
+            c.rect(x, 3, x, 7, "y")
+        c.rect(8, 7, 9, 9, "y"); c.set(8, 8, "K")
+    c.outline()
+    return c
+
+
 def sparkle():
     """闪光粒子（特效不描边）：0=大 1=小"""
     a = Canvas(5, 5); a.rows(0, 0, ["..W..", "..y..", "WyWyW", "..y..", "..W.."])
@@ -727,7 +749,7 @@ LABELS = [
     "我的小猫", "给小猫选个样子", "完成",
     "方向键走动", "空格键互动", "空格键去小镇",
     "小猫的家", "裁缝铺", "渔具店", "空格键进入", "空格键聊天",
-    "确定要退出吗", "退出", "取消",
+    "确定要退出吗", "退出", "取消", "宝箱",
     "欢迎光临", "空格键出门", "空格键看货", "空格键照镜子", "空格键看图鉴", "空格键看统计",
     "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
 ]
@@ -813,6 +835,7 @@ def build():
         "panel": save(panel(), "panel"),
         "pips": save(pips(), "pips"),
         "sparkle": save(sparkle(), "sparkle"),
+        "chest": save(sheet([chest(), chest(True)]), "chest"),
         "splash": save(splash(), "splash"),
         "hold": save(hold(), "hold"),
         "room_door": save(room_door(), "room_door"),
