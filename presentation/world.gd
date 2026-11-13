@@ -269,7 +269,8 @@ func _draw_sky(cam: Vector2, view: Vector2, t: int) -> void:
 		m.draw_texture(m.tex["hills"], Vector2(roundf(cam.x - hill_shift + i * 64), WATER_Y - 22))
 
 func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
-	if on_break:
+	# 番茄休息时小猫原地打盹——但玩家正用方向键带着它走的时候除外，那时照常画走路
+	if on_break and act != Journey.Activity.ROAM:
 		m.draw_cat(cat_pos + Vector2(0, -1 if act != Journey.Activity.VENDING else 0), 2 + (t / 1100) % 2)
 		m.draw_texture(m.tex["zzz"], cat_pos + Vector2(30, -4 - (t / 500) % 3))
 		return

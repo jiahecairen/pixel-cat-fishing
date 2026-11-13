@@ -188,6 +188,9 @@ func _apply_debug_env() -> void:
 		var ids: Array = game.fish_by_id.keys()
 		for i in OS.get_environment("CATFISH_FILL").to_int():
 			game.economy.add_catch(st, st.new_id("c"), ids[i % ids.size()], false)
+	if OS.has_environment("CATFISH_BREAK"):       # 调试：开局直接处于番茄休息中
+		st.pomodoro["phase"] = Pomodoro.Phase.SHORT_BREAK
+		st.pomodoro["phase_end_ms"] = game.now_ms() + 3600000
 	if OS.has_environment("CATFISH_AUTOFOCUS"):
 		game.start_focus()
 	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
@@ -305,6 +308,8 @@ func _update_roam(dt: float) -> void:
 		if j.activity() != Journey.Activity.ROAM and game.begin_roam(world.cat_pos.x):
 			_roam_fx = world.cat_pos.x
 		if j.activity() == Journey.Activity.ROAM:
+			if absf(_roam_fx - j.roam_x()) > 1.5:
+				_roam_fx = j.roam_x()      # 读档后或从屋里出来：以存档里的位置为准，避免第一步瞬移到码头
 			_roam_fx = clampf(_roam_fx + dir * World.ROAM_SPEED * dt, World.ROAM_MIN_X, World.ROAM_MAX_X)
 			j.set_roam_x(_roam_fx)
 			world.roam_moving = true
