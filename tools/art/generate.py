@@ -519,6 +519,66 @@ def gameboy():
     return c
 
 
+def bird_fly(frame):
+    """飞行中的海鸟，面朝左。frame 0 翅膀上扬 / 1 翅膀下压。11×8。"""
+    c = Canvas(11, 8)
+    c.ellipse(6, 4, 3.6, 1.9, "w")
+    c.ellipse(2.5, 3, 1.8, 1.6, "w")
+    c.pts([(0, 3), (1, 3)], "y"); c.set(2, 2, "K")
+    c.rect(9, 4, 10, 4, "a")
+    if frame == 0:
+        c.rows(4, 0, ["..a", "..aa", ".aaa"])
+    else:
+        c.rows(4, 5, [".aaa", "..aa", "..a"])
+    c.outline()
+    return c
+
+
+def bird_perch():
+    """停在东西上的海鸟，面朝左。8×10。"""
+    c = Canvas(8, 10)
+    c.ellipse(4, 5.5, 3, 3.4, "w")
+    c.ellipse(3, 2.5, 2, 2, "w")
+    c.pts([(0, 2), (1, 2)], "y"); c.set(2, 1, "K")
+    c.rect(4, 4, 5, 6, "a"); c.rect(6, 7, 7, 8, "a")
+    c.pts([(3, 9), (5, 9)], "f")
+    c.outline()
+    return c
+
+
+def boat_head():
+    """船尾的龙头：木头雕的，鸟可以停在头顶。12×20。"""
+    c = Canvas(12, 20)
+    c.rows(0, 0, ["...yy.......", "..nnnn......", ".nnrnnn.....", "nnnnnnnn....", "nOOOOnnn....",
+                  ".....nnO....", ".....nnO....", ".....nnO....", "....nnnO....", "....nnnO...."])
+    for y in range(10, 18):
+        c.rect(4, y, 7, y, "n"); c.set(7, y, "O")
+    c.rect(3, 18, 8, 18, "n"); c.rect(3, 19, 8, 19, "O")
+    c.outline()
+    return c
+
+
+def boat_basket_back():
+    """船上鱼篓的口（后半），鱼堆在它上面。14×5。"""
+    c = Canvas(14, 5)
+    c.ellipse(6.5, 2.2, 6.5, 2.3, "h")
+    c.ellipse(6.5, 2.4, 5.2, 1.6, "O")
+    c.outline()
+    return c
+
+
+def boat_basket():
+    """船上鱼篓的前半（编织的篓身）。14×8。"""
+    c = Canvas(14, 8)
+    c.rect(0, 0, 13, 0, "h")
+    for y in range(1, 8):
+        inset = 1 if y >= 6 else 0
+        for x in range(inset, 14 - inset):
+            c.set(x, y, "H" if (x + y) % 2 else "h")
+    c.outline()
+    return c
+
+
 def bubble():
     """满篓气泡：点它让小猫去小镇卖鱼。里面画一个小摊。"""
     c = Canvas(19, 18)
@@ -983,6 +1043,11 @@ def build():
         "stall_front": save(stall_front(), "stall_front"),
         "gameboy": save(gameboy(), "gameboy"),
         "bubble": save(bubble(), "bubble"),
+        "bird_fly": save(sheet([bird_fly(0), bird_fly(1)]), "bird_fly"),
+        "bird_perch": save(bird_perch(), "bird_perch"),
+        "boat_head": save(boat_head(), "boat_head"),
+        "boat_basket_back": save(boat_basket_back(), "boat_basket_back"),
+        "boat_basket": save(boat_basket(), "boat_basket"),
         "market_gate": save(market_gate(), "market_gate"),
         "stall_back_fruit": save(stall_back("y", "w", "H"), "stall_back_fruit"),
         "stall_back_veg": save(stall_back("g", "w", "G"), "stall_back_veg"),

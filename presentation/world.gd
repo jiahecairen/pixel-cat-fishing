@@ -48,6 +48,7 @@ var cat_pos := Vector2(FISH_X + 10, WATER_Y - 34)   # 小猫贴图左上角（�
 var boat_x: float = FISH_X
 var boat_moving: bool = false   # 玩家正用方向键划船
 var boat_dir: float = 1.0
+var bird: Dictionary = {}       # 正在来访的鸟：{kind, item, t0}
 var eat_t0: int = -100000
 var eat_fish: String = ""
 var splash_t0: int = -100000
@@ -104,7 +105,7 @@ func update(now: int, t: int) -> void:
 		Journey.Activity.ROAM:
 			cat_pos = Vector2(j.roam_x(), GROUND_Y - 30)
 		Journey.Activity.VENDING, Journey.Activity.SOLD_OUT:
-			cat_pos = Vector2(STALL_CAT_X, GROUND_Y - 31)
+			cat_pos = Vector2(STALL_CAT_X, GROUND_Y - 29)      # 脚踩在地面上
 		_:
 			cat_pos = Vector2(boat_x + 10, boat_y(t) - 23)
 
@@ -320,6 +321,7 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 
 	if not mini:
 		_draw_sky(cam, view, t)
+		_draw_sky_birds(cam, view, t)
 	for h in HOUSES:
 		m.draw_texture(m.tex[h[0]], Vector2(h[1], GROUND_Y - 60))
 	for x in TREES:
@@ -396,8 +398,92 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	if not in_town:
 		_draw_boat_cat(act, on_break, now, t)
 	m.draw_texture(m.tex["boat"], Vector2(boat_x, bob_y))
+	_draw_boat_gear(bob_y, not in_town)
 	if not in_town:
 		_draw_boat_extras(act, on_break, now, t)
+		_draw_bird(t, bob_y)
+
+# ------------------------------------------------------------------ 鸟和船上的东西
+const BASKET_SLOTS := 12
+
+## 船尾的龙头，和船头旁边的鱼篓（鱼按篓子装了多少堆起来；人在镇上时鱼在猫身上，篓子空着）。
+func _draw_boat_gear(bob_y: float, show_fish: bool) -> void:
+	m.draw_texture(m.tex["boat_head"], Vector2(boat_x - 2, bob_y - 17))
+	var o := Vector2(boat_x + 42, bob_y - 1)
+	m.draw_texture(m.tex["boat_basket_back"], o + Vector2(0, -4))
+	var g = m.game
+	var size: int = g.state.basket.size() if show_fish else 0
+	if size > 0:
+		var cap: int = maxi(1, g.state.basket_capacity)
+		var slots: int = clampi(ceili(float(BASKET_SLOTS) * float(size) / float(cap)), 1, BASKET_SLOTS)
+		for s in slots:
+			var fish_id: String = g.state.basket[(s * size) / slots]
+			var p := Vector2(o.x + 2 + (s % 4) * 3 + (s / 4) % 2, o.y - 3 - (s / 4) * 2)
+			var col := _fish_color(fish_id)
+			m.draw_rect(Rect2(p.x, p.y, 3, 2), col)
+			m.draw_rect(Rect2(p.x, p.y + 1, 3, 1), col.darkened(0.25))
+	m.draw_texture(m.tex["boat_basket"], o)
+
+var _fish_colors: Dictionary = {}
+func _fish_color(fish_id: String) -> Color:
+	if not _fish_colors.has(fish_id):
+		var f: Dictionary = m.game.fish_by_id.get(fish_id, {})
+		var col := Pal.L_A
+		if m.tex.has(f.get("sprite", "")):
+			col = m.tex[f["sprite"]].get_image().get_pixel(9, 5)
+		_fish_colors[fish_id] = col
+	return _fish_colors[fish_id]
+
+func bird_start(kind: String, item: String, t: int) -> void:
+	bird = {"kind": kind, "item": item, "t0": t}
+
+## 来访的鸟：飞来 → 停下张望 → 送礼（物品落进船里）或叼走一条鱼 → 飞走。
+## 送礼的鸟停在龙头上；偷鱼的鸟停在鱼篓边上。
+func _draw_bird(t: int, bob_y: float) -> void:
+	if bird.is_empty():
+		return
+	var d: int = t - int(bird["t0"])
+	if d > 9500:
+		bird = {}
+		return
+	var steal: bool = bird["kind"] == "steal"
+	var perch := Vector2(boat_x + 45, bob_y - 17) if steal else Vector2(boat_x - 1, bob_y - 27)
+	var item: Dictionary = m.game.fish_by_id.get(bird["item"], {}) if steal else m.game.inventory.by_id.get(bird["item"], {})
+	var item_tex: String = item.get("sprite", "")
+	if d < 2500:
+		var k := _ease(float(d) / 2500.0)
+		var pos := (perch + Vector2(170, -70)).lerp(perch, k) + Vector2(0, roundf(sin(d / 150.0) * (1.0 - k) * 3.0))
+		m.tex_frame("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 110) % 2, 2)
+	elif d < 6000:
+		if (d / 1300) % 3 == 2:
+			m.tex_frame_flipped("bird_perch", perch, 0, 1)        # 回头张望
+		else:
+			m.draw_texture(m.tex["bird_perch"], perch)
+	else:
+		var e := float(d - 6000) / 3500.0
+		if not steal and m.tex.has(item_tex) and d < 6700:       # 东西掉进船里
+			var fall := float(d - 6000) / 700.0
+			m.draw_texture(m.tex[item_tex], perch.lerp(Vector2(boat_x + 26, bob_y - 4), fall * fall).round())
+		var pos := perch + Vector2(-120.0 * e, -70.0 * e - 25.0 * e * e)
+		m.tex_frame("bird_fly", (pos + Vector2(-1, 1)).round(), (d / 100) % 2, 2)
+		if steal and m.tex.has(item_tex):                        # 叼着鱼飞走
+			m.draw_texture(m.tex[item_tex], (pos + Vector2(-4, 8)).round())
+
+## 天上远远飞过的海鸟（只在白天、不下雨时出现），和云一样随镜头慢慢错位。
+func _draw_sky_birds(cam: Vector2, view: Vector2, t: int) -> void:
+	var sky: Dictionary = m.game.sky()
+	if float(sky["dark"]) > 0.5 or m.game.is_raining():
+		return
+	for k in 3:
+		var dirn := 1.0 if k % 2 == 0 else -1.0
+		var span := view.x + 80.0
+		var sx := fposmod(float(t) / 1000.0 * (14.0 + k * 5.0) * dirn + k * 173.0 - cam.x * 0.5, span) - 40.0
+		var y := cam.y + 30.0 + k * 24.0 + roundf(sin(float(t) / 500.0 + k * 2.0) * 2.0)
+		var pos := Vector2(cam.x + sx, y).round()
+		if dirn > 0:
+			m.tex_frame_flipped("bird_fly", pos, (t / 170 + k) % 2, 2)
+		else:
+			m.tex_frame("bird_fly", pos, (t / 170 + k) % 2, 2)
 
 ## 像素风的实心圆（一行行矩形拼出来，边缘没有抗锯齿）。
 func _disc(c: Vector2, r: int, color: Color) -> void:

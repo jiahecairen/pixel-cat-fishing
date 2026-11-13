@@ -34,7 +34,7 @@ const FPS_DRAG := 60
 const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
-	"stall_front", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
+	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
@@ -243,6 +243,8 @@ func _apply_debug_env() -> void:
 		game.hour_override = OS.get_environment("CATFISH_HOUR").to_float()
 	if OS.has_environment("CATFISH_ROOM"):        # 调试：到镇上后直接进这间屋子（tackle / tailor / home）
 		_debug_room = OS.get_environment("CATFISH_ROOM")
+	if OS.has_environment("CATFISH_BIRD"):         # 调试：一开局就有鸟来
+		st.effects["bird_next_ms"] = 1
 	if OS.has_environment("CATFISH_MOVE"):
 		game.journey.set_speed(OS.get_environment("CATFISH_MOVE").to_float(), 0)
 	if OS.has_environment("CATFISH_ROAM_AT"):
@@ -702,6 +704,15 @@ func _on_event(e: Dictionary) -> void:
 			world.hop_t0 = t
 			world.on_sale(e["fish_id"])
 			_float("+%d" % e["gold"], "coin", Vector2(World.STALL_X + 8, World.GROUND_Y - 52))
+		"bird_visit":
+			world.bird_start(e["kind"], e["item"], t)
+		"bird_gift":
+			var gift: Dictionary = game.inventory.by_id.get(e["item"], {})
+			if tex.has(gift.get("sprite", "")):
+				_float("+1", gift["sprite"], world.cat_pos + Vector2(-14, -14))
+			play("catch")
+		"bird_steal":
+			play("deny")
 		"ate":
 			world.eat_t0 = t
 			world.eat_fish = e["fish_id"]
@@ -885,6 +896,7 @@ func _go_fishing() -> void:
 
 func _go_to_town() -> void:
 	if game.go_to_town():
+		world.bird = {}
 		log.write("go_to_town", {"basket": game.state.basket.size()})
 		_full_notified = false
 		play("cast")

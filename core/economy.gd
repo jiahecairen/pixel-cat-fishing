@@ -73,6 +73,17 @@ func sell_one(s: GameState, sale_id: String, multiplier: float = 1.0) -> Diction
 	return {"fish_id": fish_id, "gold": gold}
 
 ## 小猫偷吃：吃掉鱼篓里最便宜的一条普通鱼（稀有鱼 rarity>=2 不吃）。返回被吃的鱼 id，没得吃返回 ""。
+## 篓里最便宜的非稀有鱼（鸟会偷这一条）；没有返回空字符串。不改动篓子。
+func cheapest_common(s: GameState) -> String:
+	var best := -1
+	for i in s.basket.size():
+		var id: String = s.basket[i]
+		if int(_rarity.get(id, 0)) >= 2:
+			continue
+		if best < 0 or price_of(id) < price_of(s.basket[best]):
+			best = i
+	return "" if best < 0 else s.basket[best]
+
 func eat_cheapest(s: GameState) -> String:
 	var best := -1
 	for i in s.basket.size():

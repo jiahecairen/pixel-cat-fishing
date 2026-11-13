@@ -208,5 +208,12 @@
         "max_x": 9999
       }
     ]
+  },
+  "birds": {
+    "min_ms": 240000,
+    "max_ms": 540000,
+    "steal_chance": 0.35,
+    "act_after_ms": 6000,
+    "bottle_chance": 0.5
   }
 }

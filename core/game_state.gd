@@ -19,7 +19,7 @@ var fishing_checkpoint: Dictionary = {"state": 0, "state_start_ms": 0, "deadline
 ## 物品栏：物品 id → 数量
 var inventory: Dictionary = {}
 ## 物品效果：幸运鱼饵的到期时刻、招财铃剩余的单数
-var effects: Dictionary = {"lucky_until_ms": 0, "bell_sales": 0, "napped_end_ms": 0}
+var effects: Dictionary = {"lucky_until_ms": 0, "bell_sales": 0, "napped_end_ms": 0, "bird_next_ms": 0, "bird_act_ms": 0}
 var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0, "next_eat_ms": 0, "paused_at_ms": 0, "sales": 0, "roam_x": 0, "walk_from": -1, "boat_x": 260}
 var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}, "chests": 0}
 ## 时长设置为 0 表示"使用 balance.json 的默认值"

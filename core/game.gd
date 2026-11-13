@@ -28,6 +28,9 @@ var inventory: Inventory
 var fish_list: Array = []
 var fish_by_id: Dictionary = {}
 var _water: Dictionary = {}
+var _birds: Dictionary = {}
+var _bird_kind: String = ""      # 正在来访的鸟："gift" 送礼 / "steal" 偷鱼（只在内存里，重启后这次来访作废）
+var _bird_item: String = ""
 var dirty: bool = false     # 有需要落盘的变化
 
 var _clock
@@ -72,6 +75,7 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	inventory = Inventory.new(balance.get("items", []))
 	journey = Journey.new(state.journey, balance["town"], rng)
 	_water = balance.get("water", {})
+	_birds = balance.get("birds", {})
 	# 番茄钟用一份"生效配置"：默认值来自 balance.json，玩家在设置里改过的时长覆盖它
 	_pomo_cfg = balance["pomodoro"].duplicate(true)
 	for k in DURATION_KEYS:
@@ -199,6 +203,9 @@ func _tick() -> Array:
 	if int(state.journey["paused_at_ms"]) != 0:
 		var paused_for := maxi(0, now - int(state.journey["paused_at_ms"]))
 		journey.shift(paused_for)
+		for k in ["bird_next_ms", "bird_act_ms"]:       # 鸟的计时也跟着顺延
+			if int(state.effects[k]) > 0:
+				state.effects[k] = int(state.effects[k]) + paused_for
 		if int(state.effects["lucky_until_ms"]) > 0:      # 休息不消耗幸运鱼饵的时间
 			state.effects["lucky_until_ms"] = int(state.effects["lucky_until_ms"]) + paused_for
 		state.journey["paused_at_ms"] = 0
@@ -207,8 +214,10 @@ func _tick() -> Array:
 	match journey.activity():
 		Journey.Activity.FISHING:
 			_tick_fishing(now, events)
+			_tick_birds(now, events)
 		Journey.Activity.IDLE_FULL:
 			_tick_idle_full(now, events)
+			_tick_birds(now, events)
 		_:
 			_tick_trip(now, events)
 	return events
@@ -266,6 +275,7 @@ func go_to_town() -> bool:
 	var now: int = _clock.now_ms()
 	fishing.stop(now)
 	journey.depart(now)
+	_cancel_bird()
 	dirty = true
 	return true
 
@@ -391,6 +401,50 @@ func _tick_fishing(now: int, events: Array) -> void:
 	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
 		events.append({"type": "catch", "fish_id": fish_id})
 		dirty = true
+
+## 鸟：每隔几分钟飞来一次落在船上。送礼（带来物品）或偷鱼（叼走篓里最便宜的非稀有鱼，
+## 只在小猫盯着浮漂等咬钩、没留意身后的时候来偷）。来访开始时定好种类，到 act_after_ms 后才真正生效，让画面里的鸟先飞到。
+func _tick_birds(now: int, events: Array) -> void:
+	if _birds.is_empty():
+		return
+	var e := state.effects
+	if int(e["bird_act_ms"]) > 0:
+		if now < int(e["bird_act_ms"]):
+			return
+		e["bird_act_ms"] = 0
+		e["bird_next_ms"] = now + _rng.randi_range(int(_birds["min_ms"]), int(_birds["max_ms"]))
+		if _bird_kind == "gift" and _bird_item != "" and inventory.add(state, _bird_item):
+			events.append({"type": "bird_gift", "item": _bird_item})
+		elif _bird_kind == "steal":
+			var gone := economy.eat_cheapest(state)
+			events.append({"type": "bird_steal", "fish_id": gone})
+		_bird_kind = ""
+		_bird_item = ""
+		dirty = true
+		return
+	if int(e["bird_next_ms"]) <= 0:
+		e["bird_next_ms"] = now + _rng.randi_range(int(_birds["min_ms"]), int(_birds["max_ms"]))
+		dirty = true
+		return
+	if now < int(e["bird_next_ms"]):
+		return
+	var watching_float: bool = journey.activity() == Journey.Activity.IDLE_FULL or fishing.state == FishingSystem.State.WAITING
+	var loot := economy.cheapest_common(state)
+	if loot != "" and watching_float and _rng.randf() < float(_birds["steal_chance"]):
+		_bird_kind = "steal"
+		_bird_item = loot
+	else:
+		_bird_kind = "gift"
+		_bird_item = "bottle" if _rng.randf() < float(_birds["bottle_chance"]) and inventory.by_id.has("bottle") else inventory.roll(_rng)
+	e["bird_act_ms"] = now + int(_birds["act_after_ms"])
+	events.append({"type": "bird_visit", "kind": _bird_kind, "item": _bird_item})
+	dirty = true
+
+func _cancel_bird() -> void:
+	_bird_kind = ""
+	_bird_item = ""
+	state.effects["bird_act_ms"] = 0
+	state.effects["bird_next_ms"] = 0
 
 func _tick_idle_full(now: int, events: Array) -> void:
 	if in_focus() or not economy.basket_full(state):   # 专注：鱼进木箱，满篓也接着钓

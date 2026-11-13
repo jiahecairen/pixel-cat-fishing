@@ -46,6 +46,7 @@ func _init() -> void:
 		test_adapters()
 		test_weather(balance, fish)
 		test_water(balance, fish)
+		test_birds(balance, fish)
 		test_inventory(balance, fish)
 		test_checkpoint(balance, fish)
 		test_event_log()
@@ -604,6 +605,31 @@ func test_water(balance: Dictionary, fish: Array) -> void:
 	_run(g, c, 100)
 	check(g.journey.boat_x() == 440, "往返小镇不改变船的位置")
 
+func test_birds(balance: Dictionary, fish: Array) -> void:
+	print("birds: 鸟来访（送礼 / 偷鱼）")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(21))
+	var c: FakeClock = g._clock
+	var ev := _run(g, c, 3 * 3600, 500)
+	var visits: Array = ev.filter(func(e): return e["type"] == "bird_visit")
+	var gifts: Array = ev.filter(func(e): return e["type"] == "bird_gift")
+	var steals: Array = ev.filter(func(e): return e["type"] == "bird_steal")
+	check(visits.size() >= 15 and visits.size() <= 50, "3 小时来了 %d 次鸟（平均 4–9 分钟一次）" % visits.size())
+	check(gifts.size() + steals.size() >= visits.size() - 1 and gifts.size() > 0, "来访后都会生效 (送 %d / 偷 %d / 来 %d)" % [gifts.size(), steals.size(), visits.size()])
+	for e in steals:
+		check(e["fish_id"] != "koi" and e["fish_id"] != "arowana", "鸟不偷稀有鱼")
+	# 篓子空着不会来偷
+	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(22))
+	g2.state.effects["bird_next_ms"] = 1
+	var ev2 := _run(g2, g2._clock, 600, 500)
+	check(ev2.filter(func(e): return e["type"] == "bird_visit" and e["kind"] == "steal").is_empty(), "空篓子不会被偷")
+	# 出发去小镇会取消来访
+	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(23))
+	g3.state.effects["bird_next_ms"] = 1
+	_run(g3, g3._clock, 5, 500)
+	check(int(g3.state.effects["bird_act_ms"]) > 0, "鸟来了")
+	g3.go_to_town()
+	check(int(g3.state.effects["bird_act_ms"]) == 0, "出发后这次来访作废")
+
 func test_inventory(balance: Dictionary, fish: Array) -> void:
 	print("inventory & items")
 	var clock := FakeClock.new()
@@ -671,7 +697,8 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var total := 0
 	for id in g3.state.inventory:
 		total += int(g3.state.inventory[id])
-	check(total == with_item.size(), "开出的物品都进了物品栏 (%d)" % total)
+	var gifts := ev.filter(func(e): return e["type"] == "bird_gift").size()
+	check(total == with_item.size() + gifts, "开出的物品和鸟送的礼物都进了物品栏 (%d = %d + %d)" % [total, with_item.size(), gifts])
 	check(g3.inventory.owned(g3.state).size() == 6, "跑够久，6 种物品都开出来过")
 	# 存档
 	var s4 := GameState.new(); s4.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
