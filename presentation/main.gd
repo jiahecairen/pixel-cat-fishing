@@ -107,6 +107,8 @@ const KEYS_LEFT := [KEY_LEFT, KEY_A]
 const KEYS_RIGHT := [KEY_RIGHT, KEY_D]
 const KEYS_ACT := [KEY_SPACE, KEY_ENTER, KEY_E, KEY_UP, KEY_W]
 var _cam_snap: bool = true
+var _cam_fx: float = 0.0        # 完整窗口镜头的精确横坐标（画面上取整）
+const CAM_PULL := 1.4            # 镜头把小猫拉回正中的速度（每秒，越大越紧）
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
 var _debug_last: String = ""
 var _debug_act_frame: int = -1
@@ -294,24 +296,29 @@ static func mini_i(a: int, b: int) -> int:
 	return a if a < b else b
 
 
-func _update_camera(_dt: float) -> void:
+func _update_camera(dt: float) -> void:
 	if mini:
 		cam = Vector2(world.cat_pos.x - MINI_CAT_X, MINI_CAM_Y).round()
 		_cam_snap = false
 		return
-	# 完整窗口：小猫在画面中间 30%–70% 的"静止区"里活动时镜头不动，走出静止区镜头才跟上，
-	# 所以小猫永远不会走出画面。世界底边对齐窗口底边，多出来的高度都给天空。
+	# 完整窗口：镜头像橡皮筋一样跟着小猫。
+	# 1) 镜头一直在慢慢把小猫拉回画面正中（缓动，速度不快，所以小猫在中间 30%–70% 里走动时镜头几乎不动）；
+	# 2) 如果小猫走得比缓动快，走出 30%–70% 的静止区，镜头立刻跟上，保证小猫永远不会走出画面。
+	# 世界底边对齐窗口底边，多出来的高度都给天空。
 	var cx := world.cat_pos.x + 16.0
-	var x := cam.x
+	var max_x := maxf(0.0, World.WORLD_END - view.x)
 	if _cam_snap:
-		x = cx - view.x * 0.45
+		_cam_fx = cx - view.x * 0.5
 		_cam_snap = false
-	elif cx < x + view.x * 0.3:
-		x = cx - view.x * 0.3
-	elif cx > x + view.x * 0.7:
-		x = cx - view.x * 0.7
-	x = clampf(x, 0.0, maxf(0.0, World.WORLD_END - view.x))
-	cam = Vector2(x, FULL_MIN_H - view.y).round()
+	else:
+		var target := cx - view.x * 0.5
+		_cam_fx += (target - _cam_fx) * (1.0 - exp(-CAM_PULL * minf(dt, 0.1)))
+		if cx < _cam_fx + view.x * 0.3:
+			_cam_fx = cx - view.x * 0.3
+		elif cx > _cam_fx + view.x * 0.7:
+			_cam_fx = cx - view.x * 0.7
+	_cam_fx = clampf(_cam_fx, 0.0, max_x)
+	cam = Vector2(roundf(_cam_fx), FULL_MIN_H - view.y)
 
 
 ## 完整窗口里用方向键带着小猫在镇上走；松手一会儿后交还给自动流程。
