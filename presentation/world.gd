@@ -426,3 +426,92 @@ func _tile_row(name: String, frame: int, count: int, y: float, x_from: float, x_
 		if b > a:
 			m.draw_texture_rect_region(tx, Rect2(a, y, b - a, h), Rect2(frame * w + (a - x), 0, b - a, h))
 		x += w
+
+
+# ------------------------------------------------------------------ 室内
+## 三间屋子。坐标是"屋内坐标"：x 从左墙算起，脚踩的地面线是 fy（由 draw_interior 换算到视图里）。
+## spots: [小猫中心点的 x, 用途]；keeper: 店主的居民样子，-1 表示没有店主。
+const ROOM_W := 216
+const ROOM_H := 76
+const ROOM_MIN_X := 2
+const ROOM_MAX_X := ROOM_W - 34
+const ROOM_DOOR_X := 14          # 门的中心
+const ROOMS := {
+	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"]]},
+	"tailor": {"keeper": 0, "wall": "w", "spots": [[128, "mirror"]]},
+	"home": {"keeper": -1, "wall": "w", "spots": [[84, "dex"], [128, "stats"]]},
+}
+const SPOT_HINT := {"exit": "空格键出门", "shop": "空格键看货", "mirror": "空格键照镜子", "dex": "空格键看图鉴", "stats": "空格键看统计"}
+
+var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
+var room_flip: bool = false
+var room_moving: bool = false
+var room_t0: int = -100000       # 进门的时刻（店主打招呼用）
+
+func enter_room(t: int) -> void:
+	room_x = ROOM_DOOR_X - 10
+	room_flip = false
+	room_moving = false
+	room_t0 = t
+
+## 小猫此刻站在屋里的什么位置："exit" / "shop" / "mirror" / "dex" / "stats" / ""。
+func room_spot(kind: String) -> String:
+	var cx := room_x + 16.0
+	for sp in ROOMS[kind]["spots"]:
+		if absf(cx - float(sp[0])) <= 13.0:
+			return sp[1]
+	if absf(cx - ROOM_DOOR_X) <= 13.0:
+		return "exit"
+	return ""
+
+func draw_interior(kind: String, view: Vector2, t: int) -> void:
+	var room: Dictionary = ROOMS[kind]
+	var ox := floorf((view.x - ROOM_W) / 2.0)
+	var fy := view.y - 56.0                    # 地面线，和室外的地面同高
+	m.draw_rect(Rect2(Vector2.ZERO, view), Pal.U_K)
+	# 墙、护墙板、地板
+	m.draw_rect(Rect2(ox, fy - ROOM_H, ROOM_W, ROOM_H), Pal.BY_KEY[room["wall"]])
+	m.draw_rect(Rect2(ox, fy - 14, ROOM_W, 14), Pal.L_N)
+	m.draw_rect(Rect2(ox, fy - 15, ROOM_W, 1), Pal.L_O)
+	m.draw_rect(Rect2(ox, fy, ROOM_W, 16), Pal.L_O)
+	m.draw_rect(Rect2(ox, fy, ROOM_W, 1), Pal.U_K)
+	for x in range(0, ROOM_W, 18):
+		m.draw_rect(Rect2(ox + x, fy + 1, 1, 15), Pal.U_O)
+	m.draw_rect(Rect2(ox, fy + 8, ROOM_W, 1), Pal.U_O)
+	m.draw_texture(m.tex["room_door"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
+	m.draw_texture(m.tex["room_window"], Vector2(ox + 34, fy - 56))
+	var keeper_pos := Vector2.INF
+	match kind:
+		"tackle":
+			m.draw_texture(m.tex["shelf_tackle"], Vector2(ox + 76, fy - 62))
+			m.draw_texture(m.tex["barrel"] if m.tex.has("barrel") else m.tex["hold"], Vector2(ox + 196, fy - 10))
+			keeper_pos = Vector2(ox + 156, fy - 31)      # 店主站在柜台后的踏板上，露出上半身
+			m.tex_frame("villager_%d" % int(room["keeper"]), keeper_pos, 0, 2)
+			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
+			m.draw_texture(m.tex["fish_bass"], Vector2(ox + 135, fy - 26))
+		"tailor":
+			m.draw_texture(m.tex["shelf_hats"], Vector2(ox + 150, fy - 62))
+			m.draw_texture(m.tex["mirror"], Vector2(ox + 120, fy - 32))
+			m.draw_texture(m.tex["rug"], Vector2(ox + 108, fy + 3))
+			keeper_pos = Vector2(ox + 176, fy - 21)
+			m.tex_frame("villager_%d" % int(room["keeper"]), keeper_pos, 0, 2)
+		"home":
+			m.draw_texture(m.tex["bookshelf"], Vector2(ox + 70, fy - 39))
+			m.draw_texture(m.tex["calendar"], Vector2(ox + 120, fy - 50))
+			m.draw_texture(m.tex["bed"], Vector2(ox + 160, fy - 19))
+			m.draw_texture(m.tex["rug"], Vector2(ox + 96, fy + 3))
+	# 小猫
+	var pos := Vector2(ox + roundf(room_x), fy - 30)
+	m.draw_cat(pos, (4 + (t / 180) % 2) if room_moving else 4, room_flip)
+	# 店主进门时打招呼
+	if keeper_pos != Vector2.INF and t - room_t0 < 3000:
+		var w: float = m.label_width("欢迎光临") + 6
+		var box := Rect2(roundf(keeper_pos.x + 8 - w / 2), keeper_pos.y - 17, w, 13)
+		m.draw_rect(box.grow(1), Pal.U_K)
+		m.draw_rect(box, Pal.U_W)
+		m.draw_rect(Rect2(keeper_pos.x + 6, box.end.y, 3, 2), Pal.U_W)
+		m.label("欢迎光临", box.position + Vector2(3, 1), Pal.U_K)
+	# 四周的墙边
+	m.draw_rect(Rect2(ox - 2, fy - ROOM_H - 2, ROOM_W + 4, 2), Pal.U_O)
+	m.draw_rect(Rect2(ox - 2, fy - ROOM_H, 2, ROOM_H + 16), Pal.U_O)
+	m.draw_rect(Rect2(ox + ROOM_W, fy - ROOM_H, 2, ROOM_H + 16), Pal.U_O)

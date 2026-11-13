@@ -446,6 +446,121 @@ def hills():
 
 
 # ---------------------------------------------------------------- 鱼
+# ---------------------------------------------------------------- 室内
+def room_door():
+    c = Canvas(18, 30)
+    c.rect(1, 1, 16, 28, "o")
+    c.rect(1, 1, 16, 2, "O"); c.rect(1, 1, 2, 28, "O"); c.rect(15, 1, 16, 28, "O")
+    c.rect(5, 6, 12, 14, "n"); c.rect(5, 18, 12, 25, "n")
+    c.set(13, 16, "y"); c.set(13, 17, "H")
+    c.outline()
+    return c
+
+
+def room_window():
+    c = Canvas(24, 20)
+    c.rect(1, 1, 22, 18, "O")
+    c.rect(3, 3, 20, 16, "c")
+    c.rect(11, 3, 12, 16, "O"); c.rect(3, 9, 20, 10, "O")
+    c.rows(4, 12, ["..gg....", ".gggg.g.", "gggggggg"])
+    c.pts([(5, 4), (6, 5), (14, 4)], "W")
+    c.rect(0, 17, 23, 18, "n")
+    c.outline()
+    return c
+
+
+def counter():
+    c = Canvas(46, 18)
+    c.rect(1, 1, 44, 16, "o")
+    c.rect(1, 1, 44, 3, "n")
+    c.rect(1, 14, 44, 16, "O")
+    for x in (12, 23, 34):
+        c.rect(x, 4, x, 13, "O")
+    c.outline()
+    return c
+
+
+def shelf(kind):
+    """墙上的货架。tackle: 鱼竿、饵料罐、鱼篓；hats: 三顶帽子。"""
+    c = Canvas(48, 34)
+    c.rect(1, 1, 46, 32, "O")
+    c.rect(3, 3, 44, 15, "o"); c.rect(3, 18, 44, 30, "o")
+    c.rect(1, 16, 46, 17, "n"); c.rect(1, 31, 46, 32, "n")
+    if kind == "tackle":
+        for x in (6, 11):                               # 鱼竿
+            c.rect(x, 4, x, 15, "n"); c.set(x, 4, "r")
+        for x, k in ((20, "r"), (27, "g"), (34, "b")):  # 饵料罐
+            c.rect(x, 9, x + 4, 15, k); c.rect(x, 8, x + 4, 8, "a"); c.set(x + 1, 10, "W")
+        c.rows(6, 22, ["..HHHHH..", "..H...H..", "hhhhhhhhh", "HhHhHhHhH", "hHhHhHhHh", ".hHhHhHh.", ".hhhhhhh."])
+        c.rows(22, 24, ["s.sss.", "ssssKs", "s.sss."]); c.rows(32, 24, ["b.bbb.", "bbbbKb", "b.bbb."])
+    else:
+        c.rows(5, 8, ["...hhhhh...", "...hhhhh...", "...rrrrr...", "hhhhhhhhhhh", ".HHHHHHHHH."])
+        c.rows(22, 8, ["....ggggg..", "...ggggggg.", "...GGGGGGG.", ".ggggggggg.", "GGGGGGGGGGG"][:5])
+        c.rows(8, 22, ["...R....", ".rrrrrr.", "rrrrrrrr", "rrrrrrrr", ".RRRRRR."])
+        c.rect(24, 20, 30, 29, "p"); c.rect(33, 20, 39, 29, "c"); c.rect(24, 20, 39, 20, "a")   # 布料
+    c.outline()
+    return c
+
+
+def mirror():
+    c = Canvas(16, 32)
+    c.rect(1, 1, 14, 26, "H")
+    c.rect(3, 3, 12, 24, "c")
+    c.pts([(4, 5), (5, 4), (4, 6), (9, 12), (10, 11)], "W")
+    c.rect(4, 27, 5, 30, "H"); c.rect(10, 27, 11, 30, "H")
+    c.outline()
+    return c
+
+
+def bookshelf():
+    c = Canvas(28, 40)
+    c.rect(1, 1, 26, 38, "O")
+    for i, y in enumerate((3, 15, 27)):
+        c.rect(3, y, 24, y + 9, "o")
+        x = 3
+        for j, k in enumerate(["r", "b", "g", "y", "p", "s", "c", "r", "b", "h"][i:] + ["a"] * 3):
+            if x > 22:
+                break
+            w = 2 if (i + j) % 3 else 3
+            c.rect(x, y + (1 if (i + j) % 4 == 0 else 0), min(24, x + w - 1), y + 9, k)
+            x += w
+        c.rect(1, y + 10, 26, y + 11, "n")
+    c.outline()
+    return c
+
+
+def calendar():
+    c = Canvas(16, 18)
+    c.rect(1, 1, 14, 16, "w")
+    c.rect(1, 1, 14, 4, "r")
+    for y in (7, 10, 13):
+        for x in (3, 6, 9, 12):
+            c.set(x, y, "a")
+    c.rect(6, 9, 7, 11, "r"); c.set(6, 8, "g")      # 圈出来的番茄日
+    c.outline()
+    return c
+
+
+def bed():
+    c = Canvas(44, 20)
+    c.rect(1, 9, 42, 15, "b")
+    c.rect(1, 9, 42, 10, "c")
+    c.rect(1, 6, 12, 10, "W"); c.rect(2, 7, 11, 9, "w")
+    c.rect(1, 2, 3, 18, "o"); c.rect(40, 7, 42, 18, "o")
+    c.rect(1, 15, 42, 16, "O")
+    c.rect(20, 11, 24, 13, "y") if False else c.pts([(20, 12), (26, 12), (32, 12)], "W")
+    c.outline()
+    return c
+
+
+def rug():
+    c = Canvas(40, 5)
+    c.rect(2, 1, 37, 3, "r")
+    c.rect(4, 2, 35, 2, "h")
+    c.rect(0, 1, 1, 3, "h"); c.rect(38, 1, 39, 3, "h")
+    return c
+
+
 def fish(body, dark, belly, fin, spots=False):
     c = Canvas(18, 12)
     c.ellipse(9.5, 6, 5.6, 3.4, body)
@@ -609,6 +724,7 @@ LABELS = [
     "我的小猫", "给小猫选个样子", "完成",
     "方向键走动", "空格键互动", "空格键去小镇",
     "小猫的家", "裁缝铺", "渔具店", "空格键进入", "空格键聊天",
+    "欢迎光临", "空格键出门", "空格键看货", "空格键照镜子", "空格键看图鉴", "空格键看统计",
     "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
 ]
 FONT_FILE = os.path.join(os.path.dirname(__file__), "fonts", "fusion-pixel-10px-proportional-zh_hans.otf.woff")
@@ -695,6 +811,16 @@ def build():
         "sparkle": save(sparkle(), "sparkle"),
         "splash": save(splash(), "splash"),
         "hold": save(hold(), "hold"),
+        "room_door": save(room_door(), "room_door"),
+        "room_window": save(room_window(), "room_window"),
+        "counter": save(counter(), "counter"),
+        "shelf_tackle": save(shelf("tackle"), "shelf_tackle"),
+        "shelf_hats": save(shelf("hats"), "shelf_hats"),
+        "mirror": save(mirror(), "mirror"),
+        "bookshelf": save(bookshelf(), "bookshelf"),
+        "calendar": save(calendar(), "calendar"),
+        "bed": save(bed(), "bed"),
+        "rug": save(rug(), "rug"),
         "labels": labels(),
     }
     for k in range(3):

@@ -34,7 +34,8 @@ const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
 	"stall_front", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "cloud", "hills",
-	"tomato", "coin", "basket", "hold", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
+	"tomato", "coin", "basket", "hold", "room_door", "room_window", "counter", "shelf_tackle",
+	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_minus", "btn_left", "btn_right", "btn_cat", "btn_town", "btn_view"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed"]
@@ -88,6 +89,7 @@ var _limits: Dictionary = {}
 var _missing_labels: Dictionary = {}
 var _full_notified: bool = false
 var _roam_fx: float = 0.0        # 自由走动的亚像素位置
+var interior: String = ""        # 小猫所在的屋子（"" = 在室外）；不存档，重启后回到门口
 var _last_walk_input: int = -100000
 const KEYS_LEFT := [KEY_LEFT, KEY_A]
 const KEYS_RIGHT := [KEY_RIGHT, KEY_D]
@@ -97,6 +99,7 @@ var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时�
 var _debug_last: String = ""
 var _debug_act_frame: int = -1
 var _debug_dir_from: int = 0    # 调试：CATFISH_ROAM_AT=帧号，从这一帧才开始"按住方向键"
+var _debug_room: String = ""
 var _debug_dir: int = 0         # 调试：CATFISH_ROAM=1/-1 模拟一直按着右/左方向键
 var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  在这些帧截图后退出
 var _shot_frames: Array = []
@@ -183,6 +186,8 @@ func _apply_debug_env() -> void:
 		game.start_focus()
 	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
 		_debug_act_frame = OS.get_environment("CATFISH_ACT_AT").to_int()
+	if OS.has_environment("CATFISH_ROOM"):        # 调试：到镇上后直接进这间屋子（tackle / tailor / home）
+		_debug_room = OS.get_environment("CATFISH_ROOM")
 	if OS.has_environment("CATFISH_ROAM_AT"):
 		_debug_dir_from = OS.get_environment("CATFISH_ROAM_AT").to_int()
 	if OS.has_environment("CATFISH_ROAM"):
@@ -275,6 +280,16 @@ func _update_roam(dt: float) -> void:
 			if Input.is_key_pressed(k):
 				dir += 1
 				break
+	if interior != "":
+		# 在屋里：只在屋内左右走。切到迷你悬浮窗或旅程状态变了就回到室外
+		if mini or j.activity() != Journey.Activity.ROAM:
+			interior = ""
+			return
+		world.room_moving = dir != 0
+		if dir != 0:
+			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
+			world.room_flip = dir < 0
+		return
 	if dir != 0 and j.in_town():
 		if j.activity() != Journey.Activity.ROAM and game.begin_roam(world.cat_pos.x):
 			_roam_fx = world.cat_pos.x
@@ -293,7 +308,9 @@ func _update_roam(dt: float) -> void:
 ## 互动键：在海上 = 去小镇；自由走动时在摊位旁 = 开张，在码头 = 上船。
 func _interact() -> void:
 	var j: Journey = game.journey
-	if j.on_boat():
+	if interior != "":
+		_interact_inside()
+	elif j.on_boat():
 		_go_to_town()
 	elif j.activity() == Journey.Activity.ROAM:
 		var x := float(j.roam_x())
@@ -313,20 +330,38 @@ func _interact() -> void:
 			play("deny")
 
 
-## 走进镇上的房子 = 打开对应的面板。
+## 走进镇上的房子：切到室内场景。
 func _enter_building(kind: String) -> void:
 	play("buy")
 	log.write("enter", {"building": kind})
-	match kind:
-		"tackle":
+	interior = kind
+	world.enter_room(Time.get_ticks_msec())
+
+
+## 在屋里按互动键：门口 = 出门；柜台/镜子/书架/日历 = 打开对应的面板。
+func _interact_inside() -> void:
+	match world.room_spot(interior):
+		"exit":
+			play("click")
+			log.write("leave", {"building": interior})
+			interior = ""
+		"shop":
+			play("click")
 			menu.tab = 0
 			menu.open = true
-		"home":
+		"dex":
+			play("click")
 			menu.tab = 1
 			menu.open = true
-		"tailor":
+		"stats":
+			play("click")
+			menu.tab = 2
+			menu.open = true
+		"mirror":
+			play("click")
 			wardrobe.open = true
-	_last_walk_input = Time.get_ticks_msec()
+		_:
+			play("deny")
 	_update_polygon()
 
 
@@ -412,6 +447,10 @@ func _process(dt: float) -> void:
 		_on_event(e)
 		if _debug_speed > 1.0:
 			print("[debug] frame %d event %s" % [Engine.get_frames_drawn(), str(e)])
+	if _debug_room != "" and game.journey.in_town():
+		game.begin_roam(World.STALL_CAT_X)
+		_enter_building(_debug_room)
+		_debug_room = ""
 	_update_roam(dt)
 	if _debug_act_frame >= 0 and Engine.get_frames_drawn() >= _debug_act_frame:
 		_debug_act_frame = -1
@@ -645,9 +684,13 @@ func _draw() -> void:
 		return
 	var now := game.now_ms()
 	var t := Time.get_ticks_msec()
-	draw_set_transform(-cam)
-	world.draw(cam, view, mini, now, t)
-	_draw_floats(t)
+	if interior != "":
+		draw_set_transform(Vector2.ZERO)
+		world.draw_interior(interior, view, t)
+	else:
+		draw_set_transform(-cam)
+		world.draw(cam, view, mini, now, t)
+		_draw_floats(t)
 	draw_set_transform(ui_off)
 	_draw_hud(now)
 	menu.draw()
@@ -694,7 +737,12 @@ func _draw_hud(now: int) -> void:
 				Pal.L_R if full else Pal.L_W)
 	# 完整窗口里的操作提示
 	if not mini and not menu.open and not wardrobe.open:
-		if game.journey.in_town():
+		if interior != "":
+			label("方向键走动", Vector2(17, 30), Pal.L_W)
+			var spot: String = world.room_spot(interior)
+			if World.SPOT_HINT.has(spot):
+				label(World.SPOT_HINT[spot], Vector2(17, 41), Pal.L_Y)
+		elif game.journey.in_town():
 			label("方向键走动", Vector2(17, 30), Pal.U_K)
 			if game.journey.activity() == Journey.Activity.ROAM:
 				var rx := float(game.journey.roam_x())
