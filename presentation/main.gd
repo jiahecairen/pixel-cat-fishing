@@ -37,7 +37,7 @@ const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_
 	"tomato", "coin", "basket", "hold", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
-	"btn_minus", "btn_left", "btn_right", "btn_cat", "btn_town", "btn_view"]
+	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_view"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed"]
 const CAT_FRAMES := 6
 
@@ -46,9 +46,8 @@ const PANEL_POS := Vector2(15, 1)
 const PANEL_SIZE := Vector2(110, 27)
 const BTN_MAIN := Rect2(78, 3, 11, 11)
 const BTN_TOWN := Rect2(89, 3, 11, 11)
-const BTN_MENU := Rect2(100, 3, 11, 11)
+const BTN_MENU := Rect2(100, 3, 11, 11)     # 齿轮：只打开设置
 const BTN_VIEW := Rect2(111, 3, 11, 11)
-const BTN_CAT := Rect2(100, 14, 11, 11)
 const BTN_CLOSE := Rect2(111, 14, 11, 11)
 const MINI_SCENE := Rect2(4, 28, 121, 66)     # 迷你视图里可拖动/可点击的场景区域
 const MINI_CAM_Y := World.WATER_Y - 74
@@ -624,21 +623,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pressed_btn = "town"
 		_go_to_town()
 	elif BTN_MENU.has_point(p):
+		# 面板上只留"设置"。商店、图鉴、统计、换形象都要去镇上对应的房子里
 		play("click")
 		if wardrobe.open:
 			wardrobe.close()
-		menu.open = not menu.open
-		_update_polygon()
-	elif BTN_VIEW.has_point(p):
-		play("click")
-		toggle_view_mode()
-	elif BTN_CAT.has_point(p):
-		play("click")
-		menu.open = false
-		if wardrobe.open:
-			wardrobe.close()
+		if menu.open:
+			menu.open = false
 		else:
-			wardrobe.open = true
+			menu.tab = 3
+			menu.open = true
 		_update_polygon()
 	elif BTN_CLOSE.has_point(p):
 		_quit()
@@ -718,10 +711,9 @@ func _draw_hud(now: int) -> void:
 	_tex_frame(main_btn, BTN_MAIN.position, 1 if _pressed_btn == "main" else 0, 2)
 	_tex_frame("btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
 			Color.WHITE if game.can_go_to_town() else Color(1, 1, 1, 0.35))
-	_tex_frame("btn_menu", BTN_MENU.position, 1 if menu.open else 0, 2)
+	_tex_frame("btn_gear", BTN_MENU.position, 1 if menu.open and menu.tab == 3 else 0, 2)
 	if adapter.is_overlay():
 		_tex_frame("btn_view", BTN_VIEW.position, 0, 2)
-	_tex_frame("btn_cat", BTN_CAT.position, 1 if wardrobe.open else 0, 2)
 	_tex_frame("btn_close", BTN_CLOSE.position, 0, 2)
 
 	draw_texture(tex["coin"], Vector2(20, 15))

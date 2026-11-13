@@ -36,11 +36,7 @@ func _plus_rect(row: int, x: float = 99) -> Rect2:
 func click(p: Vector2) -> bool:
 	if not open or not RECT.has_point(p):
 		return false
-	for i in TABS.size():
-		if _tab_rect(i).has_point(p):
-			tab = i
-			m.play("click")
-			return true
+	# 面板一次只显示一页：商店/图鉴/统计要走进镇上对应的房子才能打开，设置从面板上的齿轮按钮打开
 	match tab:
 		0:
 			for i in UPGRADES.size():
@@ -68,11 +64,9 @@ func draw() -> void:
 		return
 	m.draw_rect(RECT, Pal.U_A)
 	m.draw_rect(RECT.grow(-1), Pal.U_K)
-	for i in TABS.size():
-		var r := _tab_rect(i)
-		m.label(TABS[i], r.position + Vector2(2, 0), Pal.L_W if i == tab else Pal.L_A)
-		if i == tab:
-			m.draw_rect(Rect2(r.position.x + 2, 41, 19, 1), Pal.L_R)
+	var r := _tab_rect(0)
+	m.label(TABS[tab], r.position + Vector2(2, 0), Pal.L_W)
+	m.draw_rect(Rect2(r.position.x + 2, 41, 19, 1), Pal.L_R)
 	match tab:
 		0: _draw_shop()
 		1: _draw_dex()
