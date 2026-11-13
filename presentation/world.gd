@@ -151,10 +151,11 @@ func _draw_strollers(t: int) -> void:
 		var talking := i == chat_who and t - chat_t0 < 3500
 		var name := "villager_%d" % int(STROLLERS[i][0])
 		var pos := Vector2(float(at[0]), GROUND_Y - 21)
+		# 居民贴图本身面朝左：朝左走直接画，朝右走才翻转（之前写反了，看起来像倒着走）
 		if at[1]:
-			m.tex_frame_flipped(name, pos, 0 if talking else (t / 220) % 2, 2)
-		else:
 			m.tex_frame(name, pos, 0 if talking else (t / 220) % 2, 2)
+		else:
+			m.tex_frame_flipped(name, pos, 0 if talking else (t / 220) % 2, 2)
 
 ## 居民说的话：最后画，保证不被摊位和房子挡住。
 func _draw_chat(t: int) -> void:
@@ -276,11 +277,11 @@ func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 		Journey.Activity.WALK_TO_STALL, Journey.Activity.WALK_TO_BOAT:
 			m.draw_cat(cat_pos, 4 + (t / 180) % 2, walk_flip)
 			if not m.game.state.basket.is_empty():        # 还有鱼就背着鱼篓
-				m.draw_texture(m.tex["basket"], cat_pos + Vector2(14 if walk_flip else 5, 11 + (t / 180) % 2))
+				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if walk_flip else 3, 16 + (t / 180) % 2))
 		Journey.Activity.ROAM:
 			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 4, roam_flip)
 			if not m.game.state.basket.is_empty():
-				m.draw_texture(m.tex["basket"], cat_pos + Vector2(14 if roam_flip else 5, 11 + ((t / 180) % 2 if roam_moving else 0)))
+				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if roam_flip else 3, 16 + ((t / 180) % 2 if roam_moving else 0)))
 		Journey.Activity.VENDING:
 			var frame := (t / 700) % 2
 			var p := cat_pos
@@ -359,15 +360,28 @@ func _draw_boat_extras(act: int, on_break: bool, now: int, t: int) -> void:
 			if b.size.x > 0:
 				m.draw_texture(m.tex["bubble"], b.position)
 		Journey.Activity.SAIL_OUT, Journey.Activity.SAIL_BACK:
-			# 划桨：桨从爪子伸到水里，前后摆动
-			var dir := -1.0 if act == Journey.Activity.SAIL_BACK else 1.0
-			var swing := roundf(sin(t / 260.0) * 6.0)
+			# 划桨：一个完整的划水循环，让人能看出船往哪边走。
+			#   前半（划水）：桨叶在水里，从船头方向推向船尾方向，入水时溅起水花，身后留下水纹
+			#   后半（回桨）：桨叶抬出水面，从船尾方向收回船头方向
+			var dir := -1.0 if act == Journey.Activity.SAIL_BACK else 1.0    # 船前进的方向
+			var ph := fposmod(t / 1300.0, 1.0)
+			var in_water := ph < 0.5
+			var k := ph / 0.5 if in_water else (ph - 0.5) / 0.5              # 本半程的进度 0..1
+			var reach := 9.0
+			var off := lerpf(reach, -reach, k) if in_water else lerpf(-reach, reach, k)   # 相对桨架，正 = 船头方向
+			var pivot_x := boat_x + 32 - dir * 4
+			var blade := Vector2(roundf(pivot_x + dir * off), WATER_Y + 3 if in_water else WATER_Y - 13 - roundf(sin(k * PI) * 4.0))
 			var hand := cat_pos + (Vector2(10, 23) if dir < 0 else Vector2(21, 23))
-			var blade := Vector2(boat_x + 32 - dir * 6 + swing, WATER_Y + 3)
 			m.pixel_line(hand, blade, Pal.U_O)
 			m.draw_rect(Rect2(blade.x - 1, blade.y, 3, 3), Pal.L_N)
-			if absf(swing) > 4:
-				m.tex_frame("splash", blade + Vector2(-5, -3), (t / 130) % 2, 2)
+			if in_water:
+				if k < 0.3:      # 入水的水花
+					m.tex_frame("splash", blade + Vector2(-5, -4), 0 if k < 0.15 else 1, 2)
+				# 桨叶划过的地方留下水纹（在桨叶的船头一侧，划得越远水纹越长）
+				for i in int(k * 5.0):
+					m.draw_rect(Rect2(blade.x + dir * (3 + i * 4), WATER_Y + 2 + (i % 2), 2, 1), Pal.U_W if i == 0 else Pal.L_C)
+			elif k < 0.35:   # 出水时甩下的水滴
+				m.draw_rect(Rect2(blade.x, blade.y + 4 + roundf(k * 10.0), 1, 1), Pal.L_C)
 
 func _draw_fishing(t: int, now: int) -> void:
 	var fs: int = m.game.fishing.state

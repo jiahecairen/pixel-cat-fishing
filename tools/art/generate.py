@@ -128,20 +128,22 @@ def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None, pose="sit", s
     c = Canvas(32, 32)
     by = breathe
     if pose == "walk":
-        # 四脚着地走路：头的位置和坐姿完全一样，所以帽子不用另画
-        for x, y in [(5, 21), (4, 20), (3, 19), (3, 18), (4, 17)]:
+        # 两条腿直立行走：头的位置和坐姿一样（帽子不用另画），身体在头的正下方。
+        # step 0/1 两帧：手脚前后交替，身体上下颠 1 像素。
+        by = step
+        tail = [(10, 25), (9, 24), (8, 23), (8, 22)] + ([(8, 21), (9, 20)] if step == 0 else [(7, 21), (7, 20)])
+        for x, y in tail:
             c.rect(x, y, x + 1, y, "F")
-        far = [(10, 14)] if step == 0 else [(6, 18)]
-        near = [(7, 17)] if step == 0 else [(9, 15)]
-        for back, front in far:                      # 远侧的腿（暗）
-            c.rect(back, 25, back + 1, 28, "F"); c.rect(front, 25, front + 1, 28, "F")
-        c.ellipse(12.5, 22, 7.5, 4.5, "f")
-        c.ellipse(9.5, 24, 5, 2.2, "F")
-        c.ellipse(12.5, 21.3, 6, 3.4, "f")
-        c.ellipse(14, 25.2, 4, 1.2, "1")
-        for back, front in near:                     # 近侧的腿
-            c.rect(back, 25, back + 1, 28, "f"); c.rect(front, 25, front + 1, 28, "f")
-            c.rect(back, 29, back + 1, 29, "1"); c.rect(front, 29, front + 1, 29, "1")
+        far_leg, near_leg = (19, 14) if step == 0 else (14, 19)      # 远侧腿（暗）、近侧腿
+        c.rect(far_leg, 26, far_leg + 1, 28, "F"); c.rect(far_leg, 29, far_leg + 2, 29, "F")
+        far_arm = 14 if step == 0 else 20                             # 远侧手臂，和近侧腿同方向摆
+        c.rect(far_arm, 21 + by, far_arm + 1, 24 + by, "F")
+        c.ellipse(16.5, 23 + by, 4.6, 4.4 - by * 0.4, "f")            # 躯干
+        c.rect(12, 21 + by, 13, 25 + by, "F")                         # 背侧暗部
+        c.ellipse(17.6, 23.6 + by, 2.4, 3.0, "1")                     # 肚皮
+        c.rect(near_leg, 26, near_leg + 1, 28, "f"); c.rect(near_leg, 29, near_leg + 2, 29, "1")
+        near_arm = 20 if step == 0 else 15                            # 近侧手臂
+        c.rect(near_arm, 21 + by, near_arm + 1, 24 + by, "f"); c.rect(near_arm, 25 + by, near_arm + 1, 25 + by, "1")
     else:
         tail = [(6, 27), (5, 26), (4, 25), (3, 24), (3, 23)]
         tail += [(3, 22), (4, 21)] if tail_up else [(2, 23), (2, 22)]
@@ -158,7 +160,7 @@ def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None, pose="sit", s
     c.ellipse(22, 16.5 + by, 3.2, 2.2, "1")  # 嘴套
     c.set(25, 15 + by, "p")               # 鼻
     c.pts([(12, 17 + by), (13, 18 + by), (12, 15 + by)], "F")  # 脸侧花纹
-    body_stripes = [(8, 19), (8, 20), (11, 18), (11, 19), (14, 18), (14, 19)] if pose == "walk" else STRIPES
+    body_stripes = [(14, 21 + by), (14, 22 + by), (15, 25 + by), (16, 26 + by)] if pose == "walk" else STRIPES
     for x, y in body_stripes + [(x, y + by) for x, y in HEAD_STRIPES]:
         if c.get(x, y) == "f":
             c.set(x, y, "2")
