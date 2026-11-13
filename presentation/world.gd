@@ -256,15 +256,51 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	if not in_town:
 		_draw_boat_extras(act, on_break, now, t)
 
+## 像素风的实心圆（一行行矩形拼出来，边缘没有抗锯齿）。
+func _disc(c: Vector2, r: int, color: Color) -> void:
+	for dy in range(-r, r + 1):
+		var half := int(sqrt(float(r * r - dy * dy)) + 0.5)
+		m.draw_rect(Rect2(c.x - half, c.y + dy, half * 2 + 1, 1), color)
+
 func _draw_sky(cam: Vector2, view: Vector2, t: int) -> void:
+	var ls: int = m.game.local_s()
+	var h := Weather.hour(ls)
+	var warm: float = Weather.daylight(ls)["warm"]
+	var raining: bool = m.game.is_raining()
+	if raining:
+		warm *= 0.35          # 下雨天看不到什么晚霞
+	var sky_h := WATER_Y - 26 - cam.y
 	m.draw_rect(Rect2(cam, view), Pal.L_C)
-	m.draw_rect(Rect2(cam.x, WATER_Y - 26, view.x, 26), Pal.U_W)
-	# 远景视差：云最慢，山其次
+	if warm > 0.01:
+		# 日出/日落：天空从上到下分成一条条色带（像素风的渐变），越靠近地平线越红越亮
+		var tops := [Pal.U_A, Pal.U_A.lerp(Pal.L_P, 0.5), Pal.L_P, Pal.L_R.lerp(Pal.L_P, 0.4), Pal.L_F, Pal.L_Y]
+		var n := tops.size()
+		for i in n:
+			var y0 := cam.y + sky_h * float(i) / n
+			var y1 := cam.y + sky_h * float(i + 1) / n
+			m.draw_rect(Rect2(cam.x, roundf(y0), view.x, roundf(y1) - roundf(y0) + 1), Pal.L_C.lerp(tops[i], clampf(warm * 1.05, 0.0, 1.0)))
+		m.draw_rect(Rect2(cam.x, WATER_Y - 26, view.x, 26), Pal.U_W.lerp(Pal.L_F if h >= 12.0 else Pal.L_P, clampf(warm, 0.0, 1.0) * 0.7))
+		# 太阳：傍晚慢慢沉到山后，清晨从山后升起
+		var sun_c := WATER_Y - 22.0
+		var sun_y: float
+		if h >= 12.0:
+			sun_y = sun_c - 40.0 + clampf((h - 17.0) / 2.5, 0.0, 1.0) * 52.0
+		else:
+			sun_y = sun_c + 12.0 - clampf((h - 4.5) / 2.5, 0.0, 1.0) * 52.0
+		var sx := roundf(cam.x + view.x * 0.7 - cam.x * 0.0)
+		var sa := clampf(warm * 1.3, 0.0, 1.0)
+		_disc(Vector2(sx, roundf(sun_y)), 15, Color(Pal.L_Y, 0.25 * sa))
+		_disc(Vector2(sx, roundf(sun_y)), 11, Color(Pal.L_F, sa))
+		_disc(Vector2(sx, roundf(sun_y)), 8, Color(Pal.L_Y, sa))
+	if warm <= 0.01:
+		m.draw_rect(Rect2(cam.x, WATER_Y - 26, view.x, 26), Pal.U_W)
+	# 远景视差：云最慢，山其次；日落时云被烧红
+	var cloud_tint := Color.WHITE.lerp(Pal.L_R.lerp(Pal.L_F, 0.35), clampf(warm * 1.1, 0.0, 0.85))
 	var cloud_shift := fposmod(cam.x * 0.85 - t / 500.0, 150.0)
 	for i in range(-1, int(view.x / 150) + 2):
 		var cx := cam.x - cloud_shift + i * 150
-		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 20), cam.y + 14 + (i * 37) % 23 + maxf(0, view.y - 180) * 0.5))
-		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 95), cam.y + 40 + (i * 53) % 17 + maxf(0, view.y - 180) * 0.5))
+		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 20), cam.y + 14 + (i * 37) % 23 + maxf(0, view.y - 180) * 0.5), cloud_tint)
+		m.draw_texture(m.tex["cloud"], Vector2(roundf(cx + 95), cam.y + 40 + (i * 53) % 17 + maxf(0, view.y - 180) * 0.5), cloud_tint)
 	var hill_shift := fposmod(cam.x * 0.4, 64.0)
 	for i in range(-1, int(view.x / 64) + 2):
 		m.draw_texture(m.tex["hills"], Vector2(roundf(cam.x - hill_shift + i * 64), WATER_Y - 22))

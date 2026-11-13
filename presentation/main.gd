@@ -863,21 +863,20 @@ func _draw() -> void:
 	_draw_particles(t)
 
 
-## 昼夜染色 + 下雨（雨丝、水面涟漪）。迷你窗里只盖场景区，透明的地方不染色。
+## 夜里的暗色 + 下雨（雨丝、水面涟漪）。黄昏的日落在 world 的天空里画。
+## 迷你窗是透明背景：不盖任何半透明色块，只留雨丝和涟漪。
 func _draw_weather(t: int) -> void:
 	var r := Rect2(cam, view)
 	if mini:
 		r = Rect2(cam + MINI_SCENE.position, MINI_SCENE.size)
-	var dl := Weather.daylight(game.local_s())
-	var dark := float(dl["dark"])
-	var warm := float(dl["warm"])
-	if dark > 0.0:
-		draw_rect(r, Color(Pal.U_K, 0.42 * dark))
-	if warm > 0.0:
-		draw_rect(r, Color(Pal.L_P if dl["dawn"] else Pal.L_F, 0.16 * warm))
+	if not mini:
+		var dark := float(Weather.daylight(game.local_s())["dark"])
+		if dark > 0.0:
+			draw_rect(r, Color(Pal.U_K, 0.42 * dark))
 	if not game.is_raining():
 		return
-	draw_rect(r, Color(Pal.U_A, 0.22))
+	if not mini:
+		draw_rect(r, Color(Pal.U_A, 0.22))
 	for i in 14:   # 水面涟漪
 		var rx := r.position.x + fposmod(i * 47.0 + 13.0, r.size.x)
 		var ry := World.WATER_Y + 3 + (i * 7) % 11

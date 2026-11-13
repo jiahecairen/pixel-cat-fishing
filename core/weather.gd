@@ -23,6 +23,10 @@ static func is_raining(local_s: int, block_chance: float) -> bool:
 	var off := local_s - block * BLOCK_S
 	return off >= start and off < start + length
 
+## 本地钟点（0..24 的小数）。
+static func hour(local_s: int) -> float:
+	return float(posmod(local_s, 86400)) / 3600.0
+
 ## 昼夜：dark 0..1（夜里 1），warm 0..1（日出/日落前后的暖色），dawn 表示暖色是清晨的还是傍晚的。
 static func daylight(local_s: int) -> Dictionary:
 	var h := float(posmod(local_s, 86400)) / 3600.0
