@@ -397,28 +397,91 @@ def tree():
     return c
 
 
-def stall_back():
-    """摊位后半：立柱 + 红白条纹雨棚。猫坐在它和柜台之间。"""
-    c = Canvas(46, 40)
-    c.rect(3, 8, 4, 39, "o"); c.rect(41, 8, 42, 39, "o")
+def stall_back(c1="r", c2="w", edge="R"):
+    """摊位后半：立柱 + 条纹雨棚（默认红白）。猫坐在它和柜台之间。"""
+    c = Canvas(46, 42)       # 比摊位高 2 像素，脚踩进草地里，不留缝
+    c.rect(3, 8, 4, 41, "o"); c.rect(41, 8, 42, 41, "o")
     for x in range(1, 45):
-        k = "r" if ((x - 1) // 4) % 2 == 0 else "w"
+        k = c1 if ((x - 1) // 4) % 2 == 0 else c2
         c.rect(x, 1, x, 8, k)
         if ((x - 1) % 4) in (1, 2):
             c.set(x, 9, k)
-    c.rect(1, 1, 44, 1, "R")
+    c.rect(1, 1, 44, 1, edge)
+    c.outline()
+    return c
+
+
+# ---------------------------------------------------------------- 市场
+def _ball(c, cx, cy, r, k, hl="W"):
+    c.ellipse(cx, cy, r, r, k)
+    c.set(int(cx - 1), int(cy - 1), hl)
+
+
+def goods(kind):
+    """柜台上的货，36×8。"""
+    c = Canvas(36, 8)
+    if kind == "fruit":
+        for i, k in enumerate(["r", "y", "r", "g", "y", "r"]):
+            _ball(c, 3 + i * 6, 4, 2.6, k)
+            c.set(3 + i * 6, 1, "G")
+    elif kind == "veg":
+        for i in range(3):
+            x = 3 + i * 6
+            c.rows(x - 1, 1, ["g.g", ".f.", ".f.", ".f.", ".f."], {"f": "f"})   # 胡萝卜
+        for i in range(3):
+            x = 22 + i * 5
+            _ball(c, x, 4, 2.4, "g"); c.set(x, 3, "G"); c.set(x + 1, 5, "G")
+    elif kind == "bread":
+        for i in range(3):
+            x = 5 + i * 8
+            c.ellipse(x, 4, 3.4, 2.4, "h"); c.pts([(x - 1, 3), (x, 2), (x + 1, 3)], "H")
+        c.rect(26, 3, 34, 5, "n"); c.pts([(28, 3), (31, 3), (28, 5), (31, 5)], "o")
+    else:  # flower
+        c.rect(1, 5, 34, 7, "o"); c.rect(1, 5, 34, 5, "n")
+        for i, k in enumerate(["p", "r", "y", "p", "w", "r", "y"]):
+            x = 3 + i * 5
+            c.set(x, 4, "g"); c.set(x, 3, "g")
+            c.rect(x - 1, 0, x + 1, 2, k); c.set(x, 1, "y" if k != "y" else "H")
+    c.outline()
+    return c
+
+
+def goods_icon(kind):
+    """买到的东西，7×7，顾客手里拿着。"""
+    c = Canvas(7, 7)
+    if kind == "fruit":
+        _ball(c, 3, 4, 2.4, "r"); c.set(3, 1, "G"); c.set(4, 1, "g")
+    elif kind == "veg":
+        c.rows(1, 0, ["g.g", "...", ".f.", ".f.", ".f.", "..."], {"f": "f"}); c.rows(2, 1, ["f.f", ".f."], {"f": "f"})
+    elif kind == "bread":
+        c.ellipse(3, 4, 3, 2, "h"); c.pts([(2, 3), (3, 2), (4, 3)], "H")
+    else:
+        c.rect(2, 0, 4, 2, "p"); c.set(3, 1, "y"); c.rect(3, 3, 3, 5, "g")
+    c.outline()
+    return c
+
+
+def market_gate():
+    """市场入口的拱门，48×50。招牌由代码画（文字走标签图集）。"""
+    c = Canvas(48, 50)
+    c.rect(2, 8, 7, 49, "o"); c.rect(40, 8, 45, 49, "o")
+    c.rect(2, 8, 3, 49, "n"); c.rect(40, 8, 41, 49, "n")
+    c.rect(6, 8, 7, 49, "O"); c.rect(44, 8, 45, 49, "O")
+    c.rect(0, 2, 47, 9, "o"); c.rect(0, 2, 47, 3, "n"); c.rect(0, 8, 47, 9, "O")
+    for x in range(8, 40, 4):
+        c.set(x, 10, "r"); c.set(x + 1, 10, "w")
     c.outline()
     return c
 
 
 def stall_front():
     """摊位前半：柜台。"""
-    c = Canvas(46, 15)
+    c = Canvas(46, 13)       # 低柜台：猫和摊主的脸露在上面；最下 2 行踩进草地
     c.rect(1, 1, 44, 2, "n")
-    c.rect(2, 3, 43, 14, "o")
+    c.rect(2, 3, 43, 12, "o")
     c.rect(2, 3, 43, 3, "O")
     for x in (12, 23, 34):
-        c.rect(x, 4, x, 14, "O")
+        c.rect(x, 4, x, 12, "O")
     c.outline()
     return c
 
@@ -845,7 +908,7 @@ LABELS = [
     "自由挂机钓得更快", "稀有鱼更容易上钩", "鱼篓容量加二", "金币可以升级装备",
     "？？？", "共钓到", "今日", "累计", "近七日", "专注", "短休", "长休", "大小", "音效",
     "我的小猫", "给小猫选个样子", "完成",
-    "方向键走动", "空格键互动", "空格键去小镇", "空格键去钓鱼",
+    "方向键走动", "空格键互动", "空格键去小镇", "空格键去钓鱼", "市场", "鱼摊", "方向键划船", "空格键摆摊", "浅滩", "普通水域", "深水区", "水果", "蔬菜", "面包", "鲜花",
     "小猫的家", "裁缝铺", "渔具店", "空格键进入", "空格键聊天",
     "确定要退出吗", "退出", "取消", "宝箱",
     "物品栏", "使用", "空空如也", "生效中", "去钓宝箱吧",
@@ -920,12 +983,23 @@ def build():
         "stall_front": save(stall_front(), "stall_front"),
         "gameboy": save(gameboy(), "gameboy"),
         "bubble": save(bubble(), "bubble"),
+        "market_gate": save(market_gate(), "market_gate"),
+        "stall_back_fruit": save(stall_back("y", "w", "H"), "stall_back_fruit"),
+        "stall_back_veg": save(stall_back("g", "w", "G"), "stall_back_veg"),
+        "stall_back_bread": save(stall_back("n", "w", "o"), "stall_back_bread"),
+        "stall_back_flower": save(stall_back("p", "w", "R"), "stall_back_flower"),
         "bubble_sold": save(bubble_sold(), "bubble_sold"),
         "cloud": save(cloud(), "cloud"),
         "hills": save(hills(), "hills"),
         "fish_crucian": save(fish("s", "S", "w", "S"), "fish_crucian"),
         "fish_bass": save(fish("b", "B", "W", "B"), "fish_bass"),
         "fish_koi": save(fish("y", "f", "w", "r", spots=True), "fish_koi"),
+        "fish_loach": save(fish("o", "O", "n", "O"), "fish_loach"),
+        "fish_bream": save(fish("a", "A", "W", "A"), "fish_bream"),
+        "fish_grass_carp": save(fish("g", "G", "w", "G"), "fish_grass_carp"),
+        "fish_catfish": save(fish("A", "K", "a", "a"), "fish_catfish"),
+        "fish_mandarin": save(fish("n", "o", "h", "R", spots=True), "fish_mandarin"),
+        "fish_arowana": save(fish("W", "a", "p", "r"), "fish_arowana"),
         "tomato": save(tomato(), "tomato"),
         "coin": save(coin(), "coin"),
         "basket": save(basket(), "basket"),
@@ -955,6 +1029,9 @@ def build():
     }
     for k in ("bottle", "lucky_bait", "bell", "map_piece", "pearl", "boot"):
         made["item_" + k] = save(item_icon(k), "item_" + k)
+    for k in ("fruit", "veg", "bread", "flower"):
+        made["goods_" + k] = save(goods(k), "goods_" + k)
+        made["ico_" + k] = save(goods_icon(k), "ico_" + k)
     for k in range(3):
         made["villager_%d" % k] = save(sheet([villager(k, 0), villager(k, 1)]), "villager_%d" % k)
     for n in BTN:

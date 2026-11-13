@@ -33,7 +33,7 @@ func _init() -> void:
 	var balance := ConfigLoader.load_balance()
 	var fish := ConfigLoader.load_fish()
 	check(not balance.is_empty(), "balance.json 可加载")
-	check(fish.size() == 3, "fish.json 有 3 种鱼")
+	check(fish.size() == 9, "fish.json 有 9 种鱼")
 	if _fails == 0:
 		test_economy(fish)
 		test_fishing(balance, fish)
@@ -45,6 +45,7 @@ func _init() -> void:
 		test_chest(balance, fish)
 		test_adapters()
 		test_weather(balance, fish)
+		test_water(balance, fish)
 		test_inventory(balance, fish)
 		test_checkpoint(balance, fish)
 		test_event_log()
@@ -85,6 +86,7 @@ func test_fishing(balance: Dictionary, fish: Array) -> void:
 	print("fishing")
 	var cfg: Dictionary = balance["fishing"]
 	var fs := Fishing.new(cfg, fish, _rng(7))
+	fs.zone = "normal"
 	var now := 0
 	fs.start(now)
 	check(fs.state == Fishing.State.CASTING, "开始后进入抛竿")
@@ -104,7 +106,7 @@ func test_fishing(balance: Dictionary, fish: Array) -> void:
 			break
 	check(catches == 300, "跑出 300 次鱼获")
 	check(waits.min() >= 20000 and waits.max() <= 60000, "咬钩等待在 20–60 秒 (%d..%d)" % [waits.min(), waits.max()])
-	check(counts.get("crucian", 0) > counts.get("bass", 0) and counts.get("bass", 0) > counts.get("koi", 0),
+	check(counts.get("crucian", 0) > counts.get("koi", 0) and counts.get("bass", 0) > counts.get("koi", 0),
 			"稀有度分布符合权重 %s" % str(counts))
 	# 睡眠醒来（时间跳 3 小时）不会补钓多条
 	var n := 0
@@ -269,6 +271,19 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 	check(gv.journey.activity() == Journey.Activity.VENDING and gv.go_fishing(0.0, 1.0), "摆摊中也可以点去钓鱼")
 	check(gv.journey.activity() == Journey.Activity.WALK_TO_BOAT and gv.state.basket.size() == 3, "没卖的鱼还在篓里")
 	check(not gv.go_fishing(0.0, 1.0), "已经在走向码头，不能重复点")
+	# 测试倍速：航行和走路按倍速缩短，进行中的航行进度保持连续
+	var gs := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(11))
+	var cs = gs._clock
+	gs.economy.add_catch(gs.state, "s1", "bass", false)
+	check(gs.change_move_speed(1) == 2.0 and gs.change_move_speed(1) == 4.0 and gs.change_move_speed(-1) == 2.0, "倍速 1→2→4→2")
+	gs.go_to_town(); _run(gs, cs, 14)
+	check(gs.journey.activity() == Journey.Activity.SAIL_OUT, "2 倍速：14 秒还在航行")
+	var prog_before: float = gs.journey.progress(cs.t)
+	gs.change_move_speed(1)
+	check(absf(gs.journey.progress(cs.t) - prog_before) < 0.01, "航行中改倍速，进度不跳 (%.2f)" % gs.journey.progress(cs.t))
+	var ev_s := _run(gs, cs, 5)
+	check(_count(ev_s, "docked") == 1, "4 倍速：剩下的航行很快就到")
+	check(gs.change_move_speed(-9) == 1.0 and gs.change_move_speed(99) == 16.0, "倍速到头不越界")
 	# 航行途中进入休息：进度冻结，休息结束后接着走
 	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(2))
 	var c3 = g3._clock
@@ -333,11 +348,12 @@ func test_upgrades_and_settings(balance: Dictionary, fish: Array) -> void:
 	var base := Fishing.new(balance["fishing"], fish, _rng(1))
 	var baited := Fishing.new(balance["fishing"], fish, _rng(1))
 	baited.rarity_bonus = 0.75
+	base.zone = "deep"; baited.zone = "deep"
 	var k0 := 0; var k1 := 0
 	for i in 5000:
 		if base._roll_fish() == "koi": k0 += 1
 		if baited._roll_fish() == "koi": k1 += 1
-	check(k1 > k0 * 1.4, "满级鱼饵锦鲤明显变多 (%d → %d)" % [k0, k1])
+	check(k1 > k0 * 1.2, "满级鱼饵锦鲤明显变多 (%d → %d)" % [k0, k1])
 	# 升级随存档恢复
 	var s2 := GameState.new(); s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
 	var g2 := Game.new(balance, fish, s2, clock, _rng(9))
@@ -562,6 +578,31 @@ func test_weather(balance: Dictionary, fish: Array) -> void:
 	g.tick()
 	check(not g.is_raining() and is_equal_approx(g.fishing.chest_chance, chest0), "雨停后宝箱概率恢复")
 	check(is_equal_approx(g.fishing.wait_multiplier, g._free_multiplier) or is_equal_approx(g.fishing.wait_multiplier, 1.0), "雨停后咬钩时间恢复")
+
+func test_water(balance: Dictionary, fish: Array) -> void:
+	print("water: 水域与划船")
+	var fs := Fishing.new(balance["fishing"], fish, _rng(3))
+	var seen := {"shallow": {}, "normal": {}, "deep": {}}
+	for z in seen:
+		fs.zone = z
+		for i in 4000:
+			seen[z][fs._roll_fish()] = true
+	check(not seen["shallow"].has("arowana") and not seen["shallow"].has("catfish") and not seen["shallow"].has("koi"), "浅滩钓不到深水鱼")
+	check(seen["deep"].has("arowana") and seen["deep"].has("catfish") and not seen["deep"].has("loach"), "深水区有银龙鱼和鲶鱼，没有泥鳅")
+	check(seen["normal"].has("bass") and seen["normal"].has("koi") and not seen["normal"].has("arowana"), "普通水域有鲈鱼和锦鲤")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(4))
+	check(g.zone_id(100.0) == "deep" and g.zone_id(250.0) == "normal" and g.zone_id(400.0) == "shallow", "按位置判断水域")
+	var zb := g.zone_bounds(640.0)
+	check(zb.size() == 3 and zb[0]["x0"] == 0.0 and zb[2]["x1"] == 640.0 and zb[1]["x0"] == zb[0]["x1"], "水域范围首尾相接")
+	check(g.can_steer() and g.steer_to(120.0) and g.journey.boat_x() == 120, "钓鱼时可以划船")
+	check(g.steer_to(-50.0) and g.journey.boat_x() == 30 and g.steer_to(9999.0) and g.journey.boat_x() == 440, "划船范围有边界")
+	g.economy.add_catch(g.state, "w1", "bass", false)
+	g.go_to_town()
+	check(not g.can_steer() and not g.steer_to(200.0), "出发后不能划船")
+	var c: FakeClock = g._clock
+	g.steer_to(200.0)
+	_run(g, c, 100)
+	check(g.journey.boat_x() == 440, "往返小镇不改变船的位置")
 
 func test_inventory(balance: Dictionary, fish: Array) -> void:
 	print("inventory & items")

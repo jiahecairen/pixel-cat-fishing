@@ -122,8 +122,9 @@ func frac_to_stall(x: float) -> float:
 func frac_to_boat(x: float) -> float:
 	return absf(x - WALK_FROM_X) / float(STALL_CAT_X - WALK_FROM_X)
 
+## 小猫（贴图左边缘 x）站在鱼摊前的任何位置都算"到摊位了"：中心落在摊位宽度内（再宽 8 像素）。
 func near_stall(x: float) -> bool:
-	return absf(x - STALL_CAT_X) <= NEAR
+	return absf(x + 16.0 - (STALL_X + 23.0)) <= 31.0
 
 func near_pier(x: float) -> bool:
 	return x <= PIER_X + NEAR
@@ -347,8 +348,11 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 			var bx := float(z["x1"])
 			if z["id"] != "shallow" and bx > left - 4 and bx < right + 4:
 				var bob := 1 if (t / 700 + int(bx)) % 2 == 0 else 0
-				m.draw_rect(Rect2(bx - 1, WATER_Y - 3 + bob, 3, 2), Pal.L_R)
-				m.draw_rect(Rect2(bx - 1, WATER_Y - 1 + bob, 3, 2), Pal.U_W)
+				# 水域分界浮标：黄色浮筒 + 竖杆 + 小旗，和钓鱼的红白浮漂区分开
+				m.draw_rect(Rect2(bx, WATER_Y - 9 + bob, 1, 6), Pal.U_K)
+				m.draw_rect(Rect2(bx + 1, WATER_Y - 9 + bob, 3, 2), Pal.L_Y)
+				m.draw_rect(Rect2(bx - 2, WATER_Y - 3 + bob, 5, 3), Pal.L_Y)
+				m.draw_rect(Rect2(bx - 2, WATER_Y - 2 + bob, 5, 1), Pal.U_K)
 	# 地面
 	var land_left := maxf(left, SHORE_X)
 	if land_left < right:

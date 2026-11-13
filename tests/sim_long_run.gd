@@ -57,6 +57,8 @@ func _init() -> void:
 			g.go_to_town()
 		elif r < 0.0010 and g.can_go_fishing():     # 模拟玩家点气泡/去钓鱼按钮
 			g.go_fishing(act.randf_range(552.0, 700.0), 0.5)
+		elif r < 0.0013 and g.can_steer():
+			g.steer_to(act.randf_range(-20.0, 500.0))
 		elif r < 0.0023:
 			var id: String = ["rod", "bait", "basket"][act.randi() % 3]
 			var cost: int = g.upgrades.next_cost(g.state, id)
@@ -89,6 +91,7 @@ func _init() -> void:
 		require(s.basket.size() <= s.basket_capacity, "鱼篓超容量 %d/%d" % [s.basket.size(), s.basket_capacity], i)
 		require(s.processed_catch_ids.size() <= GameState.MAX_PROCESSED_IDS and s.processed_sale_ids.size() <= GameState.MAX_PROCESSED_IDS, "幂等记录无限增长", i)
 		require(g.journey.activity() >= 0 and g.journey.activity() <= Journey.Activity.SOLD_OUT, "未知活动状态", i)
+		require(g.journey.boat_x() >= 30 and g.journey.boat_x() <= 440, "船划出了范围", i)
 		require(g.journey.on_boat() or not g.fishing.is_active(), "人在镇上却在钓鱼", i)
 		require(not (g.pomodoro.is_break() and g.fishing.is_active()), "休息时还在钓鱼", i)
 		require(g.in_focus() or s.session_haul.is_empty(), "不在专注但木箱里有鱼", i)

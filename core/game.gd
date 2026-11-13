@@ -301,6 +301,10 @@ func zone_bounds(sea_end: float) -> Array:
 		x0 = x1
 	return out
 
+## 船能划到的左右边界（船左端的世界坐标）。
+func boat_limits() -> Vector2:
+	return Vector2(float(_water.get("boat_min_x", 30)), float(_water.get("boat_max_x", 440)))
+
 func can_steer() -> bool:
 	return (journey.activity() == Journey.Activity.FISHING or journey.activity() == Journey.Activity.IDLE_FULL) and not pomodoro.is_break()
 

@@ -118,20 +118,21 @@ func _draw_dex() -> void:
 	var counts: Dictionary = g.state.stats["fish_counts"]
 	var tip := ""
 	var tip_price := 0
+	var tip_count := 0
 	for i in g.fish_list.size():
 		var f: Dictionary = g.fish_list[i]
 		var cx: int = 17 + (i % 3) * 32
 		var cy: int = ROW_Y + (i / 3) * 14
 		var n := int(counts.get(f["id"], 0))
 		m.draw_texture(m.tex[f["sprite"]], Vector2(cx, cy), Color.WHITE if n > 0 else Color(0.25, 0.25, 0.35))
-		if n > 0:
-			m.text("x%d" % n, Vector2(cx + 19, cy + 4), Pal.L_W)
 		if Rect2(cx - 1, cy - 1, 31, 14).has_point(hover):
 			tip = f["name"] if n > 0 else "？？？"
 			tip_price = int(f["price"]) if n > 0 else 0
+			tip_count = n
 	if tip != "":
 		m.label(tip, Vector2(19, 82), Pal.L_W)
 		if tip_price > 0:
+			m.text("x%d" % tip_count, Vector2(60, 85), Pal.L_W)      # 鼠标放上去才显示数量，免得和旁边的鱼图叠在一起
 			m.text_right(str(tip_price), 110, 85, Pal.L_Y)
 	else:
 		m.label("共钓到", Vector2(19, 82), Pal.L_A)

@@ -371,7 +371,8 @@ func _update_roam(dt: float) -> void:
 			_boat_fx = float(j.boat_x())
 		_boat_fx = clampf(_boat_fx + dir * BOAT_SPEED * game.move_speed() * dt, 0.0, 9999.0)
 		game.steer_to(_boat_fx)
-		world.boat_moving = true
+		var lim := game.boat_limits()
+		world.boat_moving = not ((dir < 0 and j.boat_x() <= lim.x) or (dir > 0 and j.boat_x() >= lim.y))   # 顶到头就不划了
 		world.boat_dir = float(dir)
 		_last_walk_input = t
 	elif dir != 0 and j.in_town():
@@ -406,7 +407,8 @@ func _interact() -> void:
 			game.roam_board(world.frac_to_boat(x))
 			play("click")
 		elif world.near_stall(x) and not game.state.basket.is_empty():
-			game.end_roam(0.0, world.frac_to_boat(x))
+			game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))      # 从当前位置走到摊位后面开张
+			play("click")
 		elif not world.door_near(x).is_empty():
 			_enter_building(world.door_near(x)[2])
 		elif world.stroller_near(x, Time.get_ticks_msec()) >= 0:
@@ -997,7 +999,7 @@ func _draw_hud(now: int) -> void:
 		_text("%d/%d" % [game.state.basket.size(), game.state.basket_capacity], Vector2(69, 17),
 				Pal.L_R if full else Pal.L_W)
 	if game.move_speed() != 1.0 and not mini:
-		_text("x%d" % int(game.move_speed()), Vector2(17, 62), Pal.L_Y)      # 移动倍速（] 加快 / [ 减慢）
+		_text("x%d" % int(game.move_speed()), Vector2(17, 66), Pal.L_Y)      # 移动倍速（] 加快 / [ 减慢）
 	# 完整窗口里的操作提示（夜里天空是深色，换成浅色字）
 	var hint_col: Color = Pal.L_W if float(game.sky()["dark"]) > 0.35 else Pal.U_K
 	if not mini and not panel_open():
@@ -1019,9 +1021,11 @@ func _draw_hud(now: int) -> void:
 				var hint := "空格键互动"
 				if world.near_pier(rx):
 					hint = "空格键去钓鱼"
+				elif world.near_stall(rx) and not game.state.basket.is_empty():
+					hint = "空格键摆摊"
 				elif not world.door_near(rx).is_empty():
 					hint = "空格键进入"
-				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_stall(rx) and not world.near_pier(rx):
+				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_pier(rx):
 					hint = "空格键聊天"
 				label(hint, Vector2(17, 41), hint_col)
 		elif game.can_go_to_town():
