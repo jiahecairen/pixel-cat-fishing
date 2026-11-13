@@ -36,7 +36,7 @@
     },
     {
       "id": "bream",
-      "name": "鳊鱼",
+      "name": "鲂鱼",
       "sprite": "fish_bream",
       "price": 8,
       "weight": 30,

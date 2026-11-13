@@ -1386,8 +1386,12 @@ def labels():
             if f.get(key) and f[key] not in names:
                 names.append(f[key])
     font_ = ImageFont.truetype(FONT_FILE, 10)
+    from fontTools.ttLib import TTFont
+    cmap = TTFont(FONT_FILE).getBestCmap()
     rects, strips = {}, []
     for n in names:
+        for ch in n:
+            assert ord(ch) in cmap, f"字体里没有这个字（会显示成方框）: {ch} 出自 {n}"
         im = Image.new("L", (10 * len(n) + 4, 14), 0)
         d = ImageDraw.Draw(im); d.fontmode = "1"
         d.text((0, 0), n, font=font_, fill=255)

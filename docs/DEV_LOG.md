@@ -271,3 +271,8 @@
 - 调试变量：`CATFISH_QUEST=letter|talk`。
 - 测试 ALL TESTS PASS（339 项）、SIM PASS；Linux 截图看过服装店两个标签页、信和交付面板。Mac 实机待验。
 
+## v0.42（11-13）
+- 市场拱门右立柱补画在人物之后（`world.gd` 在 `_draw_chat` 后用 `draw_texture_rect_region` 再画一次）。
+- "鳊鱼"→"鲂鱼"：字库（Fusion Pixel zh_hans）缺"鳊"字，之前图鉴里是方框；`labels()` 加了字库 cmap 检查，缺字直接 assert。
+- 测试 ALL TESTS PASS（339 项）、SIM PASS；启动检查无 SCRIPT ERROR。Mac 实机待验。
+

@@ -464,6 +464,8 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	if in_town and not behind_counter:
 		_draw_town_cat(act, on_break, now, t)
 	_draw_chat(t)
+	# 市场拱门的右立柱在人物前面：往市场里走时从柱子后面钻过去
+	m.draw_texture_rect_region(m.tex["market_gate"], Rect2(GATE_X + 38, GROUND_Y - 42, 10, 42), Rect2(38, 8, 10, 42))
 
 	# 船：鱼篓在船舱里、小猫背后（先画）→ 小猫 → 船身（盖住鱼篓和小猫的下半截）→ 龙头 → 吃水线和水纹
 	_draw_boat_basket(bob_y, not in_town)
