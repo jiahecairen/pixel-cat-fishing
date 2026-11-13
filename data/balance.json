@@ -175,12 +175,13 @@
     {
       "id": "bottle",
       "name": "漂流瓶",
-      "desc": "打开看看有什么",
+      "desc": "里面好像有一封信",
       "sprite": "item_bottle",
       "weight": 25,
-      "use": "gold",
+      "use": "letter",
       "gold_min": 10,
-      "gold_max": 60
+      "gold_max": 60,
+      "drop": "catch"
     },
     {
       "id": "lucky_bait",
@@ -191,7 +192,8 @@
       "use": "lucky",
       "minutes": 10,
       "rarity_bonus": 0.6,
-      "chest_mult": 2.0
+      "chest_mult": 2.0,
+      "drop": "chest"
     },
     {
       "id": "bell",
@@ -201,7 +203,8 @@
       "weight": 15,
       "use": "bell",
       "sales": 5,
-      "price_mult": 2.0
+      "price_mult": 2.0,
+      "drop": "chest"
     },
     {
       "id": "map_piece",
@@ -212,7 +215,8 @@
       "use": "gold",
       "need": 4,
       "gold_min": 400,
-      "gold_max": 600
+      "gold_max": 600,
+      "drop": "chest"
     },
     {
       "id": "pearl",
@@ -220,7 +224,8 @@
       "desc": "亮晶晶的很值钱",
       "sprite": "item_pearl",
       "weight": 5,
-      "use": ""
+      "use": "",
+      "drop": "chest"
     },
     {
       "id": "boot",
@@ -228,7 +233,8 @@
       "desc": "不知道是谁的",
       "sprite": "item_boot",
       "weight": 25,
-      "use": ""
+      "use": "",
+      "drop": "catch"
     },
     {
       "id": "bait_worm",
@@ -239,7 +245,8 @@
       "use": "bait",
       "price": 15,
       "rarity_bonus": 0.4,
-      "max_stack": 99
+      "max_stack": 99,
+      "drop": ""
     },
     {
       "id": "bait_shrimp",
@@ -251,7 +258,8 @@
       "price": 40,
       "unlock_fish": 20,
       "rarity_bonus": 0.9,
-      "max_stack": 99
+      "max_stack": 99,
+      "drop": ""
     }
   ],
   "water": {
@@ -294,10 +302,66 @@
       "棉线"
     ],
     "hook": [
-      "铁钩"
+      "铁钩",
+      "银钩"
     ]
   },
   "dough": {
     "name": "面团"
-  }
+  },
+  "junk": {
+    "chance": 0.06,
+    "pool": [
+      [
+        "bottle",
+        60
+      ],
+      [
+        "boot",
+        40
+      ]
+    ]
+  },
+  "hook_rarity_bonus": [
+    0.0,
+    0.25
+  ],
+  "quests": [
+    {
+      "id": "keeper",
+      "npc": "tackle",
+      "reward_hook": 1,
+      "reward_name": "银钩",
+      "wants": [
+        {
+          "item": "pearl",
+          "n": 1
+        },
+        {
+          "item": "boot",
+          "n": 1
+        }
+      ],
+      "letter_lines": [
+        "渔具店老板的信",
+        "想要一颗珍珠",
+        "和一只旧靴子",
+        "找到请带来",
+        "必有重谢"
+      ],
+      "talk_lines": [
+        "拜托你找找",
+        "珍珠和旧靴子"
+      ],
+      "idle_lines": [
+        "有漂流瓶的话",
+        "打开看看吧"
+      ],
+      "done_lines": [
+        "谢谢你",
+        "银钩送给你",
+        "钓鱼顺利"
+      ]
+    }
+  ]
 }

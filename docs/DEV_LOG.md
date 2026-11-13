@@ -263,3 +263,11 @@
 - 调试变量：`CATFISH_OUTFITSHOP=hat|outfit`；`CATFISH_LOOK` 可带第 4 项衣服。
 - 测试 ALL TESTS PASS（325 项）、SIM PASS；Linux 截图看过两个货架、统计页。Mac 实机待验。
 
+## v0.41（11-13）
+- 服装店合并：删掉单独的服装店房子（`house_3`、`noren_clothes`、ROOMS.clothes），裁缝铺改名"服装店"，`OutfitShop` 加"帽子/衣服"标签页（左右键或点击切换）；人台、衣物挂板放进这间屋子。
+- N19：`Inventory.roll(rng, drop)`，物品加 `drop` 字段，宝箱只在 chest 里抽；`Game._roll_junk` 钓到杂物（`balance.junk`），事件 `junk`，不占鱼篓。
+- N15：`balance.quests`；`Game.quest_state/quest_needs/can_turn_in/turn_in`、`Inventory.remove`；漂流瓶 `use: letter`（第一个开启任务，之后给零钱）；`GameState.quests`、`upgrades.hook`；银钩 = 鱼钩第二档，`hook_rarity_bonus`；新面板 `presentation/quest_panel.gd`，渔具店加 `quest` 点位（柜台左边）。
+- 教训：`tests/run_tests.gd` 不加载 `presentation/main.gd`，主脚本的语法错误测试发现不了（这次批量替换缩进弄坏过一次，靠启动截图才发现）。以后每次改完都要 `godot --headless --path . --quit-after 60` 看有没有 SCRIPT ERROR。
+- 调试变量：`CATFISH_QUEST=letter|talk`。
+- 测试 ALL TESTS PASS（339 项）、SIM PASS；Linux 截图看过服装店两个标签页、信和交付面板。Mac 实机待验。
+

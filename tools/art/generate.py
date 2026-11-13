@@ -1360,7 +1360,7 @@ LABELS = [
     "确定要退出吗", "退出", "取消", "宝箱", "状态", "鱼线", "鱼钩", "树枝", "竹竿", "玻纤", "碳素", "合金", "金竿", "棉线", "铁钩", "空", "钓到", "面团", "装上", "空格键开始钓鱼", "仓库", "身上", "存入", "取出", "全部", "空格键开仓库", "装备", "未解锁", "最高纪录", "最大的鱼", "空军", "番茄", "分钟", "最忙的一天", "每月番茄", "当日专注", "暂无记录", "钓过的鱼", "天", "月", "时",
     "物品栏", "使用", "空空如也", "生效中", "去钓宝箱吧",
     "欢迎光临", "空格键出门", "空格键看货", "空格键照镜子", "空格键看图鉴", "空格键看统计", "空格键小睡", "Z", "真实天气", "开", "关", "休息时才能小睡", "已经睡饱了", "小猫睡得真香",
-    "服装店", "帽子店", "空格键看帽子", "空格键看衣服", "买下", "穿上", "穿着", "已有", "金币不够", "开发者模式", "帽子", "衣服", "可以穿了",
+    "服装店", "空格键看衣帽", "空格键和店主聊聊", "店主的心愿", "交付", "好", "银钩", "买下", "穿上", "穿着", "已有", "金币不够", "开发者模式", "帽子", "衣服",
     "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
 ]
 FONT_FILE = os.path.join(os.path.dirname(__file__), "fonts", "fusion-pixel-10px-proportional-zh_hans.otf.woff")
@@ -1375,6 +1375,12 @@ def labels():
     extra = json.load(open(os.path.join(ROOT, "data", "fish.json"), encoding="utf-8"))["fish"]
     cat_cfg = json.load(open(os.path.join(ROOT, "data", "cat.json"), encoding="utf-8"))
     items = json.load(open(os.path.join(ROOT, "data", "balance.json"), encoding="utf-8")).get("items", [])
+    bal = json.load(open(os.path.join(ROOT, "data", "balance.json"), encoding="utf-8"))
+    for q in bal.get("quests", []):
+        for k in ("letter_lines", "talk_lines", "idle_lines", "done_lines"):
+            for line in q.get(k, []):
+                if line not in names:
+                    names.append(line)
     for f in extra + cat_cfg["furs"] + cat_cfg["patterns"] + cat_cfg["hats"] + cat_cfg["outfits"] + items:
         for key in ("name", "desc"):
             if f.get(key) and f[key] not in names:
@@ -1463,10 +1469,8 @@ def build():
         "lantern": save(lantern(), "lantern"),
         "noren_tackle": save(noren("tackle"), "noren_tackle"),
         "noren_tailor": save(noren("tailor"), "noren_tailor"),
-        "noren_clothes": save(noren("clothes"), "noren_clothes"),
         "wall_clothes": save(wall_clothes(), "wall_clothes"),
         "mannequin": save(mannequin(), "mannequin"),
-        "house_3": save(house("w", "p", "g", "G", w=46, door_x=18), "house_3"),
         "wall_bobbers": save(wall_bobbers(), "wall_bobbers"),
         "specimen_0": save(specimen(0), "specimen_0"),
         "specimen_1": save(specimen(1), "specimen_1"),

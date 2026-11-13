@@ -26,7 +26,9 @@ var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fi
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
 ## view_mode: 0 = 桌面迷你悬浮窗，1 = 全画面窗口
 var settings: Dictionary = {"view_mode": 1, "pixel_scale": 3, "sfx_volume": 2, "real_weather": 0, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
-var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0}
+var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0, "hook": 0}
+## 支线任务：{任务 id: "active" / "done"}
+var quests: Dictionary = {}
 ## 鱼钩上装的鱼饵（物品 id）；空字符串 = 面团（无限量，不占物品栏）
 var equipped_bait: String = ""
 ## 小猫形象：各项是 data/cat.json 里对应列表的下标；created=false 时首次启动会弹出捏猫面板
@@ -48,7 +50,7 @@ func to_dict() -> Dictionary:
 		"processed_sale_ids": processed_sale_ids.duplicate(),
 		"next_seq": next_seq, "pomodoro": pomodoro.duplicate(true),
 		"stats": stats.duplicate(true), "settings": settings.duplicate(true),
-		"upgrades": upgrades.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
+		"upgrades": upgrades.duplicate(true), "quests": quests.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
 		"window": window.duplicate(true),
 	}
 
@@ -89,6 +91,10 @@ func from_dict(d: Dictionary) -> bool:
 	_merge(window, d.get("window"))
 	_merge(upgrades, d.get("upgrades"))
 	_merge(cat, d.get("cat"))
+	quests.clear()
+	if d.get("quests") is Dictionary:
+		for k in d["quests"]:
+			quests[str(k)] = str(d["quests"][k])
 	equipped_bait = str(d.get("equipped_bait", ""))
 	# JSON 数字读回来是 float，统一成 int
 	for k in ["phase", "phase_end_ms", "cycle_done"]:

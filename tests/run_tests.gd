@@ -51,6 +51,7 @@ func _init() -> void:
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
+		test_quest(balance, fish)
 		test_birds(balance, fish)
 		test_inventory(balance, fish)
 		test_stall_walk(balance, fish)
@@ -415,7 +416,7 @@ func test_upgrades_and_settings(balance: Dictionary, fish: Array) -> void:
 	g.state.wallet_gold = 100000
 	for i in 10:
 		g.buy_upgrade("basket"); g.buy_upgrade("rod"); g.buy_upgrade("bait")
-	check(g.state.upgrades == {"rod": 5, "bait": 5, "basket": 5}, "最多升到 5 级")
+	check(g.state.upgrades == {"rod": 5, "bait": 5, "basket": 5, "hook": 0}, "最多升到 5 级")
 	check(g.upgrades.next_cost(g.state, "rod") == -1, "满级后没有下一级价格")
 	check(g.state.basket_capacity == 20, "满级鱼篓 20")
 	g.tick()
@@ -809,6 +810,44 @@ func test_outfit_shop_and_dock(balance: Dictionary, fish: Array) -> void:
 	g4.journey.set_boat_x(float(balance["town"]["dock_x"]) - 60.0)
 	check(not g4.at_dock(), "离码头远了不算靠码头")
 
+func test_quest(balance: Dictionary, fish: Array) -> void:
+	print("quest: 漂流瓶、支线任务、宝箱只出宝物")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(61))
+	var rng := _rng(62)
+	var seen := {}
+	for i in 400:
+		seen[g.inventory.roll(rng, "chest")] = true
+	check(not seen.has("bottle") and not seen.has("boot") and not seen.has("bait_worm") and seen.has("pearl") and seen.has("map_piece"), "宝箱里没有漂流瓶、旧靴子和鱼饵")
+	check(g.quest_state("keeper") == "" and not g.can_turn_in("keeper"), "一开始没有任务")
+	g.inventory.add(g.state, "bottle", 2)
+	var r: Dictionary = g.use_item("bottle")
+	check(r["ok"] and r["quest"] == "keeper" and g.quest_state("keeper") == "active" and g.inventory.count(g.state, "bottle") == 1, "第一个漂流瓶开启任务")
+	var gold0: int = g.state.wallet_gold
+	var r2: Dictionary = g.use_item("bottle")
+	check(r2["ok"] and r2["quest"] == "" and g.state.wallet_gold > gold0 and g.quest_state("keeper") == "active", "之后的漂流瓶只有零钱，不重复开任务")
+	check(not g.turn_in("keeper"), "东西不够不能交付")
+	g.inventory.add(g.state, "pearl")
+	check(not g.turn_in("keeper") and g.inventory.count(g.state, "pearl") == 1, "只有一样也不扣东西")
+	g.inventory.add(g.state, "boot")
+	var rb0: float = g.fishing.rarity_bonus
+	check(g.can_turn_in("keeper") and g.turn_in("keeper"), "凑齐就能交付")
+	check(g.quest_state("keeper") == "done" and g.inventory.count(g.state, "pearl") == 0 and g.inventory.count(g.state, "boot") == 0, "交付后扣掉物品，任务完成")
+	check(g.equipment_name("hook") == "银钩" and g.fishing.rarity_bonus > rb0, "奖励银钩，稀有鱼更容易上钩")
+	g.inventory.add(g.state, "pearl"); g.inventory.add(g.state, "boot")
+	check(not g.turn_in("keeper") and g.inventory.count(g.state, "pearl") == 1, "不能重复交付")
+	var st2 := GameState.new()
+	check(st2.from_dict(g.state.to_dict()) and st2.quests.get("keeper", "") == "done" and int(st2.upgrades["hook"]) == 1, "任务状态和银钩随存档保存")
+	# 钓到杂物：概率调到 1，必定钓到漂流瓶或旧靴子，且不进鱼篓
+	var b2 := balance.duplicate(true)
+	b2["junk"]["chance"] = 1.0
+	var g2 := Game.new(b2, fish, GameState.new(), FakeClock.new(), _rng(63))
+	var got := ""
+	for i in 20:
+		got = g2._roll_junk()
+		if got != "":
+			break
+	check(got == "bottle" or got == "boot", "杂物只会是漂流瓶或旧靴子")
+
 func test_birds(balance: Dictionary, fish: Array) -> void:
 	print("birds: 鸟来访（送礼 / 偷鱼）")
 	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(21))
@@ -846,6 +885,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
 	check(not g.use_item("bottle")["ok"], "没有的物品不能用")
 	# 漂流瓶：得金币
+	g.state.quests["keeper"] = "done"      # 任务已完成后，漂流瓶里只有零钱
 	inv.add(g.state, "bottle")
 	var r := g.use_item("bottle")
 	check(r["ok"] and r["gold"] >= 10 and r["gold"] <= 60 and g.state.wallet_gold == r["gold"], "漂流瓶开出 10–60 金币 (%d)" % r["gold"])

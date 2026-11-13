@@ -105,16 +105,32 @@ func consume(s: GameState, id: String) -> bool:
 	s.revision += 1
 	return true
 
-## 按权重抽一种物品（宝箱用）。
-func roll(rng: RandomNumberGenerator) -> String:
+## 按权重抽一种物品。drop 不空时只在 drop 字段等于它的物品里抽（宝箱用 "chest"）；空 = 全部（鸟送礼）。
+func roll(rng: RandomNumberGenerator, drop: String = "") -> String:
+	var pool: Array = []
 	var total := 0.0
 	for d in defs:
+		if drop != "" and str(d.get("drop", "")) != drop:
+			continue
+		pool.append(d)
 		total += float(d.get("weight", 0))
-	if total <= 0.0:
+	if total <= 0.0 or pool.is_empty():
 		return ""
 	var r := rng.randf() * total
-	for d in defs:
+	for d in pool:
 		r -= float(d.get("weight", 0))
 		if r < 0.0:
 			return d["id"]
-	return defs[-1]["id"]
+	return pool[-1]["id"]
+
+## 直接扣掉 n 个（任务交付用，不看物品能不能"使用"）。数量不够返回 false，什么也不扣。
+func remove(s: GameState, id: String, n: int = 1) -> bool:
+	if n <= 0 or count(s, id) < n:
+		return false
+	var left := count(s, id) - n
+	if left > 0:
+		s.inventory[id] = left
+	else:
+		s.inventory.erase(id)
+	s.revision += 1
+	return true

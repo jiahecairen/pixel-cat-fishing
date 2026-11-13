@@ -27,7 +27,7 @@ const LIFT := 3
 const ZONE_BLEND := 28.0              # 水域分界处颜色过渡的半宽（像素）                       # 绕到柜台后面时抬高几像素（更靠里）
 const NEAR := 16                      # 离摊位/码头多近算"到了"
 ## 可以进去的房子：[门的中心 x, 名字, 用途]
-const DOORS := [[674, "小猫的家", "home"], [782, "服装店", "clothes"], [828, "帽子店", "tailor"], [898, "渔具店", "tackle"]]
+const DOORS := [[674, "小猫的家", "home"], [828, "服装店", "tailor"], [898, "渔具店", "tackle"]]
 ## 街上散步的居民：[样子, 散步范围左端, 右端, 走一个来回的毫秒数]
 const STROLLERS := [[1, 690, 800, 26000], [2, 850, 980, 34000], [0, 930, 1010, 22000]]
 ## 市场里 NPC 的摊位：[摊位左端 x, 货物, 招牌, 摊主样子]
@@ -38,7 +38,7 @@ const SHOP_SPEED := 26.0       # 顾客走路速度（像素/秒）
 const DWELL_MS := 4200         # 在一个摊位前停留多久
 const BUY_AT_MS := 1500        # 停下后多久付钱拿货
 const CHAT := ["今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看"]
-const HOUSES := [["house_0", 652], ["house_3", 760], ["house_1", 818], ["house_2", 872]]
+const HOUSES := [["house_0", 652], ["house_1", 818], ["house_2", 872]]
 const TREES := [716, 940]
 
 # 相对小猫贴图左上角的偏移
@@ -1178,12 +1178,11 @@ const ROOM_MIN_X := 2
 const ROOM_MAX_X := ROOM_W - 34
 const ROOM_DOOR_X := 14          # 门的中心
 const ROOMS := {
-	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"]]},
+	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"], [118, "quest"]]},
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[128, "hats"]]},
-	"clothes": {"keeper": 2, "wall": "w", "spots": [[128, "clothes"]]},
 	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "shop": "空格键看货", "hats": "空格键看帽子", "clothes": "空格键看衣服", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库"}
+const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false
@@ -1243,26 +1242,16 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 			m.draw_texture(m.tex["fish_bass"], Vector2(ox + 135, fy - 26))
 		"tailor":
 			m.draw_texture(m.tex["noren_tailor"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
-			m.draw_texture(m.tex["wall_hats"], Vector2(ox + 62, fy - 64))
-			m.draw_texture(m.tex["lantern"], Vector2(ox + 100 + roundf(sin(float(t) / 900.0)), fy - ROOM_H))
-			m.draw_texture(m.tex["hat_stand"], Vector2(ox + 64, fy - 28))
-			m.draw_texture(m.tex["hat_stand"], Vector2(ox + 86, fy - 28))
+			m.draw_texture(m.tex["wall_hats"], Vector2(ox + 56, fy - 64))
+			m.draw_texture(m.tex["wall_clothes"], Vector2(ox + 100, fy - 66))
+			m.draw_texture(m.tex["lantern"], Vector2(ox + 96 + roundf(sin(float(t) / 900.0)), fy - ROOM_H))
+			m.draw_texture(m.tex["hat_stand"], Vector2(ox + 54, fy - 28))
+			m.draw_texture(m.tex["mannequin"], Vector2(ox + 74, fy - 30))
+			m.draw_texture(m.tex["mannequin"], Vector2(ox + 94, fy - 30))
 			m.draw_texture(m.tex["fabric_rolls"], Vector2(ox + 192, fy - 16))
 			m.draw_texture(m.tex["shelf_hats"], Vector2(ox + 150, fy - 62))
 			m.draw_texture(m.tex["mirror"], Vector2(ox + 120, fy - 32))
 			m.draw_texture(m.tex["rug"], Vector2(ox + 108, fy + 3))
-			keeper_pos = Vector2(ox + 176, fy - 21)
-			m.tex_frame("villager_%d" % int(room["keeper"]), keeper_pos, 0, 2)
-		"clothes":
-			m.draw_texture(m.tex["noren_clothes"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
-			m.draw_texture(m.tex["wall_clothes"], Vector2(ox + 62, fy - 66))
-			m.draw_texture(m.tex["lantern"], Vector2(ox + 112 + roundf(sin(float(t) / 900.0)), fy - ROOM_H))
-			m.draw_texture(m.tex["mannequin"], Vector2(ox + 66, fy - 30))
-			m.draw_texture(m.tex["mannequin"], Vector2(ox + 88, fy - 30))
-			m.draw_texture(m.tex["fabric_rolls"], Vector2(ox + 192, fy - 16))
-			m.draw_texture(m.tex["mirror"], Vector2(ox + 120, fy - 32))
-			m.draw_texture(m.tex["rug"], Vector2(ox + 108, fy + 3))
-			m.draw_texture(m.tex["shelf_hats"], Vector2(ox + 150, fy - 62))
 			keeper_pos = Vector2(ox + 176, fy - 21)
 			m.tex_frame("villager_%d" % int(room["keeper"]), keeper_pos, 0, 2)
 		"home":

@@ -28,6 +28,15 @@ func open_kind(k: String) -> void:
 func close() -> void:
 	open = false
 
+func _tab_rect(i: int) -> Rect2:
+	return Rect2(52 + i * 24, 30, 22, 11)
+
+func _switch(k: String) -> void:
+	if kind != k:
+		kind = k
+		sel = int(m.game.state.cat.get(k, 0))
+		m.play("click")
+
 func _items() -> Array:
 	return m.game.cat_items(kind)
 
@@ -59,6 +68,12 @@ func click(p: Vector2) -> bool:
 		m.play("click")
 		m.on_panel_toggled()
 		return true
+	if _tab_rect(0).has_point(p):
+		_switch("hat")
+		return true
+	if _tab_rect(1).has_point(p):
+		_switch("outfit")
+		return true
 	for i in _items().size():
 		if _row_rect(i).has_point(p):
 			act(i)
@@ -67,6 +82,8 @@ func click(p: Vector2) -> bool:
 func key(keycode: int) -> void:
 	var n := _items().size()
 	match keycode:
+		KEY_LEFT, KEY_A, KEY_RIGHT, KEY_D, KEY_TAB:
+			_switch("outfit" if kind == "hat" else "hat")
 		KEY_UP, KEY_W:
 			sel = posmod(sel - 1, n)
 		KEY_DOWN, KEY_S:
@@ -80,7 +97,13 @@ func draw() -> void:
 	var g = m.game
 	m.draw_rect(RECT, Pal.U_A)
 	m.draw_rect(RECT.grow(-1), Pal.U_K)
-	m.label("帽子店" if kind == "hat" else "服装店", Vector2(19, 31), Pal.L_W)
+	m.label("服装店", Vector2(19, 31), Pal.L_W)
+	for ti in 2:
+		var tr := _tab_rect(ti)
+		var on: bool = (kind == "hat") == (ti == 0)
+		m.draw_rect(tr, Pal.L_Y if on else Pal.U_A)
+		m.draw_rect(tr.grow(-1), Pal.L_A if on else Pal.U_K)
+		m.label_centered("帽子" if ti == 0 else "衣服", tr.position.x + 11, tr.position.y, Pal.U_K if on else Pal.L_A)
 	m.tex_frame("btn_close", CLOSE_RECT.position, 0, 2)
 	# 预览：试穿的那一件（光标指着的）
 	var prev: int = int(g.state.cat.get(kind, 0))

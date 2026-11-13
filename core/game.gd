@@ -502,6 +502,11 @@ func _tick_fishing(now: int, events: Array) -> void:
 				inventory.add(state, loot["item"])
 			events.append({"type": "chest", "gold": loot["gold"], "tier": loot["tier"], "item": loot["item"]})
 			dirty = true
+	elif fish_id != "" and _roll_junk() != "":
+		var junk := _last_junk
+		inventory.add(state, junk)
+		events.append({"type": "junk", "item": junk})
+		dirty = true
 	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
 		var size := fishing.hooked_size
 		var best: Dictionary = state.stats["fish_best"]
@@ -621,6 +626,31 @@ func _tick_trip(now: int, events: Array) -> void:
 		_:
 			events.append({"type": r})
 
+## 钓上来的不是鱼而是杂物（漂流瓶、旧靴子）：这次咬钩算不算。算的话物品 id 记在 _last_junk。
+var _last_junk: String = ""
+
+func _roll_junk() -> String:
+	_last_junk = ""
+	var cfg: Dictionary = _cfg.get("junk", {})
+	if cfg.is_empty() or _rng.randf() >= float(cfg.get("chance", 0.0)):
+		return ""
+	var total := 0.0
+	for e in cfg.get("pool", []):
+		total += float(e[1])
+	if total <= 0.0:
+		return ""
+	var r := _rng.randf() * total
+	for e in cfg["pool"]:
+		r -= float(e[1])
+		if r < 0.0:
+			_last_junk = str(e[0])
+			break
+	if _last_junk == "":
+		_last_junk = str(cfg["pool"][-1][0])
+	if not inventory.by_id.has(_last_junk):
+		_last_junk = ""
+	return _last_junk
+
 ## 决定宝箱里有什么。现在只有金币，按档位权重抽；以后有了物品栏，在这里加物品。
 func _roll_chest() -> Dictionary:
 	var tiers: Array = _chest_cfg.get("tiers", [])
@@ -638,7 +668,7 @@ func _roll_chest() -> Dictionary:
 	var item := ""
 	var item_chance := float(_chest_cfg.get("item_chance", 0.0))
 	if item_chance > 0.0 and not inventory.defs.is_empty() and _rng.randf() < item_chance:
-		item = inventory.roll(_rng)
+		item = inventory.roll(_rng, "chest")
 	return {"tier": pick.get("name", ""), "gold": gold, "item": item}
 
 ## 覆盖宝箱的基础概率（测试和调试用）。
@@ -697,7 +727,16 @@ func use_item(id: String) -> Dictionary:
 		return {"ok": true, "use": "bait", "gold": 0}
 	inventory.consume(state, id)
 	var gold := 0
+	var quest := ""
 	match str(d["use"]):
+		"letter":
+			# 漂流瓶：第一次打开是渔具店老板的信，开启支线；之后的瓶子里只有一点零钱
+			if _quest_cfg_list().size() > 0 and quest_state(str(_quest_cfg_list()[0]["id"])) == "":
+				quest = str(_quest_cfg_list()[0]["id"])
+				state.quests[quest] = "active"
+			else:
+				gold = _rng.randi_range(int(d.get("gold_min", 10)), int(d.get("gold_max", 60)))
+				state.wallet_gold += gold
 		"gold":
 			gold = _rng.randi_range(int(d["gold_min"]), int(d["gold_max"]))
 			state.wallet_gold += gold
@@ -709,7 +748,49 @@ func use_item(id: String) -> Dictionary:
 	_refresh_modifiers(now)
 	state.revision += 1
 	dirty = true
-	return {"ok": true, "use": str(d["use"]), "gold": gold}
+	return {"ok": true, "use": str(d["use"]), "gold": gold, "quest": quest}
+
+## ---- 支线任务（数据在 balance.json 的 quests） ----
+func _quest_cfg_list() -> Array:
+	return _cfg.get("quests", [])
+
+func quest_cfg(id: String) -> Dictionary:
+	for q in _quest_cfg_list():
+		if str(q["id"]) == id:
+			return q
+	return {}
+
+## "" = 还没开始，"active" = 进行中，"done" = 完成。
+func quest_state(id: String) -> String:
+	return str(state.quests.get(id, ""))
+
+## 每项要求的 [物品 id, 手里有几个, 需要几个]。
+func quest_needs(id: String) -> Array:
+	var out: Array = []
+	for w in quest_cfg(id).get("wants", []):
+		out.append([str(w["item"]), inventory.count(state, str(w["item"])), int(w["n"])])
+	return out
+
+func can_turn_in(id: String) -> bool:
+	if quest_state(id) != "active":
+		return false
+	for n in quest_needs(id):
+		if int(n[1]) < int(n[2]):
+			return false
+	return true
+
+## 交付：扣物品、给奖励（新鱼钩）。只能成功一次。
+func turn_in(id: String) -> bool:
+	if not can_turn_in(id):
+		return false
+	for n in quest_needs(id):
+		inventory.remove(state, str(n[0]), int(n[2]))
+	state.quests[id] = "done"
+	state.upgrades["hook"] = maxi(int(state.upgrades.get("hook", 0)), int(quest_cfg(id).get("reward_hook", 0)))
+	_apply_upgrades()
+	state.revision += 1
+	dirty = true
+	return true
 
 ## 幸运鱼饵生效期间：稀有鱼权重更高、宝箱概率翻倍。
 func _refresh_modifiers(now: int) -> void:
@@ -868,7 +949,9 @@ func _clamp_setting(key: String, v: int) -> int:
 
 func _apply_upgrades() -> void:
 	state.basket_capacity = _base_capacity + upgrades.level(state, "basket") * int(upgrades.param("basket", "capacity_per_level", 0))
-	_base_rarity = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0)
+	var hook_bonus: Array = _cfg.get("hook_rarity_bonus", [])
+	var hook_lv := int(state.upgrades.get("hook", 0))
+	_base_rarity = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0) + (float(hook_bonus[hook_lv]) if hook_lv >= 0 and hook_lv < hook_bonus.size() else 0.0)
 	fishing.rarity_bonus = _base_rarity
 	_free_multiplier = float(_cfg["fishing"]["free_wait_multiplier"])
 	if upgrades.has("rod"):

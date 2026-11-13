@@ -22,6 +22,7 @@ const Labels := preload("res://presentation/labels.gd")
 const Menu := preload("res://presentation/menu.gd")
 const Wardrobe := preload("res://presentation/wardrobe.gd")
 const OutfitShop := preload("res://presentation/outfit_shop.gd")
+const QuestPanel := preload("res://presentation/quest_panel.gd")
 const World := preload("res://presentation/world.gd")
 const Bag := preload("res://presentation/bag.gd")
 const Book := preload("res://presentation/book.gd")
@@ -35,7 +36,7 @@ const FPS_NORMAL := 30
 const FPS_DRAG := 60
 const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
-const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "noren_clothes", "wall_clothes", "mannequin", "tree", "stall_back",
+const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
@@ -76,6 +77,7 @@ var clock: Clock
 var menu: Menu
 var wardrobe: Wardrobe
 var outfit_shop: OutfitShop
+var quest_panel: QuestPanel
 var bag: Bag
 var book: Book
 var world: World
@@ -162,6 +164,7 @@ func _ready() -> void:
 	menu = Menu.new(self)
 	wardrobe = Wardrobe.new(self)
 	outfit_shop = OutfitShop.new(self)
+	quest_panel = QuestPanel.new(self)
 	game.set_cat_cfg(cat_cfg)
 	bag = Bag.new(self)
 	book = Book.new(self)
@@ -231,6 +234,7 @@ func _apply_debug_env() -> void:
 				st.cat["outfit"] = parts[3].to_int()
 			wardrobe.open = false
 			outfit_shop.open = false
+			quest_panel.open = false
 	if OS.has_environment("CATFISH_FILL"):
 		var ids: Array = game.fish_by_id.keys()
 		for i in OS.get_environment("CATFISH_FILL").to_int():
@@ -246,6 +250,7 @@ func _apply_debug_env() -> void:
 			game.inventory.add(st, d["id"], OS.get_environment("CATFISH_ITEMS").to_int())
 		wardrobe.open = false
 		outfit_shop.open = false
+		quest_panel.open = false
 		bag.open = true
 	if OS.has_environment("CATFISH_WH"):          # 调试：物品各给 N 个，一半存进仓库，并打开仓库面板
 		for d in game.inventory.defs:
@@ -253,6 +258,7 @@ func _apply_debug_env() -> void:
 			game.inventory.stash(st, d["id"], OS.get_environment("CATFISH_WH").to_int() / 2)
 		wardrobe.open = false
 		outfit_shop.open = false
+		quest_panel.open = false
 		bag.open_warehouse()
 	if OS.has_environment("CATFISH_BOOK"):        # 调试：造一些统计数据并打开图鉴册的第 N 页
 		var rngd := RandomNumberGenerator.new()
@@ -270,6 +276,7 @@ func _apply_debug_env() -> void:
 		st.stats["total_fish"] = 77
 		wardrobe.open = false
 		outfit_shop.open = false
+		quest_panel.open = false
 		book.open_page(OS.get_environment("CATFISH_BOOK").to_int())
 	if OS.has_environment("CATFISH_AUTOFOCUS"):
 		game.start_focus()
@@ -301,6 +308,7 @@ func _apply_debug_env() -> void:
 	if OS.has_environment("CATFISH_MENU"):
 		wardrobe.open = false
 		outfit_shop.open = false
+		quest_panel.open = false
 		menu.open = true
 		menu.tab = OS.get_environment("CATFISH_MENU").to_int()
 		menu.shop_page = OS.get_environment("CATFISH_SHOP").to_int() if OS.has_environment("CATFISH_SHOP") else 0
@@ -469,6 +477,7 @@ func _toggle_dev_mode() -> void:
 		bag.open = false
 		book.open = false
 		outfit_shop.close()
+		quest_panel.close()
 		wardrobe.open = true
 		wardrobe.dev = true
 	play("click")
@@ -541,12 +550,12 @@ func _interact_inside() -> void:
 				return
 			menu.tab = 2
 			menu.open = true
+		"quest":
+			play("click")
+			quest_panel.open_talk("keeper")
 		"hats":
 			play("click")
 			outfit_shop.open_kind("hat")
-		"clothes":
-			play("click")
-			outfit_shop.open_kind("outfit")
 		"bed":
 			if world.napping:
 				pass
@@ -663,6 +672,13 @@ func _process(dt: float) -> void:
 			game.state.pomodoro["phase_end_ms"] = game.now_ms() + 3600000
 		_enter_building(_debug_room)
 		_debug_room = ""
+		if OS.has_environment("CATFISH_QUEST"):        # 调试：letter = 读信；talk = 任务进行中、东西凑齐了和店主说话
+			if OS.get_environment("CATFISH_QUEST") == "letter":
+				quest_panel.open_letter("keeper")
+			else:
+				game.state.quests["keeper"] = "active"
+				game.inventory.add(game.state, "pearl")
+				quest_panel.open_talk("keeper")
 		if OS.has_environment("CATFISH_OUTFITSHOP"):   # 调试：进屋后直接打开货架（hat / outfit）
 			game.state.wallet_gold = 150
 			outfit_shop.open_kind(OS.get_environment("CATFISH_OUTFITSHOP"))
@@ -802,6 +818,12 @@ func _on_event(e: Dictionary) -> void:
 				var it: Dictionary = game.inventory.by_id.get(e["item"], {})
 				if tex.has(it.get("sprite", "")):
 					_float("+1", it["sprite"], world.cat_pos + Vector2(34, 8))
+		"junk":
+			world.hop_t0 = t
+			play("catch")
+			var jd: Dictionary = game.inventory.by_id.get(e["item"], {})
+			if tex.has(jd.get("sprite", "")):
+				_float("+1", jd["sprite"], world.cat_pos + Vector2(34, 8))
 		"bait":
 			world.bait_id = e["bait"]
 		"basket_full":
@@ -900,9 +922,16 @@ func _unhandled_input(event: InputEvent) -> void:
 					_update_polygon()
 				else:
 					bag.key(event.keycode)     # 方向键选格子，空格使用
+			elif quest_panel.open:
+				if event.keycode == KEY_ESCAPE:
+					quest_panel.close()
+					_update_polygon()
+				else:
+					quest_panel.key(event.keycode)
 			elif outfit_shop.open:
 				if event.keycode == KEY_ESCAPE:
 					outfit_shop.close()
+					quest_panel.close()
 					_update_polygon()
 				else:
 					outfit_shop.key(event.keycode)     # 上下选货，空格买下 / 穿上
@@ -966,7 +995,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
-	elif book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p):
+	elif book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or quest_panel.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_town_button()
@@ -984,7 +1013,7 @@ func _quit_button_visible() -> bool:
 
 ## 有任何面板（菜单、换形象、物品栏）开着。
 func panel_open() -> bool:
-	return menu.open or wardrobe.open or outfit_shop.open or bag.open or book.open
+	return menu.open or wardrobe.open or outfit_shop.open or quest_panel.open or bag.open or book.open
 
 
 ## 小猫状态页（菜单的第 5 页）：已经开着就关，否则打开。
@@ -994,6 +1023,7 @@ func toggle_status() -> void:
 	if wardrobe.open:
 		wardrobe.close()
 	outfit_shop.close()
+	quest_panel.close()
 	bag.open = false
 	if menu.open and menu.tab == 4:
 		menu.open = false
@@ -1012,6 +1042,7 @@ func open_book(page: int) -> void:
 	if wardrobe.open:
 		wardrobe.close()
 	outfit_shop.close()
+	quest_panel.close()
 	book.open_page(page)
 	_update_polygon()
 
@@ -1023,6 +1054,7 @@ func toggle_bag() -> void:
 	if wardrobe.open:
 		wardrobe.close()
 	outfit_shop.close()
+	quest_panel.close()
 	bag.toggle()
 	_update_polygon()
 
@@ -1144,6 +1176,7 @@ func _draw() -> void:
 	menu.draw()
 	wardrobe.draw()
 	outfit_shop.draw()
+	quest_panel.draw()
 	bag.draw()
 	book.draw()
 	if _confirm_quit:

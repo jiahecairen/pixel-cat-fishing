@@ -164,7 +164,12 @@ func use_selected() -> void:
 	if not res["ok"]:
 		m.play("deny")
 		return
-	m.log.write("use_item", {"item": id, "gold": res["gold"]})
+	m.log.write("use_item", {"item": id, "gold": res["gold"], "quest": res.get("quest", "")})
+	if str(res.get("quest", "")) != "":
+		open = false
+		m.quest_panel.open_letter(str(res["quest"]))
+		m.on_panel_toggled()
+		return
 	m.play("coin" if res["gold"] > 0 else "buy")
 	if res["gold"] > 0:
 		gain_text = "+%d" % int(res["gold"])
