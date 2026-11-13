@@ -34,7 +34,8 @@ const FPS_DRAG := 60
 const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
-	"stall_front", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
+	"stall_front", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
+	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",

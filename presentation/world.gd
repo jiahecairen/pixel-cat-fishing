@@ -13,18 +13,26 @@ const SHORE_X := 640        # 海岸线
 const FISH_X := 100         # 钓点：船的左端
 const DOCK_X := 512         # 靠岸：船的左端
 const PIER_X := 576
-const STALL_X := 760
+const GATE_X := 1012                  # 市场拱门
+const STALL_X := 1186                 # 你的鱼摊，在市场中间
 const WALK_FROM_X := 552
 const STALL_CAT_X := STALL_X + 1      # 小猫坐在摊位左半边，右半边摆鱼
 const ROAM_MIN_X := 552               # 自由走动的范围（小猫贴图左边缘）
-const ROAM_MAX_X := 1000
-const WORLD_END := 1048               # 世界右边界，镜头不会越过
-const ROAM_SPEED := 46.0              # 自由走动速度（像素/秒）
+const ROAM_MAX_X := 1340
+const WORLD_END := 1388               # 世界右边界，镜头不会越过
+const ROAM_SPEED := 70.0              # 自由走动速度（像素/秒）
 const NEAR := 16                      # 离摊位/码头多近算"到了"
 ## 可以进去的房子：[门的中心 x, 名字, 用途]
 const DOORS := [[674, "小猫的家", "home"], [828, "裁缝铺", "tailor"], [898, "渔具店", "tackle"]]
 ## 街上散步的居民：[样子, 散步范围左端, 右端, 走一个来回的毫秒数]
 const STROLLERS := [[1, 690, 800, 26000], [2, 850, 980, 34000], [0, 930, 1010, 22000]]
+## 市场里 NPC 的摊位：[摊位左端 x, 货物, 招牌, 摊主样子]
+const MARKET := [[1070, "fruit", "水果", 1], [1128, "veg", "蔬菜", 2], [1244, "bread", "面包", 0], [1302, "flower", "鲜花", 1]]
+## 逛市场的顾客：[样子, 错开的毫秒数, 依次光顾的摊位下标]
+const SHOPPERS := [[0, 0, [0, 1, 3, 2, 1]], [2, 9000, [3, 2, 0, 1]], [1, 17000, [1, 3, 0, 2]]]
+const SHOP_SPEED := 26.0       # 顾客走路速度（像素/秒）
+const DWELL_MS := 4200         # 在一个摊位前停留多久
+const BUY_AT_MS := 1500        # 停下后多久付钱拿货
 const CHAT := ["今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看"]
 const HOUSES := [["house_0", 652], ["house_1", 818], ["house_2", 872]]
 const TREES := [716, 940]
@@ -171,6 +179,107 @@ func _draw_chat(t: int) -> void:
 	m.draw_rect(Rect2(pos.x + 6, box.end.y, 3, 2), Pal.U_W)
 	m.label(chat_line, box.position + Vector2(3, 1), Pal.U_K)
 
+## 顾客在第 stall 号摊位前的站位。
+func _stand_x(stall: int, k: int) -> float:
+	return float(MARKET[stall][0]) + 6.0 + float(k % 2) * 16.0
+
+## 第 k 位顾客此刻的状态（纯函数，只看时间）：
+## x 位置；facing_right 朝向；dwell 在摊位前停着；d 停了多久；stall 当前/刚离开的摊位；carry 手里拿着的货
+func shopper_at(k: int, t: int) -> Dictionary:
+	var route: Array = SHOPPERS[k][2]
+	var n := route.size()
+	var cycle := 0.0
+	for i in n:
+		var nx: int = route[(i + 1) % n]
+		cycle += float(DWELL_MS) + absf(_stand_x(nx, k) - _stand_x(route[i], k)) / SHOP_SPEED * 1000.0
+	var tt := fposmod(float(t + int(SHOPPERS[k][1])), cycle)
+	for i in n:
+		var cur: int = route[i]
+		var nxt: int = route[(i + 1) % n]
+		var x0 := _stand_x(cur, k)
+		var x1 := _stand_x(nxt, k)
+		var prev_x := _stand_x(route[(i + n - 1) % n], k)
+		if tt < float(DWELL_MS):
+			return {"x": x0, "facing_right": x0 > prev_x, "dwell": true, "d": tt, "stall": cur, "carry": ""}
+		tt -= float(DWELL_MS)
+		var leg := absf(x1 - x0) / SHOP_SPEED * 1000.0
+		if tt < leg:
+			return {"x": roundf(lerpf(x0, x1, tt / leg)), "facing_right": x1 > x0, "dwell": false, "d": 0.0,
+					"stall": cur, "carry": MARKET[cur][1]}
+		tt -= leg
+	return {"x": _stand_x(route[0], k), "facing_right": false, "dwell": true, "d": 0.0, "stall": route[0], "carry": ""}
+
+func _stall_hopping(i: int, t: int) -> bool:
+	for k in SHOPPERS.size():
+		var s := shopper_at(k, t)
+		if s["dwell"] and s["stall"] == i and s["d"] >= BUY_AT_MS and s["d"] < BUY_AT_MS + 350.0:
+			return true
+	return false
+
+## 木招牌（门楣 / 摊位上方），文字走标签图集。
+func _plate(cx: float, y: float, text: String) -> void:
+	var w: float = m.label_width(text) + 5
+	var plate := Rect2(roundf(cx - w / 2), y, w, 12)
+	m.draw_rect(plate.grow(1), Pal.U_K)
+	m.draw_rect(plate, Pal.L_N)
+	m.draw_rect(Rect2(plate.position.x, plate.end.y - 2, plate.size.x, 2), Pal.L_O)
+	m.label(text, plate.position + Vector2(3, 0), Pal.U_K)
+
+## 市场里的 NPC 摊位：雨棚 → 摊主 → 柜台 → 货。
+func _draw_market_stalls(t: int) -> void:
+	for i in MARKET.size():
+		var s: Array = MARKET[i]
+		var x := float(s[0])
+		m.draw_texture(m.tex["stall_back_" + s[1]], Vector2(x, GROUND_Y - 40))
+		var hop := -1.0 if _stall_hopping(i, t) else 0.0
+		m.tex_frame("villager_%d" % int(s[3]), Vector2(x + 15, GROUND_Y - 27 + hop), (t / 900 + i) % 2, 2)
+		m.draw_texture(m.tex["stall_front"], Vector2(x, GROUND_Y - 15))
+		m.draw_texture(m.tex["goods_" + s[1]], Vector2(x + 5, GROUND_Y - 22))
+		_plate(x + 23, GROUND_Y - 53, s[2])
+
+## 逛市场的顾客：走一圈，在摊位前停下，付钱，拿到货拎着走。
+func _draw_shoppers(t: int) -> void:
+	for k in SHOPPERS.size():
+		var s := shopper_at(k, t)
+		var pos := Vector2(float(s["x"]), GROUND_Y - 21)
+		var name := "villager_%d" % int(SHOPPERS[k][0])
+		var frame := 0 if s["dwell"] else (t / 220) % 2
+		if s["facing_right"]:
+			m.tex_frame_flipped(name, pos, frame, 2)
+		else:
+			m.tex_frame(name, pos, frame, 2)
+		var hand := Vector2(pos.x + (11.0 if s["facing_right"] else -3.0), GROUND_Y - 11)
+		if s["dwell"]:
+			var d: float = s["d"]
+			var si: int = s["stall"]
+			var stall_pt := Vector2(float(MARKET[si][0]) + 20.0, GROUND_Y - 24)
+			if d >= BUY_AT_MS and d < BUY_AT_MS + 900.0:       # 货飞到手里，硬币飞向摊主
+				var p := (d - BUY_AT_MS) / 900.0
+				m.draw_texture(m.tex["ico_" + MARKET[si][1]], stall_pt.lerp(hand, p).round())
+				if p < 0.6:
+					m.draw_texture(m.tex["coin"], Vector2(hand.x, hand.y - 6.0).lerp(stall_pt + Vector2(0, -4), p / 0.6).round())
+			elif d >= BUY_AT_MS + 900.0:
+				m.draw_texture(m.tex["ico_" + MARKET[si][1]], hand.round())
+		elif s["carry"] != "":
+			m.draw_texture(m.tex["ico_" + s["carry"]], hand.round())
+
+## 市场入口：拱门、招牌、彩旗。
+func _draw_market_gate(left: float, right: float) -> void:
+	m.draw_texture(m.tex["market_gate"], Vector2(GATE_X, GROUND_Y - 50))
+	_plate(GATE_X + 24, GROUND_Y - 49, "市场")
+	var cols := [Pal.L_R, Pal.L_Y, Pal.L_B, Pal.L_G]
+	var x0 := GATE_X + 48
+	var i := 0
+	while x0 + i * 7 < WORLD_END - 6:
+		var fx := float(x0 + i * 7)
+		if fx > left - 8 and fx < right + 8:
+			var sag := absf(fposmod(float(i) / 8.0, 1.0) - 0.5) * 2.0       # 绳子在每 8 面旗之间微微下垂
+			var fy := float(GROUND_Y - 62) + roundf((1.0 - sag) * 3.0)
+			m.draw_rect(Rect2(fx, fy, 7, 1), Pal.U_K)
+			m.draw_rect(Rect2(fx + 1, fy + 1, 4, 3), cols[i % 4])
+			m.draw_rect(Rect2(fx + 2, fy + 4, 2, 1), cols[i % 4])
+		i += 1
+
 func on_sale(fish_id: String) -> void:
 	var f: Dictionary = m.game.fish_by_id.get(fish_id, {})
 	leaving.append({"kind": customer_kind, "t0": Time.get_ticks_msec(), "x0": float(STALL_X + 50), "fish": f.get("sprite", "")})
@@ -234,6 +343,9 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 		m.draw_rect(Rect2(plate.position.x, plate.end.y - 2, plate.size.x, 2), Pal.L_O)
 		m.label(d[1], plate.position + Vector2(3, 0), Pal.U_K)
 	# 摊位（后半）→ 摆摊的小猫 → 柜台 → 路过的居民、顾客、走动中的小猫（都在摊位前面）
+	_draw_market_gate(left, right)
+	_draw_market_stalls(t)
+	_plate(STALL_X + 23, GROUND_Y - 53, "鱼摊")
 	m.draw_texture(m.tex["stall_back"], Vector2(STALL_X, GROUND_Y - 40))
 	var in_town: bool = not j.on_boat()
 	var bob_y := boat_y(t)
@@ -248,6 +360,7 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 		if sb.size.x > 0:
 			m.draw_texture(m.tex["bubble_sold"], sb.position)
 	_draw_strollers(t)
+	_draw_shoppers(t)
 	_draw_customer(t)
 	_draw_leaving(t)
 	if in_town and not behind_counter:
