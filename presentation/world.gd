@@ -10,7 +10,7 @@ const Journey := preload("res://core/journey.gd")
 const WATER_Y := 128        # 海面
 const GROUND_Y := 124       # 小镇地面 / 码头面（脚踩的那条线）
 const SHORE_X := 640        # 海岸线
-const FISH_X := 100         # 钓点：船的左端
+const FISH_X := 260         # 新档默认的钓点（船的左端）；之后玩家可以划船改位置
 const DOCK_X := 512         # 靠岸：船的左端
 const PIER_X := 576
 const GATE_X := 1012                  # 市场拱门
@@ -46,6 +46,8 @@ const TIP_REEL := Vector2(30, 2)
 var m
 var cat_pos := Vector2(FISH_X + 10, WATER_Y - 34)   # 小猫贴图左上角（世界坐标）
 var boat_x: float = FISH_X
+var boat_moving: bool = false   # 玩家正用方向键划船
+var boat_dir: float = 1.0
 var eat_t0: int = -100000
 var eat_fish: String = ""
 var splash_t0: int = -100000
@@ -83,11 +85,11 @@ func update(now: int, t: int) -> void:
 	var p := _ease(j.progress(now))
 	match j.activity():
 		Journey.Activity.SAIL_OUT:
-			boat_x = lerpf(FISH_X, DOCK_X, p)
+			boat_x = lerpf(float(j.boat_x()), DOCK_X, p)
 		Journey.Activity.SAIL_BACK:
-			boat_x = lerpf(DOCK_X, FISH_X, p)
+			boat_x = lerpf(DOCK_X, float(j.boat_x()), p)
 		Journey.Activity.FISHING, Journey.Activity.IDLE_FULL:
-			boat_x = FISH_X
+			boat_x = float(j.boat_x())
 		_:
 			boat_x = DOCK_X
 	boat_x = roundf(boat_x)
@@ -328,6 +330,25 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 		_tile_row("sea", (t / 600) % 3, 3, WATER_Y, left, sea_right)
 		m.draw_rect(Rect2(left, WATER_Y + 6, sea_right - left, 14), Pal.L_B)
 		m.draw_rect(Rect2(left, WATER_Y + 20, sea_right - left, maxf(0, bottom - WATER_Y - 20)), Pal.U_B)
+	# 水域着色：深水区偏暗，浅滩偏亮；分界处各漂一个浮标
+	if not mini:
+		for z in m.game.zone_bounds(SHORE_X):
+			var zl := maxf(left, float(z["x0"]))
+			var zr := minf(right, float(z["x1"]))
+			if zr <= zl:
+				continue
+			var tint := Color(0, 0, 0, 0)
+			if z["id"] == "deep":
+				tint = Color(Pal.U_K, 0.22)
+			elif z["id"] == "shallow":
+				tint = Color(Pal.L_C, 0.2)
+			if tint.a > 0.0:
+				m.draw_rect(Rect2(zl, WATER_Y, zr - zl, maxf(0, bottom - WATER_Y)), tint)
+			var bx := float(z["x1"])
+			if z["id"] != "shallow" and bx > left - 4 and bx < right + 4:
+				var bob := 1 if (t / 700 + int(bx)) % 2 == 0 else 0
+				m.draw_rect(Rect2(bx - 1, WATER_Y - 3 + bob, 3, 2), Pal.L_R)
+				m.draw_rect(Rect2(bx - 1, WATER_Y - 1 + bob, 3, 2), Pal.U_W)
 	# 地面
 	var land_left := maxf(left, SHORE_X)
 	if land_left < right:
@@ -534,7 +555,7 @@ func _draw_leaving(t: int) -> void:
 func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:
 	var frame := (t / 700) % 2
 	var pos := cat_pos
-	var flip := act == Journey.Activity.SAIL_BACK
+	var flip := act == Journey.Activity.SAIL_BACK or (boat_moving and boat_dir < 0)
 	if on_break:
 		frame = 2 + (t / 1100) % 2
 	elif act == Journey.Activity.IDLE_FULL:
@@ -555,6 +576,9 @@ func _draw_boat_extras(act: int, on_break: bool, now: int, t: int) -> void:
 	if on_break:
 		m.draw_texture(m.tex["zzz"], cat_pos + Vector2(32, -2 - (t / 500) % 3))
 		return
+	if boat_moving and (act == Journey.Activity.FISHING or act == Journey.Activity.IDLE_FULL):
+		_draw_rowing(boat_dir, t)
+		return
 	match act:
 		Journey.Activity.FISHING:
 			_draw_fishing(t, now)
@@ -573,25 +597,28 @@ func _draw_boat_extras(act: int, on_break: bool, now: int, t: int) -> void:
 			if b.size.x > 0:
 				m.draw_texture(m.tex["bubble"], b.position)
 		Journey.Activity.SAIL_OUT, Journey.Activity.SAIL_BACK:
-			# 划桨：桨叶沿一个扁椭圆连续转动，没有突变，所以看起来是顺的。
-			#   椭圆下半圈在水面以下 = 划水：桨叶从船头一侧推向船尾一侧，入水溅水花，身后留水纹
-			#   椭圆上半圈在水面以上 = 回桨：桨叶贴着水面收回船头一侧（只抬高几个像素）
-			var dir := -1.0 if act == Journey.Activity.SAIL_BACK else 1.0    # 船前进的方向
-			var ang := fposmod(t / 1700.0, 1.0) * TAU                        # 0 = 桨叶在最靠船头处、正好在水面
-			var depth := sin(ang)                                            # >0 在水里，<0 在空中
-			var pivot_x := boat_x + 32 - dir * 3
-			var blade := Vector2(pivot_x + dir * 10.0 * cos(ang), WATER_Y + (depth * 3.0 if depth > 0 else depth * 4.0)).round()
-			var hand := cat_pos + (Vector2(10, 23) if dir < 0 else Vector2(21, 23))
-			m.pixel_line(hand, blade, Pal.U_O)
-			m.draw_rect(Rect2(blade.x - 1, blade.y, 3, 3), Pal.L_N)
-			if depth > 0:
-				if ang < 0.9:        # 刚入水：水花
-					m.tex_frame("splash", Vector2(blade.x - 5, WATER_Y - 3), 0 if ang < 0.45 else 1, 2)
-				# 桨叶划过的地方留下水纹（在桨叶的船头一侧，划得越远越长）
-				for i in int(ang / PI * 5.0):
-					m.draw_rect(Rect2(blade.x + dir * (3 + i * 4), WATER_Y + 1 + (i % 2), 2, 1), Pal.U_W if i == 0 else Pal.L_C)
-			elif ang < PI + 0.7:     # 刚出水：甩下一滴水
-				m.draw_rect(Rect2(blade.x, WATER_Y - 1, 1, 1), Pal.L_C)
+			_draw_rowing(-1.0 if act == Journey.Activity.SAIL_BACK else 1.0, t)
+
+## 划桨动画：dir 是船前进的方向（1 向右 / -1 向左）。
+func _draw_rowing(dir: float, t: int) -> void:
+	# 划桨：桨叶沿一个扁椭圆连续转动，没有突变，所以看起来是顺的。
+	#   椭圆下半圈在水面以下 = 划水：桨叶从船头一侧推向船尾一侧，入水溅水花，身后留水纹
+	#   椭圆上半圈在水面以上 = 回桨：桨叶贴着水面收回船头一侧（只抬高几个像素）
+	var ang := fposmod(t / 1700.0, 1.0) * TAU                        # 0 = 桨叶在最靠船头处、正好在水面
+	var depth := sin(ang)                                            # >0 在水里，<0 在空中
+	var pivot_x := boat_x + 32 - dir * 3
+	var blade := Vector2(pivot_x + dir * 10.0 * cos(ang), WATER_Y + (depth * 3.0 if depth > 0 else depth * 4.0)).round()
+	var hand := cat_pos + (Vector2(10, 23) if dir < 0 else Vector2(21, 23))
+	m.pixel_line(hand, blade, Pal.U_O)
+	m.draw_rect(Rect2(blade.x - 1, blade.y, 3, 3), Pal.L_N)
+	if depth > 0:
+		if ang < 0.9:        # 刚入水：水花
+			m.tex_frame("splash", Vector2(blade.x - 5, WATER_Y - 3), 0 if ang < 0.45 else 1, 2)
+		# 桨叶划过的地方留下水纹（在桨叶的船头一侧，划得越远越长）
+		for i in int(ang / PI * 5.0):
+			m.draw_rect(Rect2(blade.x + dir * (3 + i * 4), WATER_Y + 1 + (i % 2), 2, 1), Pal.U_W if i == 0 else Pal.L_C)
+	elif ang < PI + 0.7:     # 刚出水：甩下一滴水
+		m.draw_rect(Rect2(blade.x, WATER_Y - 1, 1, 1), Pal.L_C)
 
 func _draw_fishing(t: int, now: int) -> void:
 	var fs: int = m.game.fishing.state

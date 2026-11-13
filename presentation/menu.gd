@@ -113,23 +113,31 @@ func _draw_shop() -> void:
 	m.label(desc, Vector2(19, 81), Pal.L_A)
 
 func _draw_dex() -> void:
+	# 九宫格：每格一条鱼的图和钓到的数量；鼠标放上去，底部显示名字和价格
 	var g = m.game
 	var counts: Dictionary = g.state.stats["fish_counts"]
+	var tip := ""
+	var tip_price := 0
 	for i in g.fish_list.size():
 		var f: Dictionary = g.fish_list[i]
-		var y: int = ROW_Y + i * 13
+		var cx: int = 17 + (i % 3) * 32
+		var cy: int = ROW_Y + (i / 3) * 14
 		var n := int(counts.get(f["id"], 0))
-		m.draw_texture(m.tex[f["sprite"]], Vector2(18, y - 1), Color.WHITE if n > 0 else Color(0.25, 0.25, 0.35))
+		m.draw_texture(m.tex[f["sprite"]], Vector2(cx, cy), Color.WHITE if n > 0 else Color(0.25, 0.25, 0.35))
 		if n > 0:
-			m.label(f["name"], Vector2(39, y), Pal.L_W)
-			m.text("x%d" % n, Vector2(72, y + 3), Pal.L_W)
-			m.text_right(str(int(f["price"])), 110, y + 3, Pal.L_Y)
-		else:
-			m.label("？？？", Vector2(39, y), Pal.L_A)
-	m.label("共钓到", Vector2(19, 82), Pal.L_A)
-	m.text(str(int(g.state.stats["total_fish"])), Vector2(52, 85), Pal.L_W)
-	m.label("宝箱", Vector2(74, 82), Pal.L_A)
-	m.text(str(int(g.state.stats.get("chests", 0))), Vector2(97, 85), Pal.L_Y)
+			m.text("x%d" % n, Vector2(cx + 19, cy + 4), Pal.L_W)
+		if Rect2(cx - 1, cy - 1, 31, 14).has_point(hover):
+			tip = f["name"] if n > 0 else "？？？"
+			tip_price = int(f["price"]) if n > 0 else 0
+	if tip != "":
+		m.label(tip, Vector2(19, 82), Pal.L_W)
+		if tip_price > 0:
+			m.text_right(str(tip_price), 110, 85, Pal.L_Y)
+	else:
+		m.label("共钓到", Vector2(19, 82), Pal.L_A)
+		m.text(str(int(g.state.stats["total_fish"])), Vector2(52, 85), Pal.L_W)
+		m.label("宝箱", Vector2(74, 82), Pal.L_A)
+		m.text(str(int(g.state.stats.get("chests", 0))), Vector2(97, 85), Pal.L_Y)
 
 func _draw_stats() -> void:
 	var g = m.game

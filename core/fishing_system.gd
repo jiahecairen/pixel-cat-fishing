@@ -12,6 +12,7 @@ const CHEST := "chest"            # 钓上来的不是鱼而是宝箱时，hooke
 
 var hooked_fish: String = ""
 var chest_chance: float = 0.0     # 每一竿钓到宝箱的概率（来自 balance.json 的 chest.chance）
+var zone: String = ""               # 当前水域 id；鱼表里有 zone_weights 的鱼按它取权重
 var rarity_bonus: float = 0.0     # 鱼饵升级：稀有鱼权重 ×(1 + rarity_bonus × rarity)
 
 var _cfg: Dictionary
@@ -95,7 +96,10 @@ func _enter(s: int, now_ms: int, duration_ms: int) -> void:
 	deadline_ms = now_ms + duration_ms
 
 func _weight(f: Dictionary) -> float:
-	return float(f["weight"]) * (1.0 + rarity_bonus * float(f.get("rarity", 0)))
+	var base := float(f["weight"])
+	if f.has("zone_weights"):          # 这种鱼只在列出的水域出现
+		base = float(f["zone_weights"].get(zone, 0.0))
+	return base * (1.0 + rarity_bonus * float(f.get("rarity", 0)))
 
 func _roll_fish() -> String:
 	var total := 0.0

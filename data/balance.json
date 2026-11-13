@@ -99,8 +99,14 @@
     "eat_min_ms": 180000,
     "eat_max_ms": 300000
   },
-  "nap": {"lucky_minutes": 5},
-  "weather": {"rain_block_chance": 0.24, "rain_bite_speed": 1.05, "rain_chest_mult": 0.95},
+  "nap": {
+    "lucky_minutes": 5
+  },
+  "weather": {
+    "rain_block_chance": 0.24,
+    "rain_bite_speed": 1.05,
+    "rain_chest_mult": 0.95
+  },
   "chest": {
     "chance": 0.04,
     "tiers": [
@@ -184,5 +190,23 @@
       "weight": 25,
       "use": ""
     }
-  ]
+  ],
+  "water": {
+    "boat_min_x": 30,
+    "boat_max_x": 440,
+    "zones": [
+      {
+        "id": "deep",
+        "max_x": 190
+      },
+      {
+        "id": "normal",
+        "max_x": 330
+      },
+      {
+        "id": "shallow",
+        "max_x": 9999
+      }
+    ]
+  }
 }

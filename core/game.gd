@@ -27,6 +27,7 @@ var journey: Journey
 var inventory: Inventory
 var fish_list: Array = []
 var fish_by_id: Dictionary = {}
+var _water: Dictionary = {}
 var dirty: bool = false     # 有需要落盘的变化
 
 var _clock
@@ -70,6 +71,7 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	fishing.chest_chance = _base_chest
 	inventory = Inventory.new(balance.get("items", []))
 	journey = Journey.new(state.journey, balance["town"], rng)
+	_water = balance.get("water", {})
 	# 番茄钟用一份"生效配置"：默认值来自 balance.json，玩家在设置里改过的时长覆盖它
 	_pomo_cfg = balance["pomodoro"].duplicate(true)
 	for k in DURATION_KEYS:
@@ -282,6 +284,36 @@ func change_move_speed(direction: int) -> float:
 	dirty = true
 	return journey.speed
 
+## 船所在位置属于哪片水域（"deep" / "normal" / "shallow"）。
+func zone_id(x: float) -> String:
+	for z in _water.get("zones", []):
+		if x < float(z["max_x"]):
+			return z["id"]
+	return "normal"
+
+## 各水域的范围：[{id, x0, x1}]，从左到右；最后一片的右端用 sea_end 截断。
+func zone_bounds(sea_end: float) -> Array:
+	var out: Array = []
+	var x0 := 0.0
+	for z in _water.get("zones", []):
+		var x1 := minf(float(z["max_x"]), sea_end)
+		out.append({"id": z["id"], "x0": x0, "x1": x1})
+		x0 = x1
+	return out
+
+func can_steer() -> bool:
+	return (journey.activity() == Journey.Activity.FISHING or journey.activity() == Journey.Activity.IDLE_FULL) and not pomodoro.is_break()
+
+## 划船：把船挪到 x（夹在可划范围内）。钓鱼不会被打断，咬钩时按船此刻所在的水域抽鱼。
+func steer_to(x: float) -> bool:
+	if not can_steer():
+		return false
+	var nx := clampf(x, float(_water.get("boat_min_x", 30)), float(_water.get("boat_max_x", 440)))
+	if int(round(nx)) != journey.boat_x():
+		journey.set_boat_x(nx)
+		dirty = true
+	return true
+
 func can_go_fishing() -> bool:
 	return journey.in_town() and journey.activity() != Journey.Activity.WALK_TO_BOAT and not pomodoro.is_break()
 
@@ -343,6 +375,7 @@ func _tick_fishing(now: int, events: Array) -> void:
 		return
 	if not fishing.is_active():
 		fishing.start(now)
+	fishing.zone = zone_id(float(journey.boat_x()))
 	var fish_id := fishing.advance(now)
 	if fish_id == FishingSystem.CHEST:
 		var loot := _roll_chest()

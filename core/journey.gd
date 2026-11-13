@@ -48,6 +48,13 @@ func progress(now_ms: int) -> float:
 func in_town() -> bool:
 	return activity() in [Activity.WALK_TO_STALL, Activity.VENDING, Activity.WALK_TO_BOAT, Activity.ROAM, Activity.SOLD_OUT]
 
+## 船在河面上的位置（船左端的世界坐标）。钓鱼时玩家可以划船改变它，决定在哪片水域钓鱼。
+func boat_x() -> int:
+	return int(_j["boat_x"])
+
+func set_boat_x(x: float) -> void:
+	_j["boat_x"] = int(round(x))
+
 ## 自由走动时小猫的位置（世界坐标，由表现层写入）。
 func roam_x() -> int:
 	return int(_j["roam_x"])

@@ -109,6 +109,8 @@ const KEYS_RIGHT := [KEY_RIGHT, KEY_D]
 const KEYS_ACT := [KEY_SPACE, KEY_ENTER, KEY_E, KEY_UP, KEY_W]
 var _cam_snap: bool = true
 var _cam_fx: float = 0.0        # 完整窗口镜头的精确横坐标（画面上取整）
+const ZONE_LABEL := {"shallow": "浅滩", "normal": "普通水域", "deep": "深水区"}
+const BOAT_SPEED := 44.0         # 划船速度（像素/秒）
 const CAM_PULL := 1.4            # 镜头把小猫拉回正中的速度（每秒，越大越紧）
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
 var _debug_last: String = ""
@@ -117,6 +119,7 @@ var _debug_dir_from: int = 0    # 调试：CATFISH_ROAM_AT=帧号，从这一帧
 var _debug_room: String = ""
 var _debug_click_frame: int = -1
 var _debug_click := Vector2.ZERO
+var _boat_fx: float = 0.0        # 划船时船位置的小数部分
 var _debug_dir: int = 0         # 调试：CATFISH_ROAM=1/-1 模拟一直按着右/左方向键
 var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  在这些帧截图后退出
 var _shot_frames: Array = []
@@ -336,6 +339,7 @@ func _update_roam(dt: float) -> void:
 	var j: Journey = game.journey
 	var t := Time.get_ticks_msec()
 	world.roam_moving = false
+	world.boat_moving = false
 	var dir := 0
 	if _debug_dir != 0 and Engine.get_frames_drawn() >= _debug_dir_from:
 		dir = _debug_dir
@@ -361,7 +365,16 @@ func _update_roam(dt: float) -> void:
 			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * game.move_speed() * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
 			world.room_flip = dir < 0
 		return
-	if dir != 0 and j.in_town():
+	if dir != 0 and game.can_steer() and interior == "":
+		# 在船上：方向键划船（每帧重新读回存档里的位置，避免和别处改动打架）
+		if absf(_boat_fx - float(j.boat_x())) > 1.5:
+			_boat_fx = float(j.boat_x())
+		_boat_fx = clampf(_boat_fx + dir * BOAT_SPEED * game.move_speed() * dt, 0.0, 9999.0)
+		game.steer_to(_boat_fx)
+		world.boat_moving = true
+		world.boat_dir = float(dir)
+		_last_walk_input = t
+	elif dir != 0 and j.in_town():
 		if j.activity() != Journey.Activity.ROAM and game.begin_roam(world.cat_pos.x):
 			_roam_fx = world.cat_pos.x
 		if j.activity() == Journey.Activity.ROAM:
@@ -1013,6 +1026,9 @@ func _draw_hud(now: int) -> void:
 				label(hint, Vector2(17, 41), hint_col)
 		elif game.can_go_to_town():
 			label("空格键去小镇", Vector2(17, 30), hint_col)
+		if game.can_steer():
+			label("方向键划船", Vector2(17, 41), hint_col)
+			label(ZONE_LABEL.get(game.zone_id(float(game.journey.boat_x())), "普通水域"), Vector2(17, 52), hint_col)
 
 
 func _draw_floats(t: int) -> void:

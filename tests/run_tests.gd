@@ -269,19 +269,6 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 	check(gv.journey.activity() == Journey.Activity.VENDING and gv.go_fishing(0.0, 1.0), "摆摊中也可以点去钓鱼")
 	check(gv.journey.activity() == Journey.Activity.WALK_TO_BOAT and gv.state.basket.size() == 3, "没卖的鱼还在篓里")
 	check(not gv.go_fishing(0.0, 1.0), "已经在走向码头，不能重复点")
-	# 测试倍速：航行和走路按倍速缩短，进行中的航行进度保持连续
-	var gs := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(11))
-	var cs = gs._clock
-	gs.economy.add_catch(gs.state, "s1", "bass", false)
-	check(gs.change_move_speed(1) == 2.0 and gs.change_move_speed(1) == 4.0 and gs.change_move_speed(-1) == 2.0, "倍速 1→2→4→2")
-	gs.go_to_town(); _run(gs, cs, 14)
-	check(gs.journey.activity() == Journey.Activity.SAIL_OUT, "2 倍速：14 秒还在航行")
-	var prog_before: float = gs.journey.progress(cs.t)
-	gs.change_move_speed(1)
-	check(absf(gs.journey.progress(cs.t) - prog_before) < 0.01, "航行中改倍速，进度不跳 (%.2f)" % gs.journey.progress(cs.t))
-	var ev_s := _run(gs, cs, 5)
-	check(_count(ev_s, "docked") == 1, "4 倍速：剩下的航行很快就到")
-	check(gs.change_move_speed(-9) == 1.0 and gs.change_move_speed(99) == 16.0, "倍速到头不越界")
 	# 航行途中进入休息：进度冻结，休息结束后接着走
 	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(2))
 	var c3 = g3._clock

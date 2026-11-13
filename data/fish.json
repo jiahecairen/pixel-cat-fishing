@@ -2,12 +2,41 @@
   "version": 1,
   "fish": [
     {
+      "id": "loach",
+      "name": "泥鳅",
+      "sprite": "fish_loach",
+      "price": 4,
+      "weight": 30,
+      "rarity": 0,
+      "zone_weights": {
+        "shallow": 45,
+        "normal": 10
+      }
+    },
+    {
       "id": "crucian",
       "name": "小鲫鱼",
       "sprite": "fish_crucian",
       "price": 5,
       "weight": 60,
-      "rarity": 0
+      "rarity": 0,
+      "zone_weights": {
+        "shallow": 45,
+        "normal": 35,
+        "deep": 5
+      }
+    },
+    {
+      "id": "bream",
+      "name": "鳊鱼",
+      "sprite": "fish_bream",
+      "price": 8,
+      "weight": 30,
+      "rarity": 0,
+      "zone_weights": {
+        "shallow": 10,
+        "normal": 35
+      }
     },
     {
       "id": "bass",
@@ -15,7 +44,48 @@
       "sprite": "fish_bass",
       "price": 12,
       "weight": 30,
-      "rarity": 1
+      "rarity": 1,
+      "zone_weights": {
+        "shallow": 3,
+        "normal": 30,
+        "deep": 15
+      }
+    },
+    {
+      "id": "grass_carp",
+      "name": "草鱼",
+      "sprite": "fish_grass_carp",
+      "price": 16,
+      "weight": 20,
+      "rarity": 1,
+      "zone_weights": {
+        "normal": 15,
+        "deep": 25
+      }
+    },
+    {
+      "id": "catfish",
+      "name": "鲶鱼",
+      "sprite": "fish_catfish",
+      "price": 22,
+      "weight": 20,
+      "rarity": 1,
+      "zone_weights": {
+        "normal": 5,
+        "deep": 30
+      }
+    },
+    {
+      "id": "mandarin",
+      "name": "鳜鱼",
+      "sprite": "fish_mandarin",
+      "price": 30,
+      "weight": 12,
+      "rarity": 1,
+      "zone_weights": {
+        "normal": 8,
+        "deep": 15
+      }
     },
     {
       "id": "koi",
@@ -23,7 +93,22 @@
       "sprite": "fish_koi",
       "price": 40,
       "weight": 10,
-      "rarity": 2
+      "rarity": 2,
+      "zone_weights": {
+        "normal": 3,
+        "deep": 10
+      }
+    },
+    {
+      "id": "arowana",
+      "name": "银龙鱼",
+      "sprite": "fish_arowana",
+      "price": 90,
+      "weight": 5,
+      "rarity": 2,
+      "zone_weights": {
+        "deep": 6
+      }
     }
   ]
 }
