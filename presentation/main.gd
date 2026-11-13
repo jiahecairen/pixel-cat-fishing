@@ -28,7 +28,7 @@ const MINI_VIEW := Vector2i(128, 96)
 const FULL_MIN_H := 180          # 全画面至少能看到这么高的世界
 const FULL_MIN_W := 256
 const FULL_DEFAULT := Vector2i(960, 540)
-const FONT_ORDER := "0123456789:/+x-"
+const FONT_ORDER := "0123456789:/+x-cm"
 const FPS_NORMAL := 30
 const FPS_DRAG := 60
 const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
@@ -46,6 +46,7 @@ const CAT_FRAMES := 6
 # ---- 界面布局（界面坐标） ----
 const PANEL_POS := Vector2(15, 1)
 const PANEL_SIZE := Vector2(110, 27)
+const MINI_HUD_DX := -6.0              # 迷你窗里顶栏左移，让它在 128 宽的窗口里居中
 const BTN_MAIN := Rect2(78, 3, 11, 11)
 const BTN_TOWN := Rect2(89, 3, 11, 11)
 const BTN_MENU := Rect2(100, 3, 11, 11)     # 齿轮：只打开设置
@@ -57,7 +58,7 @@ const BTN_CLOSE := Rect2(111, 14, 11, 11)
 const QUIT_BOX := Rect2(15, 30, 110, 36)
 const QUIT_YES := Rect2(24, 49, 36, 13)
 const QUIT_NO := Rect2(80, 49, 36, 13)
-const MINI_SCENE := Rect2(4, 28, 121, 66)     # 迷你视图里可拖动/可点击的场景区域
+const MINI_SCENE := Rect2(0, 28, 128, 66)     # 迷你视图里可拖动/可点击的场景区域
 const MINI_CAM_Y := World.WATER_Y - 74
 const MINI_CAT_X := 44                        # 迷你视图里小猫固定出现的横坐标
 const FULL_UI_OFF := Vector2(-11, 3)
@@ -105,6 +106,7 @@ var _roam_fx: float = 0.0        # 自由走动的亚像素位置
 var _confirm_quit: bool = false   # 正在显示"确定要退出吗"
 var interior: String = ""        # 小猫所在的屋子（"" = 在室外）；不存档，重启后回到门口
 var _last_walk_input: int = -100000
+var _row_ready_at: int = 0      # 收杆动作做完、可以开始划船的时刻
 const KEYS_LEFT := [KEY_LEFT, KEY_A]
 const KEYS_RIGHT := [KEY_RIGHT, KEY_D]
 const KEYS_ACT := [KEY_SPACE, KEY_ENTER, KEY_E, KEY_UP, KEY_W]
@@ -372,15 +374,23 @@ func _update_roam(dt: float) -> void:
 		# 在船上：方向键划船（每帧重新读回存档里的位置，避免和别处改动打架）
 		if absf(_boat_fx - float(j.boat_x())) > 1.5:
 			_boat_fx = float(j.boat_x())
-		_boat_fx = clampf(_boat_fx + dir * BOAT_SPEED * game.move_speed() * dt, 0.0, 9999.0)
-		game.steer_to(_boat_fx)
-		var lim := game.boat_limits()
-		world.boat_moving = not ((dir < 0 and j.boat_x() <= lim.x) or (dir > 0 and j.boat_x() >= lim.y))   # 顶到头就不划了
+		if game.line_out():                          # 竿还在水里：先快速收杆，收完才开始划
+			game.reel_in()
+			world.retract_t0 = t
+			_row_ready_at = t + World.RETRACT_MS
 		world.boat_dir = float(dir)
 		_last_walk_input = t
+		if t >= _row_ready_at:
+			_boat_fx = clampf(_boat_fx + dir * BOAT_SPEED * game.move_speed() * dt, 0.0, 9999.0)
+			game.steer_to(_boat_fx)
+			var lim := game.boat_limits()
+			world.boat_moving = not ((dir < 0 and j.boat_x() <= lim.x) or (dir > 0 and j.boat_x() >= lim.y))   # 顶到头就不划了
 	elif dir != 0 and j.in_town():
-		if j.activity() != Journey.Activity.ROAM and game.begin_roam(world.cat_pos.x):
-			_roam_fx = world.cat_pos.x
+		if j.activity() != Journey.Activity.ROAM:
+			var was_behind: bool = world.walk_behind or j.activity() == Journey.Activity.VENDING or j.activity() == Journey.Activity.SOLD_OUT
+			if game.begin_roam(world.cat_pos.x):
+				_roam_fx = world.cat_pos.x
+				world.roam_behind = was_behind       # 在摊位里按方向键：先在柜台后面走，走出摊位才回到前面
 		if j.activity() == Journey.Activity.ROAM:
 			if absf(_roam_fx - j.roam_x()) > 1.5:
 				_roam_fx = j.roam_x()      # 读档后或从屋里出来：以存档里的位置为准，避免第一步瞬移到码头
@@ -391,17 +401,22 @@ func _update_roam(dt: float) -> void:
 			_last_walk_input = t
 	elif j.activity() == Journey.Activity.ROAM and mini:
 		# 玩家接管后小猫就一直听玩家的，不会自己走开；只有切到迷你悬浮窗才交还给自动流程
-		var x := float(j.roam_x())
-		game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))
+		_end_roam_auto(float(j.roam_x()))
 
 
-## 互动键：在海上 = 去小镇；自由走动时在摊位旁 = 开张，在码头 = 上船。
+func _end_roam_auto(x: float) -> void:
+	world.route_behind_start = world.roam_behind
+	game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))
+
+
+## 互动键：在海上 = 收着竿时重新甩竿；自由走动时在摊位旁 = 开张，在码头 = 上船。
 func _interact() -> void:
 	var j: Journey = game.journey
 	if interior != "":
 		_interact_inside()
 	elif j.on_boat():
-		_go_to_town()
+		if j.activity() == Journey.Activity.FISHING and game.cast_line():
+			play("click")             # 停船后按互动键：重新甩竿
 	elif j.activity() == Journey.Activity.SOLD_OUT:
 		_go_fishing()
 	elif j.activity() == Journey.Activity.ROAM:
@@ -410,7 +425,7 @@ func _interact() -> void:
 			game.roam_board(world.frac_to_boat(x))
 			play("click")
 		elif world.near_stall(x) and not game.state.basket.is_empty():
-			game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))      # 从当前位置走到摊位后面开张
+			_end_roam_auto(x)      # 从当前位置走到摊位后面开张
 			play("click")
 		elif not world.door_near(x).is_empty():
 			_enter_building(world.door_near(x)[2])
@@ -485,6 +500,10 @@ func on_panel_toggled() -> void:
 	_update_polygon()
 
 
+func _hud_dx() -> float:
+	return MINI_HUD_DX if mini else 0.0
+
+
 func _update_polygon() -> void:
 	if not adapter.is_overlay():
 		return
@@ -492,7 +511,7 @@ func _update_polygon() -> void:
 		adapter.set_interactive_polygon(get_window(), PackedVector2Array())
 		return
 	# 上面是 HUD 面板，下面是场景；两块拼成一个多边形，其余透明区域鼠标穿透
-	var p := PANEL_POS
+	var p := PANEL_POS + Vector2(_hud_dx(), 0)
 	var s := MINI_SCENE
 	var pts := PackedVector2Array([
 		p, Vector2(p.x + PANEL_SIZE.x, p.y), Vector2(p.x + PANEL_SIZE.x, s.end.y),
@@ -720,9 +739,7 @@ func _on_event(e: Dictionary) -> void:
 			world.bird_start(e["kind"], e["item"], t)
 		"bird_gift":
 			var gift: Dictionary = game.inventory.by_id.get(e["item"], {})
-			if tex.has(gift.get("sprite", "")):
-				_float("+1", gift["sprite"], world.cat_pos + Vector2(-14, -14))
-			play("catch")
+			play("catch")      # 礼物已经在鸟松爪时掉进船里了，不再另外飘一个
 		"bird_steal":
 			play("deny")
 		"ate":
@@ -811,6 +828,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var v: Vector2 = event.position / float(px_scale)   # 视图坐标
 	var p := v - ui_off                                  # 界面坐标
+	var hp := p - Vector2(_hud_dx(), 0)                  # 顶栏自己的坐标（迷你窗里整体左移了）
 	if _confirm_quit:
 		# 确认框打开时只认这两个按钮，点别处一律当作取消
 		if QUIT_YES.has_point(p):
@@ -819,13 +837,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_confirm_quit = false
 			play("click")
 		return
-	if BTN_MAIN.has_point(p):
+	if BTN_MAIN.has_point(hp):
 		_pressed_btn = "main"
 		_press_main()
-	elif BTN_TOWN.has_point(p):
+	elif BTN_TOWN.has_point(hp):
 		_pressed_btn = "town"
 		_town_button()
-	elif BTN_MENU.has_point(p):
+	elif BTN_MENU.has_point(hp):
 		# 面板上只留"设置"。商店、图鉴、统计、换形象都要去镇上对应的房子里
 		play("click")
 		if wardrobe.open:
@@ -837,17 +855,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			menu.tab = 3
 			menu.open = true
 		_update_polygon()
-	elif BTN_STATUS.has_point(p):
+	elif BTN_STATUS.has_point(hp):
 		toggle_status()
-	elif BTN_VIEW.has_point(p):
+	elif BTN_VIEW.has_point(hp):
 		play("click")
 		toggle_view_mode()
-	elif BTN_BAG.has_point(p):
+	elif BTN_BAG.has_point(hp):
 		toggle_bag()
-	elif BTN_CLOSE.has_point(p) and _quit_button_visible():
+	elif BTN_CLOSE.has_point(hp) and _quit_button_visible():
 		play("click")
 		_confirm_quit = true      # 先问一句，不直接退出
-	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(p):
+	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
 	elif bag.click(p) or menu.click(p) or wardrobe.click(p):
 		pass
@@ -964,7 +982,9 @@ func _draw() -> void:
 		_draw_floats(t)
 	draw_set_transform(ui_off)
 	if not mini or _mini_shown:
+		draw_set_transform(ui_off + Vector2(_hud_dx(), 0))
 		_draw_hud(now)
+		draw_set_transform(ui_off)
 	menu.draw()
 	wardrobe.draw()
 	bag.draw()
@@ -1071,8 +1091,8 @@ func _draw_hud(now: int) -> void:
 				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_pier(rx):
 					hint = "空格键聊天"
 				label(hint, Vector2(17, 41), hint_col)
-		elif game.can_go_to_town():
-			label("空格键去小镇", Vector2(17, 30), hint_col)
+		elif game.journey.activity() == Journey.Activity.FISHING and not game.line_out() and not game.pomodoro.is_break():
+			label("空格键开始钓鱼", Vector2(17, 30), hint_col)
 		if game.can_steer():
 			label("方向键划船", Vector2(17, 41), hint_col)
 			label(ZONE_LABEL.get(game.zone_id(float(game.journey.boat_x())), "普通水域"), Vector2(17, 52), hint_col)

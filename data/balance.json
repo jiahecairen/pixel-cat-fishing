@@ -270,7 +270,7 @@
     "min_ms": 180000,
     "max_ms": 480000,
     "steal_chance": 0.3,
-    "act_after_ms": 6000,
+    "act_after_ms": 10000,
     "bottle_chance": 0.5
   },
   "equipment": {

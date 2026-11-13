@@ -274,6 +274,7 @@ func go_to_town() -> bool:
 		return false
 	var now: int = _clock.now_ms()
 	fishing.stop(now)
+	state.journey["line_out"] = 1
 	journey.depart(now)
 	_cancel_bird()
 	dirty = true
@@ -331,6 +332,10 @@ func bait_active() -> bool:
 	return int(state.effects["lucky_until_ms"]) > _clock.now_ms()
 
 ## 船所在位置属于哪片水域（"deep" / "normal" / "shallow"）。
+## 鸟飞来后停多久才送礼/偷鱼（画面里鸟停留的时间也按它）。
+func bird_act_after_ms() -> int:
+	return int(_birds.get("act_after_ms", 6000))
+
 func zone_id(x: float) -> String:
 	for z in _water.get("zones", []):
 		if x < float(z["max_x"]):
@@ -352,12 +357,36 @@ func boat_limits() -> Vector2:
 	return Vector2(float(_water.get("boat_min_x", 30)), float(_water.get("boat_max_x", 440)))
 
 func can_steer() -> bool:
+	if fishing.state in [FishingSystem.State.HOOKED, FishingSystem.State.REELING, FishingSystem.State.SETTLEMENT]:
+		return false          # 正在收鱼，先让这条鱼收完
 	return (journey.activity() == Journey.Activity.FISHING or journey.activity() == Journey.Activity.IDLE_FULL) and not pomodoro.is_break()
+
+## 钓竿是不是甩出去了。划船会把竿收起来，停船后要按互动键重新甩竿。
+func line_out() -> bool:
+	return int(state.journey["line_out"]) == 1
+
+## 收杆：停掉这一竿（饵已经上了，没钓到就算丢了）。
+func reel_in() -> bool:
+	if not line_out():
+		return false
+	state.journey["line_out"] = 0
+	fishing.stop(_clock.now_ms())
+	dirty = true
+	return true
+
+## 停船后重新开始钓鱼。
+func cast_line() -> bool:
+	if line_out() or journey.activity() != Journey.Activity.FISHING or pomodoro.is_break():
+		return false
+	state.journey["line_out"] = 1
+	dirty = true
+	return true
 
 ## 划船：把船挪到 x（夹在可划范围内）。钓鱼不会被打断，咬钩时按船此刻所在的水域抽鱼。
 func steer_to(x: float) -> bool:
 	if not can_steer():
 		return false
+	reel_in()                  # 划船要先收杆
 	var nx := clampf(x, float(_water.get("boat_min_x", 30)), float(_water.get("boat_max_x", 440)))
 	if int(round(nx)) != journey.boat_x():
 		journey.set_boat_x(nx)
@@ -410,6 +439,10 @@ func adjust_duration(key: String, direction: int) -> int:
 # ------------------------------------------------------------------ 内部
 func _tick_fishing(now: int, events: Array) -> void:
 	var focus := in_focus()
+	if not line_out():                  # 钓竿收着（刚划过船）：等玩家按互动键再甩
+		if fishing.is_active():
+			fishing.stop(now)
+		return
 	# 下雨：鱼咬钩更快（等待时间缩短到 1/1.05）
 	var rain_speed := _rain_cfg("rain_bite_speed", 1.0) if _raining else 1.0
 	fishing.wait_multiplier = (1.0 if focus else _free_multiplier) / rain_speed
@@ -524,6 +557,8 @@ func _tick_trip(now: int, events: Array) -> void:
 	if r == "":
 		return
 	dirty = true
+	if r == "back":
+		state.journey["line_out"] = 1      # 回到钓点：自动甩竿
 	match r:
 		"sale":
 			var mult := focus_multiplier()

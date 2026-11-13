@@ -668,6 +668,13 @@ func test_water(balance: Dictionary, fish: Array) -> void:
 	check(zb.size() == 3 and zb[0]["x0"] == 0.0 and zb[2]["x1"] == 640.0 and zb[1]["x0"] == zb[0]["x1"], "水域范围首尾相接")
 	check(g.can_steer() and g.steer_to(120.0) and g.journey.boat_x() == 120, "钓鱼时可以划船")
 	check(g.steer_to(-50.0) and g.journey.boat_x() == 30 and g.steer_to(9999.0) and g.journey.boat_x() == 440, "划船范围有边界")
+	check(not g.line_out() and g.fishing.state == Fishing.State.IDLE, "划船先收杆")
+	var c0: FakeClock = g._clock
+	_run(g, c0, 30)
+	check(g.fishing.state == Fishing.State.IDLE and not g.fishing.is_active(), "停船后不会自己甩竿")
+	check(g.cast_line() and g.line_out() and not g.cast_line(), "按互动键重新甩竿，不能重复")
+	_run(g, c0, 2)
+	check(g.fishing.is_active(), "甩竿后恢复钓鱼")
 	g.economy.add_catch(g.state, "w1", "bass", false)
 	g.go_to_town()
 	check(not g.can_steer() and not g.steer_to(200.0), "出发后不能划船")

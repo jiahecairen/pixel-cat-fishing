@@ -135,8 +135,7 @@ func _draw_dex() -> void:
 		if tip_count > 0:
 			m.text("x%d" % tip_count, Vector2(60, 85), Pal.L_W)      # 鼠标放上去才显示数量，免得和旁边的鱼图叠在一起
 		if tip_price > 0:
-			m.label("厘米", Vector2(90, 82), Pal.L_Y)
-			m.text_right(str(tip_price), 89, 85, Pal.L_Y)             # 这种鱼钓到过的最大尺寸
+			m.text_right("%dcm" % tip_price, 110, 85, Pal.L_Y)         # 这种鱼钓到过的最大尺寸
 	else:
 		m.label("共钓到", Vector2(19, 82), Pal.L_A)
 		m.text(str(int(g.state.stats["total_fish"])), Vector2(52, 85), Pal.L_W)
