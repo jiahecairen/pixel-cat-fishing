@@ -290,6 +290,25 @@ func set_chest_chance(p: float) -> void:
 	_base_chest = clampf(p, 0.0, 1.0)
 	_refresh_modifiers(_clock.now_ms())
 
+## 小猫的床：休息时睡一觉（每段休息一次），睡醒后几分钟内更走运。
+## 0 = 现在不是休息时间，1 = 可以睡，2 = 这段休息已经睡过了。
+func nap_status() -> int:
+	if not pomodoro.is_break():
+		return 0
+	return 2 if int(state.effects["napped_end_ms"]) == int(state.pomodoro["phase_end_ms"]) else 1
+
+func nap() -> bool:
+	if nap_status() != 1:
+		return false
+	var now: int = _clock.now_ms()
+	var minutes := int(_cfg.get("nap", {}).get("lucky_minutes", 5))
+	state.effects["napped_end_ms"] = int(state.pomodoro["phase_end_ms"])
+	state.effects["lucky_until_ms"] = maxi(now, int(state.effects["lucky_until_ms"])) + minutes * 60000
+	_refresh_modifiers(now)
+	state.revision += 1
+	dirty = true
+	return true
+
 func lucky_active() -> bool:
 	return _clock.now_ms() < int(state.effects["lucky_until_ms"])
 

@@ -463,13 +463,14 @@ const ROOM_DOOR_X := 14          # 门的中心
 const ROOMS := {
 	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"]]},
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[128, "mirror"]]},
-	"home": {"keeper": -1, "wall": "w", "spots": [[84, "dex"], [128, "stats"]]},
+	"home": {"keeper": -1, "wall": "w", "spots": [[84, "dex"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "shop": "空格键看货", "mirror": "空格键照镜子", "dex": "空格键看图鉴", "stats": "空格键看统计"}
+const SPOT_HINT := {"exit": "空格键出门", "shop": "空格键看货", "mirror": "空格键照镜子", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false
 var room_moving: bool = false
+var napping: bool = false       # 正在床上睡觉
 var room_t0: int = -100000       # 进门的时刻（店主打招呼用）
 
 func enter_room(t: int) -> void:
@@ -526,7 +527,12 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 			m.draw_texture(m.tex["rug"], Vector2(ox + 96, fy + 3))
 	# 小猫
 	var pos := Vector2(ox + roundf(room_x), fy - 30)
-	m.draw_cat(pos, (4 + (t / 180) % 2) if room_moving else 4, room_flip)
+	if napping and kind == "home":
+		m.draw_cat(Vector2(ox + 162, fy - 34), 2 + (t / 700) % 2, false)
+		var zy := (t / 400) % 3
+		m.label("Z", Vector2(ox + 150 + zy * 3, fy - 52 - zy * 4), Pal.U_K)
+	else:
+		m.draw_cat(pos, (4 + (t / 180) % 2) if room_moving else 4, room_flip)
 	# 店主进门时打招呼
 	if keeper_pos != Vector2.INF and t - room_t0 < 3000:
 		var w: float = m.label_width("欢迎光临") + 6

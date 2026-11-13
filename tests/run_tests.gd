@@ -447,6 +447,14 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	check(absi(g.lucky_remaining_ms() - 20 * 60000) < 5000, "番茄休息的 5 分钟不算进去 (剩 %d 秒)" % (g.lucky_remaining_ms() / 1000))
 	_run(g, clock, 20 * 60 + 5)
 	check(not g.lucky_active() and is_equal_approx(g.fishing.rarity_bonus, 0.0) and is_equal_approx(g.fishing.chest_chance, base_chest), "到期后恢复原样")
+	# 小猫的床：只在休息时能睡，每段休息一次，睡醒幸运 5 分钟
+	check(g.nap_status() == 0 and not g.nap(), "不在休息时不能睡")
+	g.state.pomodoro["phase"] = Pomodoro.Phase.SHORT_BREAK; g.state.pomodoro["phase_end_ms"] = clock.t + 5 * 60000
+	check(g.nap_status() == 1 and g.nap() and g.lucky_active(), "休息时可以小睡，睡醒更走运")
+	check(absi(g.lucky_remaining_ms() - 5 * 60000) < 2000, "小睡幸运 5 分钟")
+	check(g.nap_status() == 2 and not g.nap(), "同一段休息不能再睡")
+	g.state.pomodoro["phase_end_ms"] = clock.t + 15 * 60000
+	check(g.nap_status() == 1, "下一段休息又可以睡")
 	# 招财铃：接下来 5 单翻倍，第 6 单恢复
 	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(32))
 	g2.set_chest_chance(0.0)

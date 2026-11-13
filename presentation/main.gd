@@ -88,6 +88,7 @@ var _next_player: int = 0
 var _last_fs: int = -1
 var _pressed_btn: String = ""
 var _dragging: bool = false
+var _nap_until: int = 0                 # 床上小睡动画结束的时刻
 var _mini_pts := PackedVector2Array()   # 迷你窗可交互多边形（窗口像素）
 var _mini_shown: bool = true            # 迷你窗当前是否显示（鼠标移入才显示）
 var _mini_hide_at: int = 0              # 鼠标移出后，到这个时刻才真正隐藏
@@ -208,9 +209,6 @@ func _apply_debug_env() -> void:
 			game.inventory.add(st, d["id"], OS.get_environment("CATFISH_ITEMS").to_int())
 		wardrobe.open = false
 		bag.open = true
-	if OS.has_environment("CATFISH_BREAK"):       # 调试：开局直接处于番茄休息中
-		st.pomodoro["phase"] = Pomodoro.Phase.SHORT_BREAK
-		st.pomodoro["phase_end_ms"] = game.now_ms() + 3600000
 	if OS.has_environment("CATFISH_AUTOFOCUS"):
 		game.start_focus()
 	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
@@ -320,9 +318,12 @@ func _update_roam(dt: float) -> void:
 		# 在屋里：只在屋内左右走。切到迷你悬浮窗或旅程状态变了就回到室外
 		if mini or j.activity() != Journey.Activity.ROAM:
 			interior = ""
+			world.napping = false
 			return
-		world.room_moving = dir != 0
-		if dir != 0:
+		if world.napping and Time.get_ticks_msec() >= _nap_until:
+			world.napping = false
+		world.room_moving = dir != 0 and not world.napping
+		if dir != 0 and not world.napping:
 			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
 			world.room_flip = dir < 0
 		return
@@ -398,6 +399,16 @@ func _interact_inside() -> void:
 		"mirror":
 			play("click")
 			wardrobe.open = true
+		"bed":
+			if world.napping:
+				pass
+			elif game.nap():
+				play("break_end")
+				world.napping = true
+				_nap_until = Time.get_ticks_msec() + 2600
+				log.write("nap", {"lucky_until_ms": game.state.effects["lucky_until_ms"]})
+			else:
+				play("deny")
 		_:
 			play("deny")
 	_update_polygon()
@@ -494,8 +505,16 @@ func _process(dt: float) -> void:
 			print("[debug] frame %d event %s" % [Engine.get_frames_drawn(), str(e)])
 	if _debug_room != "" and game.journey.in_town():
 		game.begin_roam(World.STALL_CAT_X)
+		if OS.has_environment("CATFISH_BREAK"):   # 调试：进屋时处于番茄休息中（休息中去不了镇上，所以到镇上再设）
+			game.state.pomodoro["phase"] = Pomodoro.Phase.SHORT_BREAK
+			game.state.pomodoro["phase_end_ms"] = game.now_ms() + 3600000
 		_enter_building(_debug_room)
 		_debug_room = ""
+		if OS.has_environment("CATFISH_NAP"):     # 调试：进屋后直接走到床边按一下
+			world.room_x = 156.0
+			_interact_inside()
+			if OS.get_environment("CATFISH_NAP") == "2":   # 一直睡着，方便截图
+				_nap_until = Time.get_ticks_msec() + 600000
 	if _debug_click_frame >= 0 and Engine.get_frames_drawn() >= _debug_click_frame:
 		_debug_click_frame = -1
 		var ev := InputEventMouseButton.new()
@@ -881,7 +900,11 @@ func _draw_hud(now: int) -> void:
 		if interior != "":
 			label("方向键走动", Vector2(17, 30), Pal.L_W)
 			var spot: String = world.room_spot(interior)
-			if World.SPOT_HINT.has(spot):
+			if spot == "bed":
+				var st := game.nap_status()
+				label("小猫睡得真香" if world.napping else ("空格键小睡" if st == 1 else ("已经睡饱了" if st == 2 else "休息时才能小睡")),
+						Vector2(17, 41), Pal.L_Y)
+			elif World.SPOT_HINT.has(spot):
 				label(World.SPOT_HINT[spot], Vector2(17, 41), Pal.L_Y)
 		elif game.journey.in_town():
 			label("方向键走动", Vector2(17, 30), Pal.U_K)

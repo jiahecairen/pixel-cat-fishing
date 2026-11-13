@@ -93,6 +93,7 @@
     "eat_min_ms": 180000,
     "eat_max_ms": 300000
   },
+  "nap": {"lucky_minutes": 5},
   "chest": {
     "chance": 0.04,
     "tiers": [
