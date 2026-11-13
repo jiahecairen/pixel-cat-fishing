@@ -26,6 +26,7 @@ data/           鱼种、数值、小猫选项        JSON
 | `core/journey.gd` | 活动循环：钓鱼 → 满篓闲置 → 航行 → 走路 → 摆摊 → 返航，以及自由走动 | （新增） |
 | `core/economy.gd` | 入篓、逐条出售、偷吃、木箱结算，全部幂等 | （ECO-001） |
 | `core/upgrades.gd` | 金币升级 | （新增） |
+| `core/inventory.gd` | 物品栏：数量、能否使用、扣除、宝箱抽取；使用效果在 `Game.use_item` | （新增） |
 | `core/clock.gd` | 时间源，测试时可替换 | — |
 | `io/config_loader.gd` | 读取并校验 `data/*.json` | ConfigLoader |
 | `io/save_service.gd` | 原子存档与 .bak 回退 | SaveService |
@@ -34,7 +35,7 @@ data/           鱼种、数值、小猫选项        JSON
 | `platform/desktop_adapter.gd` | 桌面实现：悬浮窗、穿透、原生拖动、通知 | DesktopWindow |
 | `presentation/main.gd` | 入口：视图模式、镜头、输入、HUD、事件反馈 | — |
 | `presentation/world.gd` | 画横版世界：海、船、码头、小镇、摊位、顾客、居民 | CatPresenter |
-| `presentation/menu.gd` / `wardrobe.gd` | 菜单面板 / 捏猫面板 | — |
+| `presentation/menu.gd` / `wardrobe.gd` / `bag.gd` | 菜单面板 / 捏猫面板 / 物品栏面板 | — |
 
 ## 时间与推进
 

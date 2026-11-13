@@ -44,6 +44,19 @@ static func load_balance(path: String = "res://data/balance.json") -> Dictionary
 			if not (t is Dictionary) or float(t.get("weight", 0)) <= 0 or int(t.get("gold_min", -1)) < 0 or int(t.get("gold_max", -1)) < int(t.get("gold_min", 0)):
 				push_error("balance.json chest.tiers 有非法条目: " + str(t))
 				return {}
+	var seen_items := {}
+	for it in b.get("items", []):
+		if not (it is Dictionary and it.has("id") and it.has("name") and it.has("sprite")) or seen_items.has(it.get("id")):
+			push_error("balance.json items 有缺字段或重复 id 的条目: " + str(it))
+			return {}
+		seen_items[it["id"]] = true
+		var use := str(it.get("use", ""))
+		if not use in ["", "gold", "lucky", "bell"]:
+			push_error("balance.json items.%s 的 use 不认识: %s" % [it["id"], use])
+			return {}
+		if use == "gold" and int(it.get("gold_max", -1)) < int(it.get("gold_min", 0)):
+			push_error("balance.json items.%s 的金币范围非法" % it["id"])
+			return {}
 	var town = b.get("town")
 	if not town is Dictionary:
 		push_error("balance.json 缺少 town")

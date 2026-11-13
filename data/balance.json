@@ -114,6 +114,67 @@
         "gold_min": 300,
         "gold_max": 500
       }
-    ]
-  }
+    ],
+    "item_chance": 0.6
+  },
+  "items": [
+    {
+      "id": "bottle",
+      "name": "漂流瓶",
+      "desc": "打开看看有什么",
+      "sprite": "item_bottle",
+      "weight": 25,
+      "use": "gold",
+      "gold_min": 10,
+      "gold_max": 60
+    },
+    {
+      "id": "lucky_bait",
+      "name": "幸运鱼饵",
+      "desc": "十分钟内更走运",
+      "sprite": "item_lucky_bait",
+      "weight": 20,
+      "use": "lucky",
+      "minutes": 10,
+      "rarity_bonus": 0.6,
+      "chest_mult": 2.0
+    },
+    {
+      "id": "bell",
+      "name": "招财铃",
+      "desc": "接下来五单翻倍",
+      "sprite": "item_bell",
+      "weight": 15,
+      "use": "bell",
+      "sales": 5,
+      "price_mult": 2.0
+    },
+    {
+      "id": "map_piece",
+      "name": "藏宝图碎片",
+      "desc": "集齐四片能寻宝",
+      "sprite": "item_map_piece",
+      "weight": 10,
+      "use": "gold",
+      "need": 4,
+      "gold_min": 400,
+      "gold_max": 600
+    },
+    {
+      "id": "pearl",
+      "name": "珍珠",
+      "desc": "亮晶晶的很值钱",
+      "sprite": "item_pearl",
+      "weight": 5,
+      "use": ""
+    },
+    {
+      "id": "boot",
+      "name": "旧靴子",
+      "desc": "不知道是谁的",
+      "sprite": "item_boot",
+      "weight": 25,
+      "use": ""
+    }
+  ]
 }

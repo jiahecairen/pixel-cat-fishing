@@ -14,6 +14,7 @@ const FishingSystem := preload("res://core/fishing_system.gd")
 const Pomodoro := preload("res://core/pomodoro.gd")
 const Upgrades := preload("res://core/upgrades.gd")
 const Journey := preload("res://core/journey.gd")
+const Inventory := preload("res://core/inventory.gd")
 
 const DURATION_KEYS := ["focus_min", "short_break_min", "long_break_min"]
 
@@ -23,6 +24,7 @@ var fishing: FishingSystem
 var pomodoro: Pomodoro
 var upgrades: Upgrades
 var journey: Journey
+var inventory: Inventory
 var fish_list: Array = []
 var fish_by_id: Dictionary = {}
 var dirty: bool = false     # 有需要落盘的变化
@@ -35,6 +37,8 @@ var _free_multiplier: float = 2.0
 var _last_cp_state: int = 0
 var _rng: RandomNumberGenerator
 var _chest_cfg: Dictionary = {}
+var _base_chest: float = 0.0     # 宝箱基础概率（幸运鱼饵生效时翻倍）
+var _base_rarity: float = 0.0    # 鱼饵升级带来的稀有度加成（幸运鱼饵生效时再加）
 
 func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock, rng: RandomNumberGenerator) -> void:
 	_cfg = balance
@@ -48,7 +52,9 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	fishing = FishingSystem.new(balance["fishing"], fish_table, rng)
 	_rng = rng
 	_chest_cfg = balance.get("chest", {})
-	fishing.chest_chance = float(_chest_cfg.get("chance", 0.0)) if not _chest_cfg.get("tiers", []).is_empty() else 0.0
+	_base_chest = float(_chest_cfg.get("chance", 0.0)) if not _chest_cfg.get("tiers", []).is_empty() else 0.0
+	fishing.chest_chance = _base_chest
+	inventory = Inventory.new(balance.get("items", []))
 	journey = Journey.new(state.journey, balance["town"], rng)
 	# 番茄钟用一份"生效配置"：默认值来自 balance.json，玩家在设置里改过的时长覆盖它
 	_pomo_cfg = balance["pomodoro"].duplicate(true)
@@ -81,6 +87,7 @@ func tick() -> Array:
 func _tick() -> Array:
 	var now: int = _clock.now_ms()
 	var events: Array = []
+	_refresh_modifiers(now)
 
 	var p := pomodoro.tick(now)
 	if p == "focus_done" or p == "focus_done_long":
@@ -97,7 +104,10 @@ func _tick() -> Array:
 			dirty = true
 		return events
 	if int(state.journey["paused_at_ms"]) != 0:
-		journey.shift(maxi(0, now - int(state.journey["paused_at_ms"])))
+		var paused_for := maxi(0, now - int(state.journey["paused_at_ms"]))
+		journey.shift(paused_for)
+		if int(state.effects["lucky_until_ms"]) > 0:      # 休息不消耗幸运鱼饵的时间
+			state.effects["lucky_until_ms"] = int(state.effects["lucky_until_ms"]) + paused_for
 		state.journey["paused_at_ms"] = 0
 		dirty = true
 
@@ -208,7 +218,9 @@ func _tick_fishing(now: int, events: Array) -> void:
 	if fish_id == FishingSystem.CHEST:
 		var loot := _roll_chest()
 		if economy.open_chest(state, state.new_id("c"), int(loot["gold"])):
-			events.append({"type": "chest", "gold": loot["gold"], "tier": loot["tier"]})
+			if loot["item"] != "":
+				inventory.add(state, loot["item"])
+			events.append({"type": "chest", "gold": loot["gold"], "tier": loot["tier"], "item": loot["item"]})
 			dirty = true
 	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
 		events.append({"type": "catch", "fish_id": fish_id})
@@ -232,7 +244,13 @@ func _tick_trip(now: int, events: Array) -> void:
 	dirty = true
 	match r:
 		"sale":
-			var sale := economy.sell_one(state, state.new_id("s"), focus_multiplier())
+			var mult := focus_multiplier()
+			var belled := int(state.effects["bell_sales"]) > 0     # 招财铃：这一单翻倍
+			if belled:
+				mult *= float(inventory.by_id.get("bell", {}).get("price_mult", 1.0))
+			var sale := economy.sell_one(state, state.new_id("s"), mult)
+			if belled and not sale.is_empty():
+				state.effects["bell_sales"] = int(state.effects["bell_sales"]) - 1
 			if not sale.is_empty():
 				events.append({"type": "sale", "fish_id": sale["fish_id"], "gold": sale["gold"]})
 			if state.basket.is_empty():
@@ -260,7 +278,52 @@ func _roll_chest() -> Dictionary:
 		if r < 0.0:
 			pick = t
 			break
-	return {"tier": pick.get("name", ""), "gold": _rng.randi_range(int(pick["gold_min"]), int(pick["gold_max"]))}
+	var gold := _rng.randi_range(int(pick["gold_min"]), int(pick["gold_max"]))
+	var item := ""
+	var item_chance := float(_chest_cfg.get("item_chance", 0.0))
+	if item_chance > 0.0 and not inventory.defs.is_empty() and _rng.randf() < item_chance:
+		item = inventory.roll(_rng)
+	return {"tier": pick.get("name", ""), "gold": gold, "item": item}
+
+## 覆盖宝箱的基础概率（测试和调试用）。
+func set_chest_chance(p: float) -> void:
+	_base_chest = clampf(p, 0.0, 1.0)
+	_refresh_modifiers(_clock.now_ms())
+
+func lucky_active() -> bool:
+	return _clock.now_ms() < int(state.effects["lucky_until_ms"])
+
+func lucky_remaining_ms() -> int:
+	return maxi(0, int(state.effects["lucky_until_ms"]) - _clock.now_ms())
+
+## 使用一个物品。返回 {"ok": 是否用成, "use": 效果类型, "gold": 得到的金币（没有则为 0）}。
+func use_item(id: String) -> Dictionary:
+	if not inventory.can_use(state, id):
+		return {"ok": false, "use": "", "gold": 0}
+	var d: Dictionary = inventory.by_id[id]
+	var now: int = _clock.now_ms()
+	inventory.consume(state, id)
+	var gold := 0
+	match str(d["use"]):
+		"gold":
+			gold = _rng.randi_range(int(d["gold_min"]), int(d["gold_max"]))
+			state.wallet_gold += gold
+		"lucky":
+			# 连着用会把时间接上去，而不是从现在重新算
+			state.effects["lucky_until_ms"] = maxi(now, int(state.effects["lucky_until_ms"])) + int(d["minutes"]) * 60000
+		"bell":
+			state.effects["bell_sales"] = int(state.effects["bell_sales"]) + int(d["sales"])
+	_refresh_modifiers(now)
+	state.revision += 1
+	dirty = true
+	return {"ok": true, "use": str(d["use"]), "gold": gold}
+
+## 幸运鱼饵生效期间：稀有鱼权重更高、宝箱概率翻倍。
+func _refresh_modifiers(now: int) -> void:
+	var lucky := now < int(state.effects["lucky_until_ms"])
+	var d: Dictionary = inventory.by_id.get("lucky_bait", {})
+	fishing.rarity_bonus = _base_rarity + (float(d.get("rarity_bonus", 0.0)) if lucky else 0.0)
+	fishing.chest_chance = minf(1.0, _base_chest * (float(d.get("chest_mult", 1.0)) if lucky else 1.0))
 
 func _finish_focus(is_long: bool) -> Dictionary:
 	var pc: Dictionary = _pomo_cfg
@@ -280,7 +343,8 @@ func _clamp_setting(key: String, v: int) -> int:
 
 func _apply_upgrades() -> void:
 	state.basket_capacity = _base_capacity + upgrades.level(state, "basket") * int(upgrades.param("basket", "capacity_per_level", 0))
-	fishing.rarity_bonus = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0)
+	_base_rarity = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0)
+	fishing.rarity_bonus = _base_rarity
 	_free_multiplier = float(_cfg["fishing"]["free_wait_multiplier"])
 	if upgrades.has("rod"):
 		var table: Array = _cfg["upgrades"]["rod"].get("free_wait_multipliers", [])

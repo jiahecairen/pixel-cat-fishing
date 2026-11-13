@@ -638,6 +638,7 @@ BTN = {
     "town": ["...r...", "..rrr..", ".rrrrr.", ".hhhhh.", ".hohch.", ".hohhh.", "......."],
     "view": ["ww...ww", "w.....w", "..www..", "..www..", "..www..", "w.....w", "ww...ww"],
     "skip": [".......", "c..c.c.", "cc.ccc.", "cccccc.", "cc.ccc.", "c..c.c.", "......."],
+    "bag": [".......", "..hhh..", ".h...h.", ".ooooo.", ".oonoo.", ".ooooo.", "......."],
     "gear": ["..a.a..", ".aaaaa.", "aaWWWaa", ".aW.Wa.", "aaWWWaa", ".aaaaa.", "..a.a.."],
     "menu": [".......", ".wwwww.", ".......", ".wwwww.", ".......", ".wwwww.", "......."],
     "plus": [".......", "...g...", "...g...", ".ggggg.", "...g...", "...g...", "......."],
@@ -728,6 +729,54 @@ def chest(open_=False):
     return c
 
 
+# ---------------------------------------------------------------- 物品图标（16×16）
+def item_icon(kind):
+    c = Canvas(16, 16)
+    if kind == "bottle":
+        c.rect(6, 5, 10, 13, "c"); c.rect(7, 2, 9, 4, "c")
+        c.rect(7, 1, 9, 1, "o")                       # 木塞
+        c.rect(7, 8, 9, 11, "w"); c.set(8, 9, "a")    # 里面的纸条
+        c.pts([(6, 6), (6, 7)], "W")
+    elif kind == "lucky_bait":
+        c.rect(4, 6, 11, 13, "g"); c.rect(4, 12, 11, 13, "G")   # 罐子
+        c.rect(3, 4, 12, 5, "y")                               # 盖子
+        c.rows(6, 7, ["W.W", ".W.", "W.W"])                    # 四叶草记号
+        c.set(4, 6, "W")
+    elif kind == "bell":
+        c.rect(5, 5, 10, 11, "y"); c.rect(4, 10, 11, 12, "y"); c.rect(6, 3, 9, 4, "y")
+        c.rect(7, 1, 8, 2, "H")
+        c.rect(9, 5, 10, 11, "H"); c.rect(4, 12, 11, 12, "H")
+        c.rect(7, 13, 8, 14, "r")
+        c.pts([(6, 5), (6, 6)], "W")
+    elif kind == "map_piece":
+        c.rows(2, 2, ["wwwwwwwww...", "wwwwwwwwww..", "wwwwwwwwwww.", "wwwwwwwwwww.", "wwwwwwwwww..", "wwwwwwww....",
+                      "wwwwwwwww...", "wwwwwwwwwww.", "wwwwwwwwwww.", "wwwwwwwww...", "wwwwwww.....", "wwwww......."])
+        c.pts([(4, 5), (5, 6), (6, 6), (7, 7), (8, 8), (9, 8)], "o")     # 路线
+        c.rows(9, 9, ["r.r", ".r.", "r.r"])                              # 藏宝点
+        c.pts([(3, 11), (4, 12)], "h")
+    elif kind == "pearl":
+        c.rows(2, 8, ["a..........a", "aa........aa", ".aaaaaaaaaa.", "..aaaaaaaa..", "...AAAAAA..."])   # 贝壳
+        c.ellipse(8, 6, 3, 3, "W")
+        c.pts([(9, 7), (10, 6), (9, 8)], "c"); c.set(7, 5, "p")
+    elif kind == "boot":
+        c.rect(5, 2, 9, 10, "o"); c.rect(5, 2, 9, 3, "n")
+        c.rect(5, 9, 13, 12, "o"); c.rect(5, 13, 13, 13, "O")
+        c.rect(9, 5, 9, 9, "O"); c.pts([(6, 5), (7, 7), (6, 9)], "h")   # 鞋带
+        c.pts([(12, 10), (11, 9)], "n")
+    c.outline()
+    return c
+
+
+def slot(selected=False):
+    """物品栏的一个格子（22×22）：0=普通 1=选中"""
+    c = Canvas(22, 22)
+    c.rect(0, 0, 21, 21, "y" if selected else "A")
+    c.rect(1, 1, 20, 20, "K")
+    c.rect(2, 2, 19, 19, "A")
+    c.rect(2, 2, 19, 2, "K"); c.rect(2, 2, 2, 19, "K")
+    return c
+
+
 def sparkle():
     """闪光粒子（特效不描边）：0=大 1=小"""
     a = Canvas(5, 5); a.rows(0, 0, ["..W..", "..y..", "WyWyW", "..y..", "..W.."])
@@ -750,6 +799,7 @@ LABELS = [
     "方向键走动", "空格键互动", "空格键去小镇",
     "小猫的家", "裁缝铺", "渔具店", "空格键进入", "空格键聊天",
     "确定要退出吗", "退出", "取消", "宝箱",
+    "物品栏", "使用", "空空如也", "生效中", "去钓宝箱吧",
     "欢迎光临", "空格键出门", "空格键看货", "空格键照镜子", "空格键看图鉴", "空格键看统计",
     "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
 ]
@@ -764,9 +814,11 @@ def labels():
     names = list(LABELS)
     extra = json.load(open(os.path.join(ROOT, "data", "fish.json"), encoding="utf-8"))["fish"]
     cat_cfg = json.load(open(os.path.join(ROOT, "data", "cat.json"), encoding="utf-8"))
-    for f in extra + cat_cfg["furs"] + cat_cfg["patterns"] + cat_cfg["hats"]:
-        if f["name"] not in names:
-            names.append(f["name"])
+    items = json.load(open(os.path.join(ROOT, "data", "balance.json"), encoding="utf-8")).get("items", [])
+    for f in extra + cat_cfg["furs"] + cat_cfg["patterns"] + cat_cfg["hats"] + items:
+        for key in ("name", "desc"):
+            if f.get(key) and f[key] not in names:
+                names.append(f[key])
     font_ = ImageFont.truetype(FONT_FILE, 10)
     rects, strips = {}, []
     for n in names:
@@ -836,6 +888,7 @@ def build():
         "pips": save(pips(), "pips"),
         "sparkle": save(sparkle(), "sparkle"),
         "chest": save(sheet([chest(), chest(True)]), "chest"),
+        "slot": save(sheet([slot(), slot(True)]), "slot"),
         "splash": save(splash(), "splash"),
         "hold": save(hold(), "hold"),
         "room_door": save(room_door(), "room_door"),
@@ -850,6 +903,8 @@ def build():
         "rug": save(rug(), "rug"),
         "labels": labels(),
     }
+    for k in ("bottle", "lucky_bait", "bell", "map_piece", "pearl", "boot"):
+        made["item_" + k] = save(item_icon(k), "item_" + k)
     for k in range(3):
         made["villager_%d" % k] = save(sheet([villager(k, 0), villager(k, 1)]), "villager_%d" % k)
     for n in BTN:

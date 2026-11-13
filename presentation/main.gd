@@ -22,6 +22,7 @@ const Labels := preload("res://presentation/labels.gd")
 const Menu := preload("res://presentation/menu.gd")
 const Wardrobe := preload("res://presentation/wardrobe.gd")
 const World := preload("res://presentation/world.gd")
+const Bag := preload("res://presentation/bag.gd")
 
 const MINI_VIEW := Vector2i(128, 96)
 const FULL_MIN_H := 180          # 全画面至少能看到这么高的世界
@@ -34,7 +35,7 @@ const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
 	"stall_front", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "cloud", "hills",
-	"tomato", "coin", "basket", "hold", "chest", "room_door", "room_window", "counter", "shelf_tackle",
+	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_view"]
@@ -48,6 +49,7 @@ const BTN_MAIN := Rect2(78, 3, 11, 11)
 const BTN_TOWN := Rect2(89, 3, 11, 11)
 const BTN_MENU := Rect2(100, 3, 11, 11)     # 齿轮：只打开设置
 const BTN_VIEW := Rect2(111, 3, 11, 11)
+const BTN_BAG := Rect2(100, 14, 11, 11)      # 物品栏
 const BTN_CLOSE := Rect2(111, 14, 11, 11)
 # 退出确认框
 const QUIT_BOX := Rect2(15, 30, 110, 36)
@@ -68,6 +70,7 @@ const FPS_HIDDEN := 5            # 窗口最小化时的帧率
 var clock: Clock
 var menu: Menu
 var wardrobe: Wardrobe
+var bag: Bag
 var world: World
 var cat_cfg: Dictionary = {}
 var tex: Dictionary = {}
@@ -140,6 +143,7 @@ func _ready() -> void:
 	game = Game.new(balance, fish, state, clock, rng)
 	menu = Menu.new(self)
 	wardrobe = Wardrobe.new(self)
+	bag = Bag.new(self)
 	world = World.new(self)
 	wardrobe.open = not state.cat.get("created", false)   # 第一次启动先捏猫
 	_apply_debug_env()
@@ -153,6 +157,8 @@ func _ready() -> void:
 	for h in cat_cfg["hats"]:
 		if h.get("sprite", "") != "":
 			tex["cat/" + h["sprite"]] = load("res://assets/cat/%s.png" % h["sprite"])
+	for it in balance.get("items", []):
+		tex[it["sprite"]] = load("res://assets/sprites/%s.png" % it["sprite"])
 	for n in SFX:
 		sfx[n] = load("res://assets/sfx/%s.wav" % n)
 	for i in 4:
@@ -191,7 +197,12 @@ func _apply_debug_env() -> void:
 		for i in OS.get_environment("CATFISH_FILL").to_int():
 			game.economy.add_catch(st, st.new_id("c"), ids[i % ids.size()], false)
 	if OS.has_environment("CATFISH_CHEST"):       # 调试：每一竿都钓到宝箱
-		game.fishing.chest_chance = 1.0
+		game.set_chest_chance(1.0)
+	if OS.has_environment("CATFISH_ITEMS"):       # 调试：开局每种物品给这么多个，并打开物品栏
+		for d in game.inventory.defs:
+			game.inventory.add(st, d["id"], OS.get_environment("CATFISH_ITEMS").to_int())
+		wardrobe.open = false
+		bag.open = true
 	if OS.has_environment("CATFISH_BREAK"):       # 调试：开局直接处于番茄休息中
 		st.pomodoro["phase"] = Pomodoro.Phase.SHORT_BREAK
 		st.pomodoro["phase_end_ms"] = game.now_ms() + 3600000
@@ -289,7 +300,7 @@ func _update_roam(dt: float) -> void:
 	var dir := 0
 	if _debug_dir != 0 and Engine.get_frames_drawn() >= _debug_dir_from:
 		dir = _debug_dir
-	elif not mini and not menu.open and not wardrobe.open and get_window().has_focus():
+	elif not mini and not panel_open() and get_window().has_focus():
 		for k in KEYS_LEFT:
 			if Input.is_key_pressed(k):
 				dir -= 1
@@ -567,6 +578,10 @@ func _on_event(e: Dictionary) -> void:
 			play("rare")
 			_sparkles(_world_to_view(world.cat_pos + Vector2(17, -12)), 16 if e["tier"] == "big" else 9, 9.0)
 			_float("+%d" % e["gold"], "coin", world.cat_pos + Vector2(30, -4))
+			if e.get("item", "") != "":
+				var it: Dictionary = game.inventory.by_id.get(e["item"], {})
+				if tex.has(it.get("sprite", "")):
+					_float("+1", it["sprite"], world.cat_pos + Vector2(34, 8))
 		"basket_full":
 			if not _full_notified:
 				_full_notified = true
@@ -635,12 +650,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _confirm_quit:
 				if event.keycode == KEY_ESCAPE:
 					_confirm_quit = false
+			elif event.keycode == KEY_TAB or event.keycode == KEY_I:
+				toggle_bag()               # Tab / I 开关物品栏
+			elif bag.open:
+				if event.keycode == KEY_ESCAPE:
+					bag.open = false
+					_update_polygon()
+				else:
+					bag.key(event.keycode)     # 方向键选格子，空格使用
 			elif (menu.open or wardrobe.open) and event.keycode == KEY_ESCAPE:
 				menu.open = false          # Esc 关闭面板（从店里出来）
 				if wardrobe.open:
 					wardrobe.close()
 				_update_polygon()
-			elif not menu.open and not wardrobe.open and event.keycode in KEYS_ACT:
+			elif not panel_open() and event.keycode in KEYS_ACT:
 				_interact()
 		return
 	if event is InputEventMouseMotion:
@@ -672,6 +695,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		play("click")
 		if wardrobe.open:
 			wardrobe.close()
+		bag.open = false
 		if menu.open:
 			menu.open = false
 		else:
@@ -681,12 +705,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif BTN_VIEW.has_point(p):
 		play("click")
 		toggle_view_mode()
+	elif BTN_BAG.has_point(p):
+		toggle_bag()
 	elif BTN_CLOSE.has_point(p) and _quit_button_visible():
 		play("click")
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(p):
 		pass
-	elif menu.click(p) or wardrobe.click(p):
+	elif bag.click(p) or menu.click(p) or wardrobe.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_go_to_town()
@@ -699,7 +725,21 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## 商店、图鉴、统计、设置、换形象任何一个面板开着时，不显示退出按钮，免得把它当成"关闭面板"点错。
 func _quit_button_visible() -> bool:
-	return not menu.open and not wardrobe.open
+	return not panel_open()
+
+
+## 有任何面板（菜单、换形象、物品栏）开着。
+func panel_open() -> bool:
+	return menu.open or wardrobe.open or bag.open
+
+
+func toggle_bag() -> void:
+	play("click")
+	menu.open = false
+	if wardrobe.open:
+		wardrobe.close()
+	bag.toggle()
+	_update_polygon()
 
 
 func _draw_quit_confirm() -> void:
@@ -754,6 +794,7 @@ func _draw() -> void:
 	_draw_hud(now)
 	menu.draw()
 	wardrobe.draw()
+	bag.draw()
 	if _confirm_quit:
 		_draw_quit_confirm()
 	draw_set_transform(Vector2.ZERO)
@@ -782,6 +823,7 @@ func _draw_hud(now: int) -> void:
 	_tex_frame("btn_gear", BTN_MENU.position, 1 if menu.open and menu.tab == 3 else 0, 2)
 	if adapter.is_overlay():
 		_tex_frame("btn_view", BTN_VIEW.position, 0, 2)
+	_tex_frame("btn_bag", BTN_BAG.position, 1 if bag.open else 0, 2)
 	if _quit_button_visible():
 		_tex_frame("btn_close", BTN_CLOSE.position, 1 if _confirm_quit else 0, 2)
 
@@ -797,7 +839,7 @@ func _draw_hud(now: int) -> void:
 		_text("%d/%d" % [game.state.basket.size(), game.state.basket_capacity], Vector2(69, 17),
 				Pal.L_R if full else Pal.L_W)
 	# 完整窗口里的操作提示
-	if not mini and not menu.open and not wardrobe.open:
+	if not mini and not panel_open():
 		if interior != "":
 			label("方向键走动", Vector2(17, 30), Pal.L_W)
 			var spot: String = world.room_spot(interior)
@@ -825,7 +867,8 @@ func _draw_floats(t: int) -> void:
 			keep.append(f)
 			var pos: Vector2 = f["pos"] + Vector2(0, -int(age / 180))
 			draw_texture(tex[f["icon"]], pos)
-			_text(f["text"], pos + Vector2(12, 2), Pal.L_Y, true)
+			var icon: Texture2D = tex[f["icon"]]
+			_text(f["text"], pos + Vector2(icon.get_width() + 3, maxi(2, icon.get_height() / 2 - 2)), Pal.L_Y, true)
 	floats = keep
 
 

@@ -6,7 +6,7 @@
 
 | 项目 | 命令 | 结果 |
 |---|---|---|
-| 单元测试 143 项 | `godot --headless --path . --script res://tests/run_tests.gd` | 通过 |
+| 单元测试 166 项 | `godot --headless --path . --script res://tests/run_tests.gd` | 通过 |
 | 8 小时逻辑模拟 | `godot --headless --path . --script res://tests/sim_long_run.gd` | 通过 |
 | 工程无报错启动 | `godot --headless --path . --quit-after 30` | 通过 |
 | 导出包可加载 | 用 Linux 引擎加载导出的 `.pck` | 通过 |
@@ -47,5 +47,6 @@
 | C14 | 最小化后 CPU 占用下降，恢复后正常 | 未运行 |
 | C15 | 多显示器：拖到另一块屏、拔掉外接屏后重启 | 未运行 |
 | C20 | 宝箱：提上来与打开的动画、金币当场入账且鱼篓不变、概率与金额合适 | 通过（用户 11-13） |
+| C21 | 物品栏：背包按钮与 Tab/I 打开、选中、使用四种可用物品、效果生效、两种视图的显示 | 未运行 |
 | C16 | 真实连续运行 8 小时无异常 | 未运行（用户 11-13：先忽略） |
 | C17 | 事件日志写在 `~/Library/Application Support/Godot/app_userdata/CatFishing/logs/events.log` | 未运行 |

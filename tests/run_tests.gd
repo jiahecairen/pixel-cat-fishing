@@ -41,6 +41,7 @@ func _init() -> void:
 		test_upgrades_and_settings(balance, fish)
 		test_cat_config()
 		test_chest(balance, fish)
+		test_inventory(balance, fish)
 		test_checkpoint(balance, fish)
 		test_event_log()
 		test_save()
@@ -152,7 +153,7 @@ func test_game_focus(balance: Dictionary, fish: Array) -> void:
 	print("game: focus（木箱结算）")
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(3))
-	g.fishing.chest_chance = 0.0      # 这组用例要精确对账鱼的收入，宝箱另有专门的用例
+	g.set_chest_chance(0.0)      # 这组用例要精确对账鱼的收入，宝箱另有专门的用例
 	check(g.start_focus(), "开始专注")
 	var ev := _run(g, clock, 25 * 60 + 1)
 	var caught := _count(ev, "catch")
@@ -362,7 +363,7 @@ func test_chest(balance: Dictionary, fish: Array) -> void:
 	# 概率调到 100%：每一竿都是宝箱
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(21))
-	g.fishing.chest_chance = 1.0
+	g.set_chest_chance(1.0)
 	var ev := _run(g, clock, 30 * 60, 500)
 	var chests: Array = ev.filter(func(e): return e["type"] == "chest")
 	check(chests.size() >= 10 and _count(ev, "catch") == 0, "每一竿都钓到宝箱 (%d 个)" % chests.size())
@@ -382,7 +383,7 @@ func test_chest(balance: Dictionary, fish: Array) -> void:
 	check(not g.economy.open_chest(g.state, g.state.processed_catch_ids[-1], 999) and g.state.wallet_gold == sum, "同一个宝箱不能开两次")
 	# 专注时也能钓到，同样直接入账
 	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(22))
-	g2.fishing.chest_chance = 1.0
+	g2.set_chest_chance(1.0)
 	g2.start_focus()
 	var ev2 := _run(g2, g2._clock, 10 * 60, 500)
 	check(_count(ev2, "chest") > 0 and g2.state.session_haul.is_empty() and g2.state.wallet_gold > 0, "专注时钓到宝箱也直接入账，不进木箱")
@@ -399,7 +400,7 @@ func test_chest(balance: Dictionary, fish: Array) -> void:
 	check(g4.fishing.chest_chance == 0.0, "没有 chest 配置时概率为 0")
 	# 咬钩后、提竿前重启：断点里的宝箱能恢复，且只开一次
 	var g5 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(25))
-	g5.fishing.chest_chance = 1.0
+	g5.set_chest_chance(1.0)
 	var c5 = g5._clock
 	var guard := 0
 	while g5.fishing.state != Fishing.State.HOOKED and guard < 2000:
@@ -409,6 +410,74 @@ func test_chest(balance: Dictionary, fish: Array) -> void:
 	check(g6.fishing.hooked_fish == Fishing.CHEST, "重启后钩上的宝箱还在")
 	var ev6 := _run(g6, c5, 4, 100)
 	check(_count(ev6, "chest") == 1, "提上来只开一次")
+
+func test_inventory(balance: Dictionary, fish: Array) -> void:
+	print("inventory & items")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
+	var inv = g.inventory
+	check(inv.defs.size() == 6 and inv.owned(g.state).is_empty(), "6 种物品，开局物品栏为空")
+	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
+	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
+	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
+	check(not g.use_item("bottle")["ok"], "没有的物品不能用")
+	# 漂流瓶：得金币
+	inv.add(g.state, "bottle")
+	var r := g.use_item("bottle")
+	check(r["ok"] and r["gold"] >= 10 and r["gold"] <= 60 and g.state.wallet_gold == r["gold"], "漂流瓶开出 10–60 金币 (%d)" % r["gold"])
+	check(inv.count(g.state, "bottle") == 0 and not g.state.inventory.has("bottle"), "用掉后从物品栏消失")
+	# 藏宝图碎片：集齐 4 片才能用
+	inv.add(g.state, "map_piece", 3)
+	check(not inv.can_use(g.state, "map_piece") and not g.use_item("map_piece")["ok"], "3 片不够")
+	inv.add(g.state, "map_piece", 2)
+	var w := g.state.wallet_gold
+	r = g.use_item("map_piece")
+	check(r["ok"] and r["gold"] >= 400 and r["gold"] <= 600 and g.state.wallet_gold == w + r["gold"], "4 片拼成藏宝图，得 400–600 金币 (%d)" % r["gold"])
+	check(inv.count(g.state, "map_piece") == 1, "5 片用掉 4 片剩 1 片")
+	# 幸运鱼饵：10 分钟内稀有度和宝箱概率提高，到期恢复
+	inv.add(g.state, "lucky_bait", 2)
+	var base_chest: float = g.fishing.chest_chance
+	check(g.use_item("lucky_bait")["ok"] and g.lucky_active(), "幸运鱼饵生效")
+	check(is_equal_approx(g.fishing.rarity_bonus, 0.6) and is_equal_approx(g.fishing.chest_chance, base_chest * 2.0), "稀有度 +0.6，宝箱概率翻倍")
+	g.use_item("lucky_bait")
+	check(g.lucky_remaining_ms() == 20 * 60000, "连着用两个，时间接成 20 分钟")
+	# 休息不消耗时间
+	g.state.pomodoro["phase"] = Pomodoro.Phase.SHORT_BREAK; g.state.pomodoro["phase_end_ms"] = clock.t + 5 * 60000
+	_run(g, clock, 5 * 60 + 2)
+	check(absi(g.lucky_remaining_ms() - 20 * 60000) < 5000, "番茄休息的 5 分钟不算进去 (剩 %d 秒)" % (g.lucky_remaining_ms() / 1000))
+	_run(g, clock, 20 * 60 + 5)
+	check(not g.lucky_active() and is_equal_approx(g.fishing.rarity_bonus, 0.0) and is_equal_approx(g.fishing.chest_chance, base_chest), "到期后恢复原样")
+	# 招财铃：接下来 5 单翻倍，第 6 单恢复
+	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(32))
+	g2.set_chest_chance(0.0)
+	for i in 7:
+		g2.economy.add_catch(g2.state, "b%d" % i, "bass", false)
+	g2.inventory.add(g2.state, "bell")
+	check(g2.use_item("bell")["ok"] and g2.state.effects["bell_sales"] == 5, "招财铃：记下 5 单")
+	g2.go_to_town()
+	var sales: Array = _run(g2, g2._clock, 240).filter(func(e): return e["type"] == "sale")
+	var golds: Array = sales.map(func(e): return e["gold"])
+	check(golds == [24, 24, 24, 24, 24, 12, 12], "前 5 单 24，后 2 单 12: %s" % str(golds))
+	check(g2.state.effects["bell_sales"] == 0, "铃用完")
+	# 宝箱会开出物品
+	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(33))
+	g3.set_chest_chance(1.0)
+	var ev := _run(g3, g3._clock, 4 * 3600, 1000)
+	var chests: Array = ev.filter(func(e): return e["type"] == "chest")
+	var with_item: Array = chests.filter(func(e): return e["item"] != "")
+	var rate := float(with_item.size()) / float(chests.size())
+	check(chests.size() > 100 and rate > 0.45 and rate < 0.75, "约 60%% 的宝箱带物品 (%d/%d)" % [with_item.size(), chests.size()])
+	var total := 0
+	for id in g3.state.inventory:
+		total += int(g3.state.inventory[id])
+	check(total == with_item.size(), "开出的物品都进了物品栏 (%d)" % total)
+	check(g3.inventory.owned(g3.state).size() == 6, "跑够久，6 种物品都开出来过")
+	# 存档
+	var s4 := GameState.new(); s4.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
+	check(s4.inventory == g.state.inventory and typeof(s4.inventory["boot"]) == TYPE_INT and s4.effects == g.state.effects, "物品栏和效果随存档恢复")
+	var old: Dictionary = g.state.to_dict(); old.erase("inventory"); old.erase("effects")
+	var s5 := GameState.new()
+	check(s5.from_dict(old) and s5.inventory.is_empty() and s5.effects["bell_sales"] == 0, "旧存档没有物品栏字段也能读")
 
 func test_checkpoint(balance: Dictionary, fish: Array) -> void:
 	print("fishing checkpoint")

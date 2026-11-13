@@ -65,7 +65,11 @@ func _init() -> void:
 			g.end_roam(act.randf(), act.randf())
 		elif r < 0.0047:
 			g.roam_board(act.randf())
-		elif r < 0.00475:
+		elif r < 0.0056:
+			var owned: Array = g.inventory.owned(g.state)
+			if not owned.is_empty():
+				gold_in += int(g.use_item(owned[act.randi() % owned.size()])["gold"])
+		elif r < 0.00565:
 			clock.t += act.randi_range(60_000, 3 * 3600_000)    # 电脑睡了一觉
 		# ---- 推进 ----
 		var before_fish: int = int(g.state.stats["total_fish"])
@@ -84,6 +88,9 @@ func _init() -> void:
 		require(g.journey.on_boat() or not g.fishing.is_active(), "人在镇上却在钓鱼", i)
 		require(not (g.pomodoro.is_break() and g.fishing.is_active()), "休息时还在钓鱼", i)
 		require(g.in_focus() or s.session_haul.is_empty(), "不在专注但木箱里有鱼", i)
+		require(int(s.effects["bell_sales"]) >= 0, "招财铃单数为负", i)
+		for id in s.inventory:
+			require(int(s.inventory[id]) > 0 and g.inventory.by_id.has(id), "物品栏里有数量非正或未定义的物品", i)
 		if i % 5000 == 0:
 			var sum := 0
 			for k in s.stats["fish_counts"]:
