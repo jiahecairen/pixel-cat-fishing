@@ -119,3 +119,10 @@
 - 家里的床成为互动点（空格键小睡）：只在番茄休息时可用，每段休息一次；睡 2.6 秒后"幸运"5 分钟（复用幸运鱼饵效果，稀有鱼和宝箱概率提高）。
 - `Game.nap_status()/nap()`，状态记在 `effects.napped_end_ms`；balance.json 新增 `nap.lucky_minutes`。
 - 测试 171 项通过（新增 5 项）；Linux 截图看过睡觉画面；Mac 实机待验。
+
+## 天气与昼夜（真实时间）
+- `core/weather.gd`：本地时间 → 是否下雨、昼夜暗度和暖色，全是纯函数，不存档。每 2 小时一个时段，24% 的时段会下雨，一场 60–90 分钟（总体约 15%）。
+- 下雨：咬钩等待缩短到 1/1.05，宝箱概率 ×0.95（`balance.json` 的 `weather`）；雨停恢复。`Game.weather_override` / `hour_override` 供调试。
+- 画面：昼夜染色、雨丝、水面涟漪（迷你窗只染场景区）；小猫在室外下雨时穿蓑衣、戴蓑衣帽（`assets/cat/rain_gear.png`），进屋脱掉，捏猫界面不穿。
+- 调试：`CATFISH_WEATHER=rain|clear`、`CATFISH_HOUR=0..24`。
+- 测试 186 项通过，SIM PASS；Linux 截图看过白天雨、夜晚、黄昏；Mac 实机待验。

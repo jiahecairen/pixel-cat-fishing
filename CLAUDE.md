@@ -10,7 +10,7 @@
 - **计时用时间戳**：一律经 `core/clock.gd`，禁止用帧数或 `_process` 的累计 delta 做业务计时。
 - **经济必须幂等**：鱼获、出售、结算都带 id，重复提交不能重复生效；`GameState` 是唯一的状态来源。
 - **素材只能由脚本生成**：改图改 `tools/art/generate.py`，改音效改 `tools/audio/generate.py`；只用 `tools/art/palette.py` 的颜色；新增界面文字要加进 `LABELS` 并重新生成。
-- **不做的事**：不 `git push`、不 `git reset --hard`、不 `git clean -fd`、不 `git add` 之外的批量删除；不删用户存档。
+- **不做的事**：不 `git reset --hard`、不 `git clean -fd`、不 `git add` 之外的批量删除；不删用户存档。
 
 ## 每次改动后
 
@@ -21,7 +21,7 @@
 3. 画面有改动就截图目检（`CATFISH_SHOT`，见 README 的调试变量）。
 4. 更新 `docs/ACCEPTANCE_TESTS.md`：没在真实 macOS 上验证过的一律写"未运行"，不能写"通过"。
 5. 在 `docs/DEV_LOG.md` 末尾追加一条记录；需求或决定有变化时同步 `REQUIREMENTS.md` / `DECISION_REGISTER.md`。
-6. 提交（不 push）。向用户汇报时说明：实际跑了哪些命令、结果如何、哪些没验证。
+6. 提交并打版本标签（`v0.N`，每个版本一个提交）；按用户要求推送到 GitHub `jiahecairen/pixel-cat-fishing`（本机没有 GitHub 登录信息，由云端会话推送；标签推送在会话里会被拦截，推不上去）。向用户汇报时说明：实际跑了哪些命令、结果如何、哪些没验证。
 
 ## 如实汇报
 

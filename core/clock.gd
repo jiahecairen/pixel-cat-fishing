@@ -8,6 +8,11 @@ var debug_offset_ms: float = 0.0
 func now_ms() -> int:
 	return int(Time.get_unix_time_from_system() * 1000.0 + debug_offset_ms)
 
+## 本地时间的秒数（Unix 秒 + 时区偏移），天气和昼夜用。
+func local_s() -> int:
+	var bias_s: int = int(Time.get_time_zone_from_system().get("bias", 0)) * 60
+	return now_ms() / 1000 + bias_s
+
 func today_key() -> String:
 	return day_key(0)
 

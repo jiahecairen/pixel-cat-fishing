@@ -17,6 +17,7 @@ class FakeClock:
 	var day: String = "2026-01-01"
 	func now_ms() -> int: return t
 	func today_key() -> String: return day
+	func local_s() -> int: return 43200 + 3 * 3600     # 本地 15:00，固定一个不下雨的时刻
 
 var _fails := 0
 var _checks := 0
@@ -41,6 +42,7 @@ func _init() -> void:
 		test_upgrades_and_settings(balance, fish)
 		test_cat_config()
 		test_chest(balance, fish)
+		test_weather(balance, fish)
 		test_inventory(balance, fish)
 		test_checkpoint(balance, fish)
 		test_event_log()
@@ -410,6 +412,61 @@ func test_chest(balance: Dictionary, fish: Array) -> void:
 	check(g6.fishing.hooked_fish == Fishing.CHEST, "重启后钩上的宝箱还在")
 	var ev6 := _run(g6, c5, 4, 100)
 	check(_count(ev6, "chest") == 1, "提上来只开一次")
+
+func test_weather(balance: Dictionary, fish: Array) -> void:
+	print("weather")
+	var p: float = float(balance["weather"]["rain_block_chance"])
+	# 同一时刻结果固定
+	var same := true
+	for s in range(0, 86400 * 3, 977):
+		if Weather.is_raining(s, p) != Weather.is_raining(s, p):
+			same = false
+	check(same, "同一时刻天气固定")
+	# 长期下雨占比在 10%–20% 之间，且下雨连续一段时间（不是一闪而过）
+	var rainy := 0
+	var total := 0
+	var longest := 0
+	var run := 0
+	for s in range(0, 86400 * 60, 300):
+		total += 1
+		if Weather.is_raining(s, p):
+			rainy += 1
+			run += 300
+			longest = maxi(longest, run)
+		else:
+			run = 0
+	var frac := float(rainy) / float(total)
+	check(frac > 0.10 and frac < 0.20, "下雨时间占比约 15%% (%.3f)" % frac)
+	check(longest >= 3600 and longest <= 5400 + 300, "一场雨持续 60–90 分钟 (%d 秒)" % longest)
+	var dry := true
+	for s in range(0, 86400, 600):
+		if Weather.is_raining(s, 0.0):
+			dry = false
+	check(dry, "概率 0 永远不下雨")
+	# 昼夜
+	check(is_equal_approx(Weather.daylight(12 * 3600)["dark"], 0.0), "中午不暗")
+	check(is_equal_approx(Weather.daylight(23 * 3600)["dark"], 1.0) and is_equal_approx(Weather.daylight(2 * 3600)["dark"], 1.0), "深夜最暗")
+	check(Weather.daylight(19 * 3600)["dark"] > 0.4 and Weather.daylight(19 * 3600)["dark"] < 0.6, "傍晚渐暗")
+	check(Weather.daylight(6 * 3600)["warm"] > 0.9 and Weather.daylight(6 * 3600)["dawn"], "清晨暖色")
+	check(not Weather.daylight(18 * 3600 + 1800)["dawn"] and Weather.daylight(18 * 3600 + 1800)["warm"] > 0.9, "黄昏暖色")
+	# 下雨对钓鱼的影响：咬钩快 5%，宝箱概率 ×0.95；雨停恢复
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(77))
+	check(not Weather.is_raining(clock.local_s(), p), "测试时钟固定在不下雨的时刻")
+	var chest0: float = g.fishing.chest_chance
+	g.weather_override = 1
+	var ev: Array = g.tick()
+	var got := false
+	for e in ev:
+		if e["type"] == "weather" and e["raining"]:
+			got = true
+	check(g.is_raining() and got, "下雨时发出天气事件")
+	check(is_equal_approx(g.fishing.chest_chance, chest0 * 0.95), "下雨宝箱概率 ×0.95")
+	check(is_equal_approx(g.fishing.wait_multiplier, g._free_multiplier / 1.05) or is_equal_approx(g.fishing.wait_multiplier, 1.0 / 1.05), "下雨咬钩等待缩短到 1/1.05 (%f)" % g.fishing.wait_multiplier)
+	g.weather_override = 0
+	g.tick()
+	check(not g.is_raining() and is_equal_approx(g.fishing.chest_chance, chest0), "雨停后宝箱概率恢复")
+	check(is_equal_approx(g.fishing.wait_multiplier, g._free_multiplier) or is_equal_approx(g.fishing.wait_multiplier, 1.0), "雨停后咬钩时间恢复")
 
 func test_inventory(balance: Dictionary, fish: Array) -> void:
 	print("inventory & items")

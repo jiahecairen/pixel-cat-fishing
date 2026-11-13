@@ -38,6 +38,9 @@ var _last_cp_state: int = 0
 var _rng: RandomNumberGenerator
 var _chest_cfg: Dictionary = {}
 var _base_chest: float = 0.0     # 宝箱基础概率（幸运鱼饵生效时翻倍）
+var weather_override: int = -1    # 调试/测试：-1 按真实时间，0 强制晴，1 强制下雨
+var hour_override: float = -1.0   # 调试：>=0 时把"现在"当成这个钟点（0..24）
+var _raining: bool = false
 var _base_rarity: float = 0.0    # 鱼饵升级带来的稀有度加成（幸运鱼饵生效时再加）
 
 func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock, rng: RandomNumberGenerator) -> void:
@@ -84,9 +87,30 @@ func tick() -> Array:
 		dirty = true
 	return events
 
+## 本地时间秒数（调试时可以指定钟点）。
+func local_s() -> int:
+	if hour_override >= 0.0:
+		return int(hour_override * 3600.0)
+	return _clock.local_s()
+
+func is_raining() -> bool:
+	return _raining
+
+func _rain_cfg(key: String, fallback: float) -> float:
+	return float(_cfg.get("weather", {}).get(key, fallback))
+
+func _compute_raining() -> bool:
+	if weather_override >= 0:
+		return weather_override == 1
+	return Weather.is_raining(local_s(), _rain_cfg("rain_block_chance", 0.0))
+
 func _tick() -> Array:
 	var now: int = _clock.now_ms()
 	var events: Array = []
+	var rain := _compute_raining()
+	if rain != _raining:
+		_raining = rain
+		events.append({"type": "weather", "raining": rain})
 	_refresh_modifiers(now)
 
 	var p := pomodoro.tick(now)
@@ -201,7 +225,9 @@ func adjust_duration(key: String, direction: int) -> int:
 # ------------------------------------------------------------------ 内部
 func _tick_fishing(now: int, events: Array) -> void:
 	var focus := in_focus()
-	fishing.wait_multiplier = 1.0 if focus else _free_multiplier
+	# 下雨：鱼咬钩更快（等待时间缩短到 1/1.05）
+	var rain_speed := _rain_cfg("rain_bite_speed", 1.0) if _raining else 1.0
+	fishing.wait_multiplier = (1.0 if focus else _free_multiplier) / rain_speed
 	if not focus and economy.basket_full(state):
 		# 让最后一条鱼的结算动画播完再收竿
 		if fishing.is_active() and fishing.state == FishingSystem.State.SETTLEMENT:
@@ -342,7 +368,8 @@ func _refresh_modifiers(now: int) -> void:
 	var lucky := now < int(state.effects["lucky_until_ms"])
 	var d: Dictionary = inventory.by_id.get("lucky_bait", {})
 	fishing.rarity_bonus = _base_rarity + (float(d.get("rarity_bonus", 0.0)) if lucky else 0.0)
-	fishing.chest_chance = minf(1.0, _base_chest * (float(d.get("chest_mult", 1.0)) if lucky else 1.0))
+	var rain_chest := _rain_cfg("rain_chest_mult", 1.0) if _raining else 1.0
+	fishing.chest_chance = minf(1.0, _base_chest * (float(d.get("chest_mult", 1.0)) if lucky else 1.0) * rain_chest)
 
 func _finish_focus(is_long: bool) -> Dictionary:
 	var pc: Dictionary = _pomo_cfg

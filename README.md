@@ -192,6 +192,9 @@ tests/         无界面单元测试
 | `CATFISH_BREAK=1` | 开局直接处于番茄休息中 |
 | `CATFISH_CLICK=10:116,8` | 在第 10 帧模拟点击界面坐标 (116,8) |
 | `CATFISH_ROOM=tackle` | 到镇上后直接进这间屋子（`tackle` / `tailor` / `home`） |
+| `CATFISH_NAP=1` | 配合 `CATFISH_ROOM=home`：进屋直接走到床边小睡（`2` 表示一直睡着，方便截图） |
+| `CATFISH_WEATHER=rain` / `clear` | 强制下雨 / 晴天 |
+| `CATFISH_HOUR=21` | 把现在当成这个钟点（0–24），看昼夜染色 |
 | `CATFISH_ACT_AT=200` | 在第 200 帧模拟按一次互动键 |
 | `CATFISH_SHOT=/tmp/a:60,120` | 在第 60、120 帧截图到 `/tmp/a_60.png` 等，然后退出 |
 

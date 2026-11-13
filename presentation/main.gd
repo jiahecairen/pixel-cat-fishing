@@ -39,7 +39,7 @@ const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_view"]
-const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed"]
+const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 6
 
 # ---- 界面布局（界面坐标） ----
@@ -218,6 +218,10 @@ func _apply_debug_env() -> void:
 		var xy := c[1].split(",")
 		_debug_click_frame = c[0].to_int()
 		_debug_click = Vector2(xy[0].to_float(), xy[1].to_float())
+	if OS.has_environment("CATFISH_WEATHER"):     # 调试：rain / clear 强制天气
+		game.weather_override = 1 if OS.get_environment("CATFISH_WEATHER") == "rain" else 0
+	if OS.has_environment("CATFISH_HOUR"):        # 调试：把现在当成这个钟点（0–24）
+		game.hour_override = OS.get_environment("CATFISH_HOUR").to_float()
 	if OS.has_environment("CATFISH_ROOM"):        # 调试：到镇上后直接进这间屋子（tackle / tailor / home）
 		_debug_room = OS.get_environment("CATFISH_ROOM")
 	if OS.has_environment("CATFISH_ROAM_AT"):
@@ -845,6 +849,7 @@ func _draw() -> void:
 	else:
 		draw_set_transform(-cam)
 		world.draw(cam, view, mini, now, t)
+		_draw_weather(t)
 		_draw_floats(t)
 	draw_set_transform(ui_off)
 	if not mini or _mini_shown:
@@ -856,6 +861,34 @@ func _draw() -> void:
 		_draw_quit_confirm()
 	draw_set_transform(Vector2.ZERO)
 	_draw_particles(t)
+
+
+## 昼夜染色 + 下雨（雨丝、水面涟漪）。迷你窗里只盖场景区，透明的地方不染色。
+func _draw_weather(t: int) -> void:
+	var r := Rect2(cam, view)
+	if mini:
+		r = Rect2(cam + MINI_SCENE.position, MINI_SCENE.size)
+	var dl := Weather.daylight(game.local_s())
+	var dark := float(dl["dark"])
+	var warm := float(dl["warm"])
+	if dark > 0.0:
+		draw_rect(r, Color(Pal.U_K, 0.42 * dark))
+	if warm > 0.0:
+		draw_rect(r, Color(Pal.L_P if dl["dawn"] else Pal.L_F, 0.16 * warm))
+	if not game.is_raining():
+		return
+	draw_rect(r, Color(Pal.U_A, 0.22))
+	for i in 14:   # 水面涟漪
+		var rx := r.position.x + fposmod(i * 47.0 + 13.0, r.size.x)
+		var ry := World.WATER_Y + 3 + (i * 7) % 11
+		if rx < World.SHORE_X - 4 and ry > r.position.y and ry < r.end.y and ((t / 350) + i) % 5 == 0:
+			draw_rect(Rect2(roundf(rx), ry, 3, 1), Color(Pal.U_W, 0.8))
+	var n := int(r.size.x * r.size.y / 650.0)
+	for i in n:   # 雨丝
+		var sp := 0.2 + (i % 3) * 0.05
+		var y := fposmod(i * 37.0 + t * sp, r.size.y + 6.0) - 6.0
+		var x := fposmod(i * 53.0 + y * 0.3, r.size.x)
+		draw_rect(Rect2(r.position + Vector2(roundf(x), roundf(y)), Vector2(1, 3)), Color(Pal.U_W, 0.7))
 
 
 func _draw_hud(now: int) -> void:
@@ -965,7 +998,10 @@ func draw_cat(pos: Vector2, frame: int, flip := false) -> void:
 	_tex_frame("cat/pat_white", pos, frame, CAT_FRAMES, Pal.L_W if pat.get("white", false) else light, flip)
 	_tex_frame("cat/pat_stripe", pos, frame, CAT_FRAMES, shade if pat.get("stripes", false) else base, flip)
 	_tex_frame("cat/fixed", pos, frame, CAT_FRAMES, Color.WHITE, flip)
-	if hat.get("sprite", "") != "":
+	if game.is_raining() and interior == "" and not wardrobe.open:
+		# 下雨天在室外：穿蓑衣、戴蓑衣帽（盖掉平时的帽子），进屋就脱掉
+		_tex_frame("cat/rain_gear", pos, frame, CAT_FRAMES, Color.WHITE, flip)
+	elif hat.get("sprite", "") != "":
 		_tex_frame("cat/" + hat["sprite"], pos, frame, CAT_FRAMES, Color.WHITE, flip)
 
 

@@ -110,6 +110,15 @@ def draw_hat(c, hat, by, dx=0):
         c.rect(9 + dx, 8 + by, 27 + dx, 8 + by, "h")
         c.rect(10 + dx, 9 + by, 26 + dx, 9 + by, "H")
         c.pts([(15 + dx, 5 + by), (16 + dx, 5 + by), (17 + dx, 4 + by)], "w")
+    elif hat == "rain":
+        # 蓑衣帽：尖顶斗笠，稻草色，带暗色草纹
+        rows = [(3, 17, 19), (4, 16, 20), (5, 15, 21), (6, 14, 22), (7, 13, 23), (8, 11, 25), (9, 10, 26)]
+        for y, x0, x1 in rows:
+            c.rect(x0 + dx, y + by, x1 + dx, y + by, "n")
+        for y, x0, x1 in rows[1:-1]:
+            c.set(x0 + 2 + dx, y + by, "o"); c.set(x1 - 2 + dx, y + by, "o")
+        c.rect(10 + dx, 9 + by, 26 + dx, 9 + by, "H")
+        c.pts([(17 + dx, 4 + by), (18 + dx, 4 + by)], "w")
     elif hat == "bucket":
         c.rect(14 + dx, 3 + by, 22 + dx, 3 + by, "g")
         c.rect(13 + dx, 4 + by, 23 + dx, 6 + by, "g")
@@ -124,7 +133,7 @@ def draw_hat(c, hat, by, dx=0):
         c.pts([(14 + dx, 5 + by), (15 + dx, 4 + by)], "p")
 
 
-def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None, pose="sit", step=0):
+def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None, pose="sit", step=0, rain=False):
     c = Canvas(32, 32)
     by = breathe
     if pose == "walk":
@@ -153,6 +162,21 @@ def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None, pose="sit", s
         c.ellipse(10, 25, 4, 4, "F")          # 背侧暗部
         c.ellipse(13, 23 + by, 5, 5 - by, "f")
         c.ellipse(16.5, 25, 2.6, 3.6, "1")    # 肚皮
+    if rain:
+        # 蓑衣：稻草披风，盖住躯干，下摆有一圈穗
+        if pose == "walk":
+            cx, cy, rx, ry = 16.5, 23.6 + by, 5.6, 5.0 - by * 0.4
+        else:
+            cx, cy, rx, ry = 12.6, 23.4 + by, 7.6, 7.3 - by
+        c.ellipse(cx, cy, rx, ry, "n")
+        for i, x in enumerate(range(int(cx - rx) + 2, int(cx + rx) - 1, 3)):
+            for y in range(int(cy - ry) + 3, int(cy + ry)):
+                if c.get(x, y) == "n":
+                    c.set(x, y, "o")
+        bottom = int(cy + ry)
+        for x in range(int(cx - rx) + 1, int(cx + rx)):
+            if c.get(x, bottom) == "n":
+                c.set(x, bottom, "H")
     c.ellipse(18, 14 + by, 7.2, 6, "f")   # 头
     c.rows(12, 7 + by, ["f....", "ff...", "fpf..", "fpff."])     # 左耳
     c.rows(20, 7 + by, ["...f.", "..ff.", ".fpf.", "ffpf."])     # 右耳
@@ -246,6 +270,19 @@ def cat_layers():
                         o.px[y][x] = h.px[y][x]
             overlays.append(o)
         write("hat_" + hat, overlays, False)
+
+
+    gear = []
+    for f, b in zip(CAT_FRAMES, bare):
+        h = cat_raw(hat="rain", rain=True, **f)
+        o = Canvas(32, 32)
+        for y in range(32):
+            for x in range(32):
+                if h.px[y][x] != b.px[y][x]:
+                    assert h.px[y][x] is not None
+                    o.px[y][x] = h.px[y][x]
+        gear.append(o)
+    write("rain_gear", gear, False)
 
 
 def cat_gallery():
