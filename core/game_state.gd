@@ -26,6 +26,10 @@ var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fi
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
 ## view_mode: 0 = 桌面迷你悬浮窗，1 = 全画面窗口
 var settings: Dictionary = {"view_mode": 1, "pixel_scale": 3, "sfx_volume": 2, "real_weather": 0, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
+## 物品栏格子数（每种物品占一格）
+var bag_slots: int = 8
+## 身上装备的鱼竿/鱼线/鱼钩的档位；-1 = 老存档还没初始化（Game 启动时按升级档位补上）
+var gear: Dictionary = {"rod": -1, "line": -1, "hook": -1}
 var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0, "hook": 0}
 ## 支线任务：{任务 id: "active" / "done"}
 var quests: Dictionary = {}
@@ -50,7 +54,7 @@ func to_dict() -> Dictionary:
 		"processed_sale_ids": processed_sale_ids.duplicate(),
 		"next_seq": next_seq, "pomodoro": pomodoro.duplicate(true),
 		"stats": stats.duplicate(true), "settings": settings.duplicate(true),
-		"upgrades": upgrades.duplicate(true), "quests": quests.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
+		"upgrades": upgrades.duplicate(true), "quests": quests.duplicate(true), "bag_slots": bag_slots, "gear": gear.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
 		"window": window.duplicate(true),
 	}
 
@@ -91,6 +95,8 @@ func from_dict(d: Dictionary) -> bool:
 	_merge(window, d.get("window"))
 	_merge(upgrades, d.get("upgrades"))
 	_merge(cat, d.get("cat"))
+	bag_slots = clampi(int(d.get("bag_slots", 8)), 1, 99)
+	_merge(gear, d.get("gear"))
 	quests.clear()
 	if d.get("quests") is Dictionary:
 		for k in d["quests"]:

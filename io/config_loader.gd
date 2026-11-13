@@ -56,7 +56,7 @@ static func load_balance(path: String = "res://data/balance.json") -> Dictionary
 			return {}
 		seen_items[it["id"]] = true
 		var use := str(it.get("use", ""))
-		if not use in ["", "gold", "lucky", "bell", "bait", "letter"]:
+		if not use in ["", "gold", "lucky", "bell", "bait", "letter", "gear"]:
 			push_error("balance.json items.%s 的 use 不认识: %s" % [it["id"], use])
 			return {}
 		if (use == "gold" or use == "letter") and int(it.get("gold_max", -1)) < int(it.get("gold_min", 0)):

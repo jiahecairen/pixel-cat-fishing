@@ -201,6 +201,10 @@ func draw() -> void:
 	m.tex_frame("btn_close", _close_rect().position, 0, 2)
 	var owned := _owned()
 	var cells := _cols() * _rows()
+	if not (wh and tab == 1):
+		cells = mini(cells, g.state.bag_slots)             # 身上只有这么多格；仓库不限
+		if not m.mini:
+			m.text("%d/%d" % [g.inventory.slots_used(g.state), g.state.bag_slots], r.position + Vector2(42, 6), Pal.L_A)
 	for i in cells:
 		var p := _slot_pos(i)
 		# 格子：选中的描金边

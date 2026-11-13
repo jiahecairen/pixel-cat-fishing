@@ -74,6 +74,8 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	_base_chest = float(_chest_cfg.get("chance", 0.0)) if not _chest_cfg.get("tiers", []).is_empty() else 0.0
 	fishing.chest_chance = _base_chest
 	inventory = Inventory.new(balance.get("items", []))
+	inventory.stack_default = int(balance.get("bag", {}).get("stack", 10))
+	_init_gear()
 	journey = Journey.new(state.journey, balance["town"], rng)
 	_water = balance.get("water", {})
 	_birds = balance.get("birds", {})
@@ -347,7 +349,7 @@ func equipment_name(slot: String) -> String:
 	var names: Array = _cfg.get("equipment", {}).get(slot, [])
 	if names.is_empty():
 		return "-"
-	return String(names[clampi(int(state.upgrades.get(slot, 0)), 0, names.size() - 1)])
+	return String(names[clampi(int(state.gear.get(slot, 0)), 0, names.size() - 1)])
 
 ## 幸运鱼饵生效中（鱼饵格显示用）。
 func bait_active() -> bool:
@@ -444,6 +446,8 @@ func go_fishing(x: float, fraction_to_boat: float) -> bool:
 func buy_upgrade(id: String) -> bool:
 	if not upgrades.buy(state, id):
 		return false
+	if id == "rod":
+		grant_gear("rod_%d" % upgrades.level(state, "rod"))     # 买到手的新鱼竿自动装上，换下来的进物品栏
 	_apply_upgrades()
 	dirty = true
 	return true
@@ -499,12 +503,12 @@ func _tick_fishing(now: int, events: Array) -> void:
 		var loot := _roll_chest()
 		if economy.open_chest(state, state.new_id("c"), int(loot["gold"])):
 			if loot["item"] != "":
-				inventory.add(state, loot["item"])
+				give(loot["item"], 1, events)
 			events.append({"type": "chest", "gold": loot["gold"], "tier": loot["tier"], "item": loot["item"]})
 			dirty = true
 	elif fish_id != "" and _roll_junk() != "":
 		var junk := _last_junk
-		inventory.add(state, junk)
+		give(junk, 1, events)
 		events.append({"type": "junk", "item": junk})
 		dirty = true
 	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
@@ -540,7 +544,8 @@ func _tick_birds(now: int, events: Array) -> void:
 			return
 		e["bird_act_ms"] = 0
 		e["bird_next_ms"] = now + _rng.randi_range(int(_birds["min_ms"]), int(_birds["max_ms"]))
-		if _bird_kind == "gift" and _bird_item != "" and inventory.add(state, _bird_item):
+		if _bird_kind == "gift" and _bird_item != "":
+			give(_bird_item, 1, events)
 			events.append({"type": "bird_gift", "item": _bird_item})
 		elif _bird_kind == "steal":
 			var gone := economy.eat_cheapest(state)
@@ -725,14 +730,17 @@ func use_item(id: String) -> Dictionary:
 		state.revision += 1
 		dirty = true
 		return {"ok": true, "use": "bait", "gold": 0}
+	if str(d["use"]) == "gear":          # 装备：装上，换下来的进物品栏
+		var ok := equip_gear(id)
+		return {"ok": ok, "use": "gear", "gold": 0, "quest": ""}
 	inventory.consume(state, id)
 	var gold := 0
 	var quest := ""
 	match str(d["use"]):
 		"letter":
 			# 漂流瓶：第一次打开是渔具店老板的信，开启支线；之后的瓶子里只有一点零钱
-			if _quest_cfg_list().size() > 0 and quest_state(str(_quest_cfg_list()[0]["id"])) == "":
-				quest = str(_quest_cfg_list()[0]["id"])
+			quest = next_quest_letter()
+			if quest != "":
 				state.quests[quest] = "active"
 			else:
 				gold = _rng.randi_range(int(d.get("gold_min", 10)), int(d.get("gold_max", 60)))
@@ -749,6 +757,99 @@ func use_item(id: String) -> Dictionary:
 	state.revision += 1
 	dirty = true
 	return {"ok": true, "use": str(d["use"]), "gold": gold, "quest": quest}
+
+## ---- 放进物品栏（放不下就送去仓库）----
+## 返回 "bag" / "warehouse"。送去仓库时给 events 加一条 overflow 事件（界面提示"行李满了"）。
+func give(id: String, n: int = 1, events: Array = []) -> String:
+	var moved := inventory.room_for(state, id, n)
+	if moved > 0:
+		inventory.add(state, id, moved)
+	if moved >= n:
+		return "bag"
+	state.warehouse[id] = inventory.count_w(state, id) + (n - moved)
+	state.revision += 1
+	events.append({"type": "overflow", "item": id})
+	_overflow_pending = true
+	return "warehouse"
+
+var _overflow_pending: bool = false
+
+## 界面每帧问一次：刚才有没有东西因为行李满了被送去仓库（问完清零，用来弹提示）。
+func take_overflow() -> bool:
+	var r := _overflow_pending
+	_overflow_pending = false
+	return r
+
+## ---- 装备（鱼竿 / 鱼线 / 鱼钩都是物品，身上装一件，其余放物品栏或仓库）----
+func _init_gear() -> void:
+	for slot in ["rod", "line", "hook"]:
+		if int(state.gear.get(slot, -1)) < 0:
+			state.gear[slot] = int(state.upgrades.get(slot, 0)) if slot != "line" else 0
+
+func _gear_def(id: String) -> Dictionary:
+	var d: Dictionary = inventory.by_id.get(id, {})
+	return d if str(d.get("use", "")) == "gear" else {}
+
+## 得到一件新装备：比身上的好就直接装上（旧的进物品栏），否则放进物品栏。
+func grant_gear(id: String) -> void:
+	var d := _gear_def(id)
+	if d.is_empty():
+		return
+	var slot := str(d["slot"])
+	if int(d["level"]) > int(state.gear.get(slot, 0)):
+		var old := "%s_%d" % [slot, int(state.gear.get(slot, 0))]
+		state.gear[slot] = int(d["level"])
+		give(old)
+	else:
+		give(id)
+	state.revision += 1
+	dirty = true
+
+## 装上物品栏里的一件装备，身上原来的那件换回物品栏。
+func equip_gear(id: String) -> bool:
+	var d := _gear_def(id)
+	if d.is_empty() or inventory.count(state, id) <= 0:
+		return false
+	var slot := str(d["slot"])
+	var old := "%s_%d" % [slot, int(state.gear.get(slot, 0))]
+	inventory.remove(state, id, 1)
+	state.gear[slot] = int(d["level"])
+	give(old)
+	_apply_upgrades()
+	state.revision += 1
+	dirty = true
+	return true
+
+## 下一封漂流瓶里的信是哪个任务（前置任务没完成的不出，没有了返回 ""）。
+func next_quest_letter() -> String:
+	for q in _quest_cfg_list():
+		var id := str(q["id"])
+		if quest_state(id) != "":
+			continue
+		var req := str(q.get("requires", ""))
+		if req != "" and quest_state(req) != "done":
+			continue
+		return id
+	return ""
+
+## 这间屋子里的店主该和玩家说哪个任务：进行中的 > 最近完成的 > 还没开始的。
+func room_quest(kind: String) -> String:
+	var started := ""
+	var idle := ""
+	var done := ""
+	for q in _quest_cfg_list():
+		if str(q.get("npc", "")) != kind:
+			continue
+		var id := str(q["id"])
+		match quest_state(id):
+			"active":
+				started = id
+			"done":
+				done = id
+			_:
+				if idle == "":
+					idle = id
+	return started if started != "" else (done if done != "" else idle)
 
 ## ---- 支线任务（数据在 balance.json 的 quests） ----
 func _quest_cfg_list() -> Array:
@@ -786,7 +887,11 @@ func turn_in(id: String) -> bool:
 	for n in quest_needs(id):
 		inventory.remove(state, str(n[0]), int(n[2]))
 	state.quests[id] = "done"
-	state.upgrades["hook"] = maxi(int(state.upgrades.get("hook", 0)), int(quest_cfg(id).get("reward_hook", 0)))
+	var qc: Dictionary = quest_cfg(id)
+	if str(qc.get("reward_item", "")) != "":
+		grant_gear(str(qc["reward_item"]))
+	if int(qc.get("reward_slots", 0)) > 0:
+		state.bag_slots += int(qc["reward_slots"])
 	_apply_upgrades()
 	state.revision += 1
 	dirty = true
@@ -933,7 +1038,7 @@ func bait_unlocked(id: String) -> bool:
 func can_buy_bait(id: String) -> bool:
 	var d: Dictionary = inventory.by_id.get(id, {})
 	return not d.is_empty() and bait_unlocked(id) and state.wallet_gold >= int(d.get("price", 0)) and int(d.get("price", 0)) > 0 \
-			and inventory.count(state, id) < int(d.get("max_stack", 99))
+			and inventory.room_for(state, id, 1) > 0
 
 func buy_bait(id: String) -> bool:
 	if not can_buy_bait(id):
@@ -950,12 +1055,12 @@ func _clamp_setting(key: String, v: int) -> int:
 func _apply_upgrades() -> void:
 	state.basket_capacity = _base_capacity + upgrades.level(state, "basket") * int(upgrades.param("basket", "capacity_per_level", 0))
 	var hook_bonus: Array = _cfg.get("hook_rarity_bonus", [])
-	var hook_lv := int(state.upgrades.get("hook", 0))
+	var hook_lv := int(state.gear.get("hook", 0))
 	_base_rarity = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0) + (float(hook_bonus[hook_lv]) if hook_lv >= 0 and hook_lv < hook_bonus.size() else 0.0)
 	fishing.rarity_bonus = _base_rarity
 	_free_multiplier = float(_cfg["fishing"]["free_wait_multiplier"])
 	if upgrades.has("rod"):
 		var table: Array = _cfg["upgrades"]["rod"].get("free_wait_multipliers", [])
-		var lv := upgrades.level(state, "rod")
-		if lv < table.size():
+		var lv := int(state.gear.get("rod", 0))
+		if lv >= 0 and lv < table.size():
 			_free_multiplier = float(table[lv])

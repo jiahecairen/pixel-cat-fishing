@@ -260,6 +260,126 @@
       "rarity_bonus": 0.9,
       "max_stack": 99,
       "drop": ""
+    },
+    {
+      "id": "rod_0",
+      "name": "树枝",
+      "desc": "鱼竿，使用就装上",
+      "sprite": "item_rod",
+      "weight": 0,
+      "use": "gear",
+      "slot": "rod",
+      "level": 0,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "rod_1",
+      "name": "竹竿",
+      "desc": "鱼竿，使用就装上",
+      "sprite": "item_rod",
+      "weight": 0,
+      "use": "gear",
+      "slot": "rod",
+      "level": 1,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "rod_2",
+      "name": "玻纤",
+      "desc": "鱼竿，使用就装上",
+      "sprite": "item_rod",
+      "weight": 0,
+      "use": "gear",
+      "slot": "rod",
+      "level": 2,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "rod_3",
+      "name": "碳素",
+      "desc": "鱼竿，使用就装上",
+      "sprite": "item_rod",
+      "weight": 0,
+      "use": "gear",
+      "slot": "rod",
+      "level": 3,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "rod_4",
+      "name": "合金",
+      "desc": "鱼竿，使用就装上",
+      "sprite": "item_rod",
+      "weight": 0,
+      "use": "gear",
+      "slot": "rod",
+      "level": 4,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "rod_5",
+      "name": "金竿",
+      "desc": "鱼竿，使用就装上",
+      "sprite": "item_rod",
+      "weight": 0,
+      "use": "gear",
+      "slot": "rod",
+      "level": 5,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "line_0",
+      "name": "棉线",
+      "desc": "鱼线，使用就装上",
+      "sprite": "item_line",
+      "weight": 0,
+      "use": "gear",
+      "slot": "line",
+      "level": 0,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "hook_0",
+      "name": "铁钩",
+      "desc": "鱼钩，使用就装上",
+      "sprite": "item_hook",
+      "weight": 0,
+      "use": "gear",
+      "slot": "hook",
+      "level": 0,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "hook_1",
+      "name": "银钩",
+      "desc": "鱼钩，使用就装上",
+      "sprite": "item_hook",
+      "weight": 0,
+      "use": "gear",
+      "slot": "hook",
+      "level": 1,
+      "drop": "",
+      "need": 1
+    },
+    {
+      "id": "hook_2",
+      "name": "金钩",
+      "desc": "鱼钩，使用就装上",
+      "sprite": "item_hook",
+      "weight": 0,
+      "use": "gear",
+      "slot": "hook",
+      "level": 2,
+      "drop": "",
+      "need": 1
     }
   ],
   "water": {
@@ -303,34 +423,39 @@
     ],
     "hook": [
       "铁钩",
-      "银钩"
+      "银钩",
+      "金钩"
     ]
   },
   "dough": {
     "name": "面团"
   },
   "junk": {
-    "chance": 0.06,
+    "chance": 0.1,
     "pool": [
       [
         "bottle",
-        60
+        50
       ],
       [
         "boot",
         40
+      ],
+      [
+        "pearl",
+        10
       ]
     ]
   },
   "hook_rarity_bonus": [
     0.0,
-    0.25
+    0.25,
+    0.5
   ],
   "quests": [
     {
       "id": "keeper",
       "npc": "tackle",
-      "reward_hook": 1,
       "reward_name": "银钩",
       "wants": [
         {
@@ -361,7 +486,83 @@
         "谢谢你",
         "银钩送给你",
         "钓鱼顺利"
+      ],
+      "reward_item": "hook_1"
+    },
+    {
+      "id": "tailor",
+      "npc": "tailor",
+      "reward_slots": 4,
+      "reward_name": "大口袋",
+      "wants": [
+        {
+          "item": "boot",
+          "n": 2
+        },
+        {
+          "item": "bell",
+          "n": 1
+        }
+      ],
+      "letter_lines": [
+        "服装店老板的信",
+        "想要两只旧靴子",
+        "和一个招财铃",
+        "缝成大口袋",
+        "送你装东西"
+      ],
+      "talk_lines": [
+        "拜托你找找",
+        "旧靴子和招财铃"
+      ],
+      "idle_lines": [
+        "听说海里有",
+        "好多有趣的东西"
+      ],
+      "done_lines": [
+        "谢谢你",
+        "大口袋缝好了",
+        "背包更大了"
+      ]
+    },
+    {
+      "id": "keeper2",
+      "npc": "tackle",
+      "reward_item": "hook_2",
+      "reward_name": "金钩",
+      "requires": "keeper",
+      "wants": [
+        {
+          "item": "pearl",
+          "n": 2
+        },
+        {
+          "item": "lucky_bait",
+          "n": 1
+        }
+      ],
+      "letter_lines": [
+        "渔具店老板的信",
+        "还想要两颗珍珠",
+        "和一罐幸运饵",
+        "做一只金钩",
+        "给你用"
+      ],
+      "talk_lines": [
+        "这次想要",
+        "两颗珍珠幸运饵"
+      ],
+      "idle_lines": [
+        "上次的银钩",
+        "还好用吗"
+      ],
+      "done_lines": [
+        "金钩做好了",
+        "去钓大鱼吧"
       ]
     }
-  ]
+  ],
+  "bag": {
+    "stack": 10
+  }
 }

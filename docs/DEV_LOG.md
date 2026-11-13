@@ -276,3 +276,10 @@
 - "鳊鱼"→"鲂鱼"：字库（Fusion Pixel zh_hans）缺"鳊"字，之前图鉴里是方框；`labels()` 加了字库 cmap 检查，缺字直接 assert。
 - 测试 ALL TESTS PASS（339 项）、SIM PASS；启动检查无 SCRIPT ERROR。Mac 实机待验。
 
+## v0.43（11-13）
+- 物品栏容量：`GameState.bag_slots`（存档）、`Inventory.stack_default/stack_cap/slots_used/room_for`，`add` 受容量限制，`fetch` 同；`Game.give` 放不下送仓库并置 `take_overflow`，主界面弹"行李满了"提示；`can_buy_bait` 检查有没有位置。物品栏标题旁显示已用/总格数。
+- 装备物品化：`balance.items` 加 10 件 `use: gear`（`slot`、`level`），`GameState.gear` 记身上各栏的档位（-1 = 老存档，`Game._init_gear` 按升级档位补）；`grant_gear / equip_gear`，`buy_upgrade("rod")` 自动装新竿；鱼竿速度、钩子加成、状态页名字都读 `gear`。新图标 `item_rod/line/hook`。
+- 支线：`balance.quests` 增至 3 条（`requires`、`reward_item`、`reward_slots`），`Game.next_quest_letter / room_quest`，服装店加 `quest` 点位（x=172），`quest_panel` 按屋子取任务。银钩改为通过 `grant_gear("hook_1")` 发放；`hook_rarity_bonus` 加金钩 0.5。
+- 杂物概率 10%，珍珠加进杂物池。
+- 测试 ALL TESTS PASS（358 项，新增 `test_bag_gear_quests`）、SIM PASS；启动检查无 SCRIPT ERROR；Linux 截图看过物品栏和服装店任务面板。Mac 实机待验。
+

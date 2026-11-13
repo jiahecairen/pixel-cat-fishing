@@ -52,6 +52,7 @@ func _init() -> void:
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
 		test_quest(balance, fish)
+		test_bag_gear_quests(balance, fish)
 		test_birds(balance, fish)
 		test_inventory(balance, fish)
 		test_stall_walk(balance, fish)
@@ -822,9 +823,8 @@ func test_quest(balance: Dictionary, fish: Array) -> void:
 	g.inventory.add(g.state, "bottle", 2)
 	var r: Dictionary = g.use_item("bottle")
 	check(r["ok"] and r["quest"] == "keeper" and g.quest_state("keeper") == "active" and g.inventory.count(g.state, "bottle") == 1, "第一个漂流瓶开启任务")
-	var gold0: int = g.state.wallet_gold
 	var r2: Dictionary = g.use_item("bottle")
-	check(r2["ok"] and r2["quest"] == "" and g.state.wallet_gold > gold0 and g.quest_state("keeper") == "active", "之后的漂流瓶只有零钱，不重复开任务")
+	check(r2["ok"] and r2["quest"] == "tailor" and g.quest_state("tailor") == "active" and g.quest_state("keeper2") == "", "第二个漂流瓶开服装店的任务；第三个任务要等老板的任务做完")
 	check(not g.turn_in("keeper"), "东西不够不能交付")
 	g.inventory.add(g.state, "pearl")
 	check(not g.turn_in("keeper") and g.inventory.count(g.state, "pearl") == 1, "只有一样也不扣东西")
@@ -836,7 +836,7 @@ func test_quest(balance: Dictionary, fish: Array) -> void:
 	g.inventory.add(g.state, "pearl"); g.inventory.add(g.state, "boot")
 	check(not g.turn_in("keeper") and g.inventory.count(g.state, "pearl") == 1, "不能重复交付")
 	var st2 := GameState.new()
-	check(st2.from_dict(g.state.to_dict()) and st2.quests.get("keeper", "") == "done" and int(st2.upgrades["hook"]) == 1, "任务状态和银钩随存档保存")
+	check(st2.from_dict(g.state.to_dict()) and st2.quests.get("keeper", "") == "done" and int(st2.gear["hook"]) == 1, "任务状态和银钩随存档保存")
 	# 钓到杂物：概率调到 1，必定钓到漂流瓶或旧靴子，且不进鱼篓
 	var b2 := balance.duplicate(true)
 	b2["junk"]["chance"] = 1.0
@@ -847,6 +847,58 @@ func test_quest(balance: Dictionary, fish: Array) -> void:
 		if got != "":
 			break
 	check(got == "bottle" or got == "boot", "杂物只会是漂流瓶或旧靴子")
+
+func test_bag_gear_quests(balance: Dictionary, fish: Array) -> void:
+	print("bag: 容量 / 装备物品 / 更多支线")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(71))
+	var inv = g.inventory
+	check(g.state.bag_slots == 8 and g.equipment_name("rod") == "树枝" and int(g.state.gear["rod"]) == 0, "开局 8 格，身上装着树枝竿")
+	# 每格最多叠 10 个
+	check(inv.add(g.state, "pearl", 10) and inv.count(g.state, "pearl") == 10 and not inv.add(g.state, "pearl", 1), "珍珠一格最多 10 个")
+	check(g.give("pearl") == "warehouse" and inv.count_w(g.state, "pearl") == 1 and inv.count(g.state, "pearl") == 10, "放不下的送去仓库")
+	check(g.take_overflow() and not g.take_overflow(), "送去仓库会提示一次")
+	# 8 种东西占满 8 格，第 9 种放不下
+	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(72))
+	var kinds := ["bottle", "boot", "pearl", "bell", "lucky_bait", "map_piece", "bait_worm", "bait_shrimp"]
+	for k in kinds:
+		inv.add(g2.state, k)
+	check(inv.slots_used(g2.state) == 8, "八种物品占满 8 格")
+	check(not inv.add(g2.state, "rod_1") and g2.give("rod_1") == "warehouse" and inv.count_w(g2.state, "rod_1") == 1, "第 9 种放不下，进仓库")
+	g2.state.wallet_gold = 1000
+	inv.remove(g2.state, "bait_worm", 1)
+	inv.add(g2.state, "rod_2")                   # 把空出来的格子占上
+	check(not g2.can_buy_bait("bait_worm") and not g2.buy_bait("bait_worm") and g2.state.wallet_gold == 1000, "格子满了不能买新鱼饵，不扣钱")
+	check(inv.fetch(g2.state, "rod_1", 1) == 0 and inv.count_w(g2.state, "rod_1") == 1, "身上满了取不出仓库里的新种类")
+	# 装备：买鱼竿自动装上，旧的进物品栏；使用物品栏里的装备换回去
+	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(73))
+	g3.state.wallet_gold = 100000
+	var mult0: float = g3._free_multiplier
+	check(g3.buy_upgrade("rod") and g3.equipment_name("rod") == "竹竿" and inv.count(g3.state, "rod_0") == 1, "买竹竿自动装上，树枝竿进物品栏")
+	check(g3._free_multiplier < mult0, "新鱼竿让自由挂机等得更短")
+	check(g3.use_item("rod_0")["ok"] and g3.equipment_name("rod") == "树枝" and inv.count(g3.state, "rod_1") == 1 and inv.count(g3.state, "rod_0") == 0, "装回树枝竿，竹竿换回物品栏")
+	check(g3._free_multiplier == mult0 and int(g3.state.upgrades["rod"]) == 1, "鱼竿效果看身上装的，买竿进度不变")
+	check(inv.stash(g3.state, "rod_1", 1) == 1 and inv.count_w(g3.state, "rod_1") == 1, "装备可以存进仓库")
+	var st2 := GameState.new()
+	check(st2.from_dict(g3.state.to_dict()) and int(st2.gear["rod"]) == 0 and st2.bag_slots == 8, "身上的装备和格子数随存档保存")
+	# 老存档：没有 gear 字段，按升级档位补上
+	var old := GameState.new()
+	old.upgrades["rod"] = 3
+	old.upgrades["hook"] = 1
+	var g4 := Game.new(balance, fish, old, FakeClock.new(), _rng(74))
+	check(g4.equipment_name("rod") == "碳素" and g4.equipment_name("hook") == "银钩", "老存档的装备按升级档位补上")
+	# 支线：服装店老板 → 大口袋；老板第二个 → 金钩
+	var g5 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(75))
+	g5.state.quests["keeper"] = "done"
+	check(g5.next_quest_letter() == "tailor", "老板的任务完成后，下一封信是服装店的")
+	g5.state.quests["tailor"] = "active"
+	check(g5.room_quest("tailor") == "tailor" and g5.room_quest("tackle") == "keeper", "按屋子找到该说的任务")
+	g5.inventory.add(g5.state, "boot", 2); g5.inventory.add(g5.state, "bell")
+	check(g5.turn_in("tailor") and g5.state.bag_slots == 12 and g5.quest_state("tailor") == "done", "交付后背包扩到 12 格")
+	check(g5.next_quest_letter() == "keeper2", "两个都完成后，下一封信是老板的第二个任务")
+	g5.state.quests["keeper2"] = "active"
+	g5.inventory.add(g5.state, "pearl", 2); g5.inventory.add(g5.state, "lucky_bait")
+	check(g5.turn_in("keeper2") and g5.equipment_name("hook") == "金钩" and g5.room_quest("tackle") == "keeper2", "交付得到金钩")
+	check(g5.next_quest_letter() == "", "任务都做完了，没有新的信")
 
 func test_birds(balance: Dictionary, fish: Array) -> void:
 	print("birds: 鸟来访（送礼 / 偷鱼）")
@@ -879,13 +931,14 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.size() == 8 and inv.owned(g.state).is_empty(), "8 种物品（含两种鱼饵），开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 8 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "8 种普通物品（含两种鱼饵）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
 	check(not g.use_item("bottle")["ok"], "没有的物品不能用")
 	# 漂流瓶：得金币
-	g.state.quests["keeper"] = "done"      # 任务已完成后，漂流瓶里只有零钱
+	for q in balance["quests"]:
+		g.state.quests[q["id"]] = "done"      # 任务都完成后，漂流瓶里只有零钱
 	inv.add(g.state, "bottle")
 	var r := g.use_item("bottle")
 	check(r["ok"] and r["gold"] >= 10 and r["gold"] <= 60 and g.state.wallet_gold == r["gold"], "漂流瓶开出 10–60 金币 (%d)" % r["gold"])
@@ -940,11 +993,16 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var rate := float(with_item.size()) / float(chests.size())
 	check(chests.size() > 100 and rate > 0.45 and rate < 0.75, "约 60%% 的宝箱带物品 (%d/%d)" % [with_item.size(), chests.size()])
 	var total := 0
+	var kinds := {}
 	for id in g3.state.inventory:
 		total += int(g3.state.inventory[id])
+		kinds[id] = true
+	for id in g3.state.warehouse:          # 行李满了会送去仓库，也算
+		total += int(g3.state.warehouse[id])
+		kinds[id] = true
 	var gifts := ev.filter(func(e): return e["type"] == "bird_gift").size()
 	check(total == with_item.size() + gifts, "开出的物品和鸟送的礼物都进了物品栏 (%d = %d + %d)" % [total, with_item.size(), gifts])
-	check(g3.inventory.owned(g3.state).size() == 8, "跑够久，8 种物品都开出来过")
+	check(kinds.size() == 8, "跑够久，8 种物品都开出来过 (%d)" % kinds.size())
 	# 存档
 	var s4 := GameState.new(); s4.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
 	check(s4.inventory == g.state.inventory and typeof(s4.inventory["boot"]) == TYPE_INT and s4.effects == g.state.effects, "物品栏和效果随存档恢复")
@@ -982,7 +1040,7 @@ func test_stall_walk(balance: Dictionary, fish: Array) -> void:
 	check(b0["behind"] and absf(b0["x"] - World.STALL_CAT_X) < 0.5 and not b1["behind"] and absf(b1["x"] - World.WALK_FROM_X) < 0.5, "回码头：从柜台后出来，走到码头")
 	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(5))
 	check(g.equipment_name("rod") == "树枝" and g.equipment_name("line") == "棉线" and g.equipment_name("hook") == "铁钩", "装备栏默认名字")
-	g.state.upgrades["rod"] = 2
+	g.state.gear["rod"] = 2
 	check(g.equipment_name("rod") == "玻纤" and not g.bait_active(), "鱼竿随升级换名字；没有幸运鱼饵时鱼饵格为空")
 
 func test_bait(balance: Dictionary, fish: Array) -> void:

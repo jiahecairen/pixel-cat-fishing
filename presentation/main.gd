@@ -77,6 +77,7 @@ var clock: Clock
 var menu: Menu
 var wardrobe: Wardrobe
 var outfit_shop: OutfitShop
+var _toast_t0: int = -100000       # 行李满了、东西送去仓库的提示
 var quest_panel: QuestPanel
 var bag: Bag
 var book: Book
@@ -245,6 +246,8 @@ func _apply_debug_env() -> void:
 		world.call_deferred("bird_start", bk, bi, Time.get_ticks_msec())
 	if OS.has_environment("CATFISH_CHEST"):       # 调试：每一竿都钓到宝箱
 		game.set_chest_chance(1.0)
+	if OS.has_environment("CATFISH_ITEMS") or OS.has_environment("CATFISH_WH"):
+		st.bag_slots = 40                          # 调试：格子开大，所有物品都放得下
 	if OS.has_environment("CATFISH_ITEMS"):       # 调试：开局每种物品给这么多个，并打开物品栏
 		for d in game.inventory.defs:
 			game.inventory.add(st, d["id"], OS.get_environment("CATFISH_ITEMS").to_int())
@@ -552,7 +555,7 @@ func _interact_inside() -> void:
 			menu.open = true
 		"quest":
 			play("click")
-			quest_panel.open_talk("keeper")
+			quest_panel.open_talk(game.room_quest(interior))
 		"hats":
 			play("click")
 			outfit_shop.open_kind("hat")
@@ -660,6 +663,9 @@ func _process(dt: float) -> void:
 		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
 	_update_power()
 	game.fast_forward(dt * 1000.0)        # [ ] 全局加速：把所有截止时刻前移
+	if game.take_overflow():
+		_toast_t0 = Time.get_ticks_msec()
+		play("deny")
 	for e in game.tick():
 		log.write(e["type"], e)
 		_on_event(e)
@@ -678,7 +684,7 @@ func _process(dt: float) -> void:
 			else:
 				game.state.quests["keeper"] = "active"
 				game.inventory.add(game.state, "pearl")
-				quest_panel.open_talk("keeper")
+				quest_panel.open_talk(game.room_quest(interior))
 		if OS.has_environment("CATFISH_OUTFITSHOP"):   # 调试：进屋后直接打开货架（hat / outfit）
 			game.state.wallet_gold = 150
 			outfit_shop.open_kind(OS.get_environment("CATFISH_OUTFITSHOP"))
@@ -1177,6 +1183,9 @@ func _draw() -> void:
 	wardrobe.draw()
 	outfit_shop.draw()
 	quest_panel.draw()
+	if Time.get_ticks_msec() - _toast_t0 < 3000:
+		label("行李满了", Vector2(17, 63), Pal.L_R)
+		label("送去了仓库", Vector2(17, 74), Pal.L_R)
 	bag.draw()
 	book.draw()
 	if _confirm_quit:

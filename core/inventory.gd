@@ -1,5 +1,5 @@
 extends RefCounted
-## 物品栏：物品从宝箱里开出来，同种叠加，没有容量上限。
+## 物品栏：8 格（任务奖励可扩），每种物品占一格，每格最多叠 10 个（鱼饵 99 个）。放不下的由 Game 送去仓库。
 ## 物品定义来自 balance.json 的 "items"：
 ##   id / name / desc / sprite   基本信息
 ##   weight                      宝箱里开出它的权重
@@ -20,16 +20,36 @@ func _init(item_defs: Array) -> void:
 func count(s: GameState, id: String) -> int:
 	return int(s.inventory.get(id, 0))
 
-func add(s: GameState, id: String, n: int = 1) -> bool:
+## 每格最多叠几个：鱼饵看自己的 max_stack（99），其他物品用 stack_default（balance.bag.stack）。
+var stack_default: int = 10
+
+func stack_cap(id: String) -> int:
+	var ms := int(by_id.get(id, {}).get("max_stack", 0))
+	return ms if ms > 0 else stack_default
+
+## 手里占了几格（每种物品一格）。
+func slots_used(s: GameState) -> int:
+	var n := 0
+	for k in s.inventory:
+		if int(s.inventory[k]) > 0:
+			n += 1
+	return n
+
+## 现在最多还能放进几个：受每格叠加上限和格子总数限制。
+func room_for(s: GameState, id: String, n: int = 1) -> int:
 	if not by_id.has(id) or n <= 0:
+		return 0
+	var have := count(s, id)
+	if have == 0 and slots_used(s) >= s.bag_slots:
+		return 0
+	return clampi(stack_cap(id) - have, 0, n)
+
+## 放进物品栏。放不下的部分不放（返回 false 表示一个都没放进去）；调用方决定放不下怎么办。
+func add(s: GameState, id: String, n: int = 1) -> bool:
+	var moved := room_for(s, id, n)
+	if moved <= 0:
 		return false
-	var cap := int(by_id[id].get("max_stack", 0))      # 鱼饵最多 99 个，其他物品没有上限
-	var total := count(s, id) + n
-	if cap > 0:
-		total = mini(total, cap)
-		if total <= count(s, id):
-			return false
-	s.inventory[id] = total
+	s.inventory[id] = count(s, id) + moved
 	s.revision += 1
 	return true
 
@@ -62,14 +82,9 @@ func stash(s: GameState, id: String, n: int = 1) -> int:
 
 ## 从仓库取 n 个回物品栏（受鱼饵 99 个上限限制，放不下的留在仓库），返回实际取了几个。
 func fetch(s: GameState, id: String, n: int = 1) -> int:
-	var moved := mini(n, count_w(s, id))
+	var moved := mini(mini(n, count_w(s, id)), room_for(s, id, n))
 	if not by_id.has(id) or moved <= 0:
 		return 0
-	var cap := int(by_id[id].get("max_stack", 0))
-	if cap > 0:
-		moved = mini(moved, cap - count(s, id))
-		if moved <= 0:
-			return 0
 	var left := count_w(s, id) - moved
 	if left > 0:
 		s.warehouse[id] = left
