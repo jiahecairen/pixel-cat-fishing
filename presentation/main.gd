@@ -89,7 +89,6 @@ var _missing_labels: Dictionary = {}
 var _full_notified: bool = false
 var _roam_fx: float = 0.0        # 自由走动的亚像素位置
 var _last_walk_input: int = -100000
-const ROAM_AUTO_MS := 6000       # 松手这么久后小猫自己接着干活
 const KEYS_LEFT := [KEY_LEFT, KEY_A]
 const KEYS_RIGHT := [KEY_RIGHT, KEY_D]
 const KEYS_ACT := [KEY_SPACE, KEY_ENTER, KEY_E, KEY_UP, KEY_W]
@@ -282,8 +281,8 @@ func _update_roam(dt: float) -> void:
 			world.roam_moving = true
 			world.roam_flip = dir < 0
 			_last_walk_input = t
-	elif j.activity() == Journey.Activity.ROAM and (mini or t - _last_walk_input > ROAM_AUTO_MS) \
-			and not (menu.open or wardrobe.open) and t - world.chat_t0 > 3500:
+	elif j.activity() == Journey.Activity.ROAM and mini:
+		# 玩家接管后小猫就一直听玩家的，不会自己走开；只有切到迷你悬浮窗才交还给自动流程
 		var x := float(j.roam_x())
 		game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))
 
@@ -798,7 +797,9 @@ func _tex_frame(name: String, pos: Vector2, frame: int, count: int, mod := Color
 	var h := tx.get_height()
 	var dst := Rect2(pos, Vector2(w, h))
 	if flip:
-		dst = Rect2(pos.x + w, pos.y, -w, h)   # 负宽度 = 水平翻转
+		# 负宽度 = 水平翻转。Godot 只翻转贴图、不移动矩形，所以位置保持 pos 不变
+		# （之前写成 pos.x + w，翻转后整只猫会向右跳 32 像素）
+		dst = Rect2(pos.x, pos.y, -w, h)
 	draw_texture_rect_region(tx, dst, Rect2(frame * w, 0, w, h), mod)
 
 

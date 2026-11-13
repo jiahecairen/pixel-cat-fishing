@@ -203,18 +203,20 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 		m.draw_rect(plate, Pal.L_N)
 		m.draw_rect(Rect2(plate.position.x, plate.end.y - 2, plate.size.x, 2), Pal.L_O)
 		m.label(d[1], plate.position + Vector2(3, 0), Pal.U_K)
-	_draw_strollers(t)
-
-	# 摊位（后半）→ 小猫 → 柜台
+	# 摊位（后半）→ 摆摊的小猫 → 柜台 → 路过的居民、顾客、走动中的小猫（都在摊位前面）
 	m.draw_texture(m.tex["stall_back"], Vector2(STALL_X, GROUND_Y - 40))
 	var in_town: bool = not j.on_boat()
 	var bob_y := boat_y(t)
-	if in_town:
+	var behind_counter: bool = act == Journey.Activity.VENDING
+	if in_town and behind_counter:
 		_draw_town_cat(act, on_break, now, t)
 	m.draw_texture(m.tex["stall_front"], Vector2(STALL_X, GROUND_Y - 15))
+	_draw_strollers(t)
 	if act == Journey.Activity.VENDING:
 		_draw_stall_goods(now, t, on_break)
 	_draw_leaving(t)
+	if in_town and not behind_counter:
+		_draw_town_cat(act, on_break, now, t)
 	_draw_chat(t)
 
 	# 船
@@ -246,11 +248,11 @@ func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 		Journey.Activity.WALK_TO_STALL, Journey.Activity.WALK_TO_BOAT:
 			m.draw_cat(cat_pos, 4 + (t / 180) % 2, walk_flip)
 			if not m.game.state.basket.is_empty():        # 还有鱼就背着鱼篓
-				m.draw_texture(m.tex["basket"], cat_pos + Vector2(17 if walk_flip else 4, 11 + (t / 180) % 2))
+				m.draw_texture(m.tex["basket"], cat_pos + Vector2(14 if walk_flip else 5, 11 + (t / 180) % 2))
 		Journey.Activity.ROAM:
 			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 4, roam_flip)
 			if not m.game.state.basket.is_empty():
-				m.draw_texture(m.tex["basket"], cat_pos + Vector2(17 if roam_flip else 4, 11 + ((t / 180) % 2 if roam_moving else 0)))
+				m.draw_texture(m.tex["basket"], cat_pos + Vector2(14 if roam_flip else 5, 11 + ((t / 180) % 2 if roam_moving else 0)))
 		Journey.Activity.VENDING:
 			var frame := (t / 700) % 2
 			var p := cat_pos
