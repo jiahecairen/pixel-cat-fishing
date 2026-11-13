@@ -77,7 +77,9 @@ var clock: Clock
 var menu: Menu
 var wardrobe: Wardrobe
 var outfit_shop: OutfitShop
-var _toast_t0: int = -100000       # 行李满了、东西送去仓库的提示
+var _toast_t0: int = -100000       # 屏幕左侧的两行小提示（行李满了、水太浅了……）
+var _toast_l1: String = ""
+var _toast_l2: String = ""
 var quest_panel: QuestPanel
 var bag: Bag
 var book: Book
@@ -120,7 +122,9 @@ const KEYS_ACT := [KEY_SPACE, KEY_ENTER, KEY_E, KEY_UP, KEY_W]
 var _cam_snap: bool = true
 var _cam_fx: float = 0.0        # 完整窗口镜头的精确横坐标（画面上取整）
 const ZONE_LABEL := {"shallow": "浅滩", "normal": "普通水域", "deep": "深水区"}
-const BOAT_SPEED := 44.0         # 划船速度（像素/秒）
+const BOAT_SPEED := 44.0         # 划船最高速度（像素/秒）
+const BOAT_ACCEL := 98.0         # 起桨加速度：约 0.45 秒加到最高速
+const BOAT_DECEL := 55.0         # 停桨后的滑行减速度：约 0.8 秒滑停
 const CAM_PULL := 1.4            # 镜头把小猫拉回正中的速度（每秒，越大越紧）
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
 var _debug_last: String = ""
@@ -130,6 +134,7 @@ var _debug_room: String = ""
 var _debug_click_frame: int = -1
 var _debug_click := Vector2.ZERO
 var _boat_fx: float = 0.0        # 划船时船位置的小数部分
+var _boat_v: float = 0.0         # 划船的当前速度（像素/秒，带方向）：起桨加速、停桨滑行
 var _debug_dir: int = 0         # 调试：CATFISH_ROAM=1/-1 模拟一直按着右/左方向键
 var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  在这些帧截图后退出
 var _shot_frames: Array = []
@@ -246,6 +251,9 @@ func _apply_debug_env() -> void:
 		world.call_deferred("bird_start", bk, bi, Time.get_ticks_msec())
 	if OS.has_environment("CATFISH_CHEST"):       # 调试：每一竿都钓到宝箱
 		game.set_chest_chance(1.0)
+	if OS.has_environment("CATFISH_BOATX"):        # 调试：船开局停在这个位置（512 = 贴着码头）
+		st.journey["boat_x"] = OS.get_environment("CATFISH_BOATX").to_int()
+		st.journey["line_out"] = 0
 	if OS.has_environment("CATFISH_ITEMS") or OS.has_environment("CATFISH_WH"):
 		st.bag_slots = 40                          # 调试：格子开大，所有物品都放得下
 	if OS.has_environment("CATFISH_ITEMS"):       # 调试：开局每种物品给这么多个，并打开物品栏
@@ -263,6 +271,12 @@ func _apply_debug_env() -> void:
 		outfit_shop.open = false
 		quest_panel.open = false
 		bag.open_warehouse()
+	if OS.has_environment("CATFISH_QSTATE"):      # 调试：keeper,tailor 进行中、keeper2 已完成（也给一点材料）
+		st.quests = {"keeper": "active", "tailor": "active"}
+		game.inventory.add(st, "pearl", 1)
+		game.inventory.add(st, "boot", 1)
+	if OS.has_environment("CATFISH_BAGSEL"):      # 调试：物品栏选中第 N 个
+		bag.sel = OS.get_environment("CATFISH_BAGSEL").to_int()
 	if OS.has_environment("CATFISH_BOOK"):        # 调试：造一些统计数据并打开图鉴册的第 N 页
 		var rngd := RandomNumberGenerator.new()
 		rngd.seed = 7
@@ -426,6 +440,21 @@ func _update_roam(dt: float) -> void:
 			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * game.move_speed() * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
 			world.room_flip = dir < 0
 		return
+	if dir == 0 and absf(_boat_v) > 0.5 and game.can_steer() and interior == "":
+		# 松开方向键后船不会立刻停：按减速度滑行到 0，滑行时桨还在划（速度慢到一定程度再收桨）
+		_boat_v = move_toward(_boat_v, 0.0, BOAT_DECEL * game.move_speed() * dt)
+		if absf(_boat_fx - float(j.boat_x())) > 1.5:
+			_boat_fx = float(j.boat_x())
+		_boat_fx = clampf(_boat_fx + _boat_v * game.move_speed() * dt, 0.0, 9999.0)
+		game.steer_to(_boat_fx)
+		var glim := game.boat_limits()
+		if j.boat_x() <= int(glim.x) or j.boat_x() >= int(glim.y):
+			_boat_v = 0.0
+		world.boat_dir = 1.0 if _boat_v >= 0.0 else -1.0
+		world.boat_moving = absf(_boat_v) > 8.0
+	elif dir == 0 or not game.can_steer():
+		if dir == 0:
+			_boat_v = 0.0
 	if dir != 0 and interior == "" and game.can_halt_sail():
 		game.halt_sail()                       # 方向键随时打断自动航行，船停在当前位置，接着手动划
 	if dir != 0 and game.can_steer() and interior == "":
@@ -439,10 +468,14 @@ func _update_roam(dt: float) -> void:
 		world.boat_dir = float(dir)
 		_last_walk_input = t
 		if t >= _row_ready_at:
-			_boat_fx = clampf(_boat_fx + dir * BOAT_SPEED * game.move_speed() * dt, 0.0, 9999.0)
+			_boat_v = move_toward(_boat_v, float(dir) * BOAT_SPEED, BOAT_ACCEL * game.move_speed() * dt)
+			_boat_fx = clampf(_boat_fx + _boat_v * game.move_speed() * dt, 0.0, 9999.0)
 			game.steer_to(_boat_fx)
 			var lim := game.boat_limits()
-			world.boat_moving = not ((dir < 0 and j.boat_x() <= lim.x) or (dir > 0 and j.boat_x() >= lim.y))   # 顶到头就不划了
+			var at_end: bool = (dir < 0 and j.boat_x() <= lim.x) or (dir > 0 and j.boat_x() >= lim.y)
+			if at_end:
+				_boat_v = 0.0
+			world.boat_moving = not at_end
 	elif dir != 0 and j.in_town():
 		if j.activity() != Journey.Activity.ROAM:
 			var was_behind: bool = world.walk_behind or j.activity() == Journey.Activity.VENDING or j.activity() == Journey.Activity.SOLD_OUT
@@ -468,6 +501,12 @@ func _end_roam_auto(x: float) -> void:
 
 
 ## ` 键（中文输入法下是"·"）：开发者模式，随便换形象，不花钱。
+func _toast(l1: String, l2: String = "") -> void:
+	_toast_l1 = l1
+	_toast_l2 = l2
+	_toast_t0 = Time.get_ticks_msec()
+
+
 func _is_dev_key(event: InputEventKey) -> bool:
 	return event.keycode == KEY_QUOTELEFT or event.unicode == 96 or event.unicode == 183
 
@@ -493,7 +532,12 @@ func _interact() -> void:
 	if interior != "":
 		_interact_inside()
 	elif j.on_boat():
-		if j.activity() == Journey.Activity.FISHING and game.cast_line():
+		if game.at_dock() and game.can_go_to_town():
+			_go_to_town()             # 船贴着码头：按互动键直接上岸
+		elif j.activity() == Journey.Activity.FISHING and game.fishing_blocked() and not game.pomodoro.is_break():
+			_toast("水太浅了", "不能钓鱼")
+			play("deny")
+		elif j.activity() == Journey.Activity.FISHING and game.cast_line():
 			play("click")             # 停船后按互动键：重新甩竿
 	elif j.activity() == Journey.Activity.SOLD_OUT:
 		_go_fishing()
@@ -664,7 +708,7 @@ func _process(dt: float) -> void:
 	_update_power()
 	game.fast_forward(dt * 1000.0)        # [ ] 全局加速：把所有截止时刻前移
 	if game.take_overflow():
-		_toast_t0 = Time.get_ticks_msec()
+		_toast("行李满了", "送去了仓库")
 		play("deny")
 	for e in game.tick():
 		log.write(e["type"], e)
@@ -1184,8 +1228,8 @@ func _draw() -> void:
 	outfit_shop.draw()
 	quest_panel.draw()
 	if Time.get_ticks_msec() - _toast_t0 < 3000:
-		label("行李满了", Vector2(17, 63), Pal.L_R)
-		label("送去了仓库", Vector2(17, 74), Pal.L_R)
+		label(_toast_l1, Vector2(17, 63), Pal.L_R)
+		label(_toast_l2, Vector2(17, 74), Pal.L_R)
 	bag.draw()
 	book.draw()
 	if _confirm_quit:
@@ -1296,7 +1340,9 @@ func _draw_hud(now: int) -> void:
 				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_pier(rx):
 					hint = "空格键聊天"
 				label(hint, Vector2(17, 41), hint_col)
-		elif game.journey.activity() == Journey.Activity.FISHING and not game.line_out() and not game.pomodoro.is_break() and not game.at_dock():
+		elif game.at_dock() and game.can_go_to_town():
+			label("空格键上岸", Vector2(17, 30), hint_col)
+		elif game.journey.activity() == Journey.Activity.FISHING and not game.line_out() and not game.pomodoro.is_break() and not game.fishing_blocked():
 			label("空格键开始钓鱼", Vector2(17, 30), hint_col)
 		if game.can_steer():
 			label("方向键划船", Vector2(17, 41), hint_col)

@@ -279,6 +279,8 @@ func go_to_town() -> bool:
 	fishing.stop(now)
 	state.journey["line_out"] = 1
 	journey.depart(now)
+	if journey.activity() == Journey.Activity.WALK_TO_STALL and state.basket.is_empty():
+		journey.begin_roam(journey.dock_roam_x(), now)      # 空篓子贴着码头上岸：直接让玩家自己逛
 	_cancel_bird()
 	dirty = true
 	return true
@@ -400,11 +402,15 @@ func reel_in() -> bool:
 
 ## 船停在码头边上（离码头太近，不能钓鱼）。
 func at_dock() -> bool:
-	return float(journey.boat_x()) >= float(journey.cfg_dock_x()) - 12.0
+	return journey.boat_at_dock()
+
+## 离码头一定距离内水太浅，不能钓鱼。
+func fishing_blocked() -> bool:
+	return journey.boat_in_shoal()
 
 ## 停船后重新开始钓鱼。
 func cast_line() -> bool:
-	if at_dock() or line_out() or journey.activity() != Journey.Activity.FISHING or pomodoro.is_break():
+	if fishing_blocked() or line_out() or journey.activity() != Journey.Activity.FISHING or pomodoro.is_break():
 		return false
 	state.journey["line_out"] = 1
 	dirty = true
@@ -470,6 +476,8 @@ func adjust_duration(key: String, direction: int) -> int:
 # ------------------------------------------------------------------ 内部
 func _tick_fishing(now: int, events: Array) -> void:
 	var focus := in_focus()
+	if fishing_blocked():               # 浅滩：不能钓鱼，收着竿
+		state.journey["line_out"] = 0
 	if not line_out():                  # 钓竿收着（刚划过船）：等玩家按互动键再甩
 		if fishing.is_active():
 			fishing.stop(now)
@@ -604,6 +612,8 @@ func _tick_trip(now: int, events: Array) -> void:
 	dirty = true
 	if r == "back":
 		state.journey["line_out"] = 1      # 回到钓点：自动甩竿
+	elif r == "moored":
+		state.journey["line_out"] = 0      # 船贴着码头：不能钓鱼
 	match r:
 		"sale":
 			var mult := focus_multiplier()
@@ -819,6 +829,26 @@ func equip_gear(id: String) -> bool:
 	state.revision += 1
 	dirty = true
 	return true
+
+## 装备的属性：返回 [属性名, 数值文字]；不是装备或没有属性返回 []。
+## 鱼竿：自由挂机时的等待倍率（越小越快）；鱼钩：稀有鱼加成；鱼线：暂时没有属性。
+func gear_stat(id: String) -> Array:
+	var d: Dictionary = inventory.by_id.get(id, {})
+	if str(d.get("use", "")) != "gear":
+		return []
+	var lv := int(d.get("level", 0))
+	match str(d.get("slot", "")):
+		"rod":
+			var table: Array = _cfg.get("upgrades", {}).get("rod", {}).get("free_wait_multipliers", [])
+			if lv >= 0 and lv < table.size():
+				return ["挂机速度", "+%d％" % int(round((float(table[0]) / float(table[lv]) - 1.0) * 100.0))]      # 比最差的鱼竿快多少
+		"hook":
+			var hb: Array = _cfg.get("hook_rarity_bonus", [])
+			if lv >= 0 and lv < hb.size():
+				return ["稀有鱼加成", "+%d％" % int(round(float(hb[lv]) * 100.0))]
+		"line":
+			return ["暂无加成", ""]
+	return []
 
 ## 下一封漂流瓶里的信是哪个任务（前置任务没完成的不出，没有了返回 ""）。
 func next_quest_letter() -> String:

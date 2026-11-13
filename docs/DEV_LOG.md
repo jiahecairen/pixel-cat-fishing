@@ -283,3 +283,10 @@
 - 杂物概率 10%，珍珠加进杂物池。
 - 测试 ALL TESTS PASS（358 项，新增 `test_bag_gear_quests`）、SIM PASS；启动检查无 SCRIPT ERROR；Linux 截图看过物品栏和服装店任务面板。Mac 实机待验。
 
+
+## v0.44 码头浅滩、划船曲线、聊天转向、任务页、装备属性
+- 码头：`Journey.boat_at_dock/boat_in_shoal`；贴码头时 `depart` 直接进 WALK_TO_STALL，WALK_TO_BOAT 结束在码头则直接 FISHING（返回 "moored"）；`Game.fishing_blocked()` 阻止浅滩抛竿；空篓子上岸直接逛街。世界层画浅滩（沙底、焦散、浮标）。
+- 划船速度曲线（`main.gd` 的 `_boat_v`，加速/减速）；聊天时小猫转向居民、店主按距离转向小猫（`world.gd`）。
+- 图鉴册第 4 页"任务"；`Game.gear_stat` + 物品栏属性文字。生成脚本的字符检查只对纯汉字标签做（ASCII 是变宽字形），新增 `+N％` 标签。
+- 新增调试变量：`CATFISH_BOATX`、`CATFISH_QSTATE`、`CATFISH_BAGSEL`。
+- 测试 ALL TESTS PASS、SIM PASS；启动检查无 SCRIPT ERROR；Linux 截图看过浅滩、上岸提示、任务页、物品栏属性。居民聊天转向和店内店主转向没有截图验证；全部待 Mac 实机。

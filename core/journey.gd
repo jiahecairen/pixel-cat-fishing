@@ -17,6 +17,14 @@ func _dur(key: String, scale: float = 1.0) -> int:
 
 ## 航行时长按路程折算：sail_ms 对应从默认钓点到码头的路程，船停得离码头近就按比例缩短（太近也不低于 sail_min_scale），
 ## 这样不管船在哪儿，航行速度都差不多，不会出现最后一小段慢得像爬。
+## 船贴着码头（可以直接上岸，不用划）。
+func boat_at_dock() -> bool:
+	return float(boat_x()) >= cfg_dock_x() - float(_cfg.get("dock_snap", 12))
+
+## 离码头太近，水太浅不能钓鱼。
+func boat_in_shoal() -> bool:
+	return float(boat_x()) >= cfg_dock_x() - float(_cfg.get("dock_no_fish", 70))
+
 func cfg_dock_x() -> float:
 	return float(_cfg.get("dock_x", 512))
 
@@ -130,6 +138,9 @@ func resume_fishing(now_ms: int) -> void:
 func depart(now_ms: int) -> bool:
 	if not can_depart():
 		return false
+	if boat_at_dock():            # 船本来就贴着码头：不用划，直接上岸
+		_enter(Activity.WALK_TO_STALL, now_ms, _dur("walk_ms"))
+		return true
 	_enter(Activity.SAIL_OUT, now_ms, _dur("sail_ms", sail_scale()))
 	return true
 
@@ -189,6 +200,9 @@ func advance(now_ms: int) -> String:
 				return "sale"
 		Activity.WALK_TO_BOAT:
 			if now_ms >= int(_j["phase_end_ms"]):
+				if boat_at_dock():            # 船停在码头边：上船后就停在原地，不用划
+					_enter(Activity.FISHING, now_ms, 0)
+					return "moored"
 				_enter(Activity.SAIL_BACK, now_ms, _dur("sail_ms", sail_scale()))
 				return "boarded"
 		Activity.SAIL_BACK:

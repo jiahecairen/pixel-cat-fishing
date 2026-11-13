@@ -5,7 +5,8 @@ extends RefCounted
 
 const Pal := preload("res://presentation/palette.gd")
 
-const PAGES := ["图鉴", "最高纪录", "统计"]
+const PAGES := ["图鉴", "最高纪录", "统计", "任务"]
+const NPC_NAMES := {"tackle": "渔具店", "tailor": "裁缝铺"}
 
 var open: bool = false
 var page: int = 0
@@ -160,6 +161,8 @@ func key(keycode: int) -> bool:
 			page = 1
 		KEY_3:
 			page = 2
+		KEY_4:
+			page = 3
 		KEY_LEFT, KEY_A:
 			if page == 2:
 				shift_day(-1)
@@ -193,6 +196,37 @@ func draw() -> void:
 		0: _draw_dex(r)
 		1: _draw_records(r)
 		2: _draw_stats(r)
+		3: _draw_quests(r)
+
+## 任务页：进行中的任务在前（店名、每项要求 有几个/要几个、奖励），已完成的灰着排在后面。
+func _draw_quests(r: Rect2) -> void:
+	var g = m.game
+	var y := r.position.y + 19
+	var x := r.position.x + 8
+	var shown := 0
+	for pass_state in ["active", "done"]:
+		for q in g._quest_cfg_list():
+			var id := str(q["id"])
+			if g.quest_state(id) != pass_state:
+				continue
+			shown += 1
+			var active: bool = pass_state == "active"
+			m.label(NPC_NAMES.get(str(q.get("npc", "")), ""), Vector2(x, y), Pal.L_Y if active else Pal.L_A)
+			m.label("进行中" if active else "已完成", Vector2(x + 52, y), Pal.L_G if not active else Pal.L_W)
+			y += 11.0
+			if active:
+				for n in g.quest_needs(id):
+					var it: Dictionary = g.inventory.by_id.get(str(n[0]), {})
+					var enough: bool = int(n[1]) >= int(n[2])
+					m.label(str(it.get("name", "")), Vector2(x + 6, y), Pal.L_W)
+					m.text_right("%d/%d" % [int(n[1]), int(n[2])], x + 82, y + 3, Pal.L_G if enough else Pal.L_R)
+					y += 10.0
+			m.label("奖励", Vector2(x + 6, y), Pal.L_A)
+			m.label(str(q.get("reward_name", "")), Vector2(x + 30, y), Pal.L_W if active else Pal.L_A)
+			y += 14.0
+	if shown == 0:
+		m.label("暂无任务", Vector2(x, y), Pal.L_A)
+		m.label("打开漂流瓶看看", Vector2(x, y + 12), Pal.L_A)
 
 func _draw_dex(r: Rect2) -> void:
 	var g = m.game

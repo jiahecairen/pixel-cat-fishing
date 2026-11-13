@@ -1377,8 +1377,8 @@ LABELS = [
     "确定要退出吗", "退出", "取消", "宝箱", "状态", "鱼线", "鱼钩", "树枝", "竹竿", "玻纤", "碳素", "合金", "金竿", "棉线", "铁钩", "空", "钓到", "面团", "装上", "空格键开始钓鱼", "仓库", "身上", "存入", "取出", "全部", "空格键开仓库", "装备", "未解锁", "最高纪录", "最大的鱼", "空军", "番茄", "分钟", "最忙的一天", "每月番茄", "当日专注", "暂无记录", "钓过的鱼", "天", "月", "时",
     "物品栏", "使用", "空空如也", "生效中", "去钓宝箱吧",
     "欢迎光临", "空格键出门", "空格键看货", "空格键照镜子", "空格键看图鉴", "空格键看统计", "空格键小睡", "Z", "真实天气", "开", "关", "休息时才能小睡", "已经睡饱了", "小猫睡得真香",
-    "服装店", "空格键看衣帽", "行李满了", "送去了仓库", "空格键和店主聊聊", "店主的心愿", "交付", "好", "银钩", "买下", "穿上", "穿着", "已有", "金币不够", "开发者模式", "帽子", "衣服",
-    "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
+    "服装店", "空格键看衣帽", "行李满了", "送去了仓库", "水太浅了", "不能钓鱼", "空格键上岸", "空格键和店主聊聊", "店主的心愿", "交付", "好", "银钩", "买下", "穿上", "穿着", "已有", "金币不够", "开发者模式", "帽子", "衣服",
+    "任务", "暂无任务", "打开漂流瓶看看", "奖励", "进行中", "已完成", "挂机速度", "稀有鱼加成", "暂无加成", "大口袋", "金钩", "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
 ]
 FONT_FILE = os.path.join(os.path.dirname(__file__), "fonts", "fusion-pixel-10px-proportional-zh_hans.otf.woff")
 
@@ -1398,6 +1398,12 @@ def labels():
             for line in q.get(k, []):
                 if line not in names:
                     names.append(line)
+    # 装备属性文字（和 core/game.gd 的 gear_stat 格式一致）
+    base_wait = float(bal.get("upgrades", {}).get("rod", {}).get("free_wait_multipliers", [2.0])[0])
+    for v in bal.get("upgrades", {}).get("rod", {}).get("free_wait_multipliers", []):
+        names.append("+%d％" % int(round((base_wait / float(v) - 1.0) * 100.0)))
+    for v in bal.get("hook_rarity_bonus", []):
+        names.append("+%d％" % int(round(float(v) * 100.0)))
     for f in extra + cat_cfg["furs"] + cat_cfg["patterns"] + cat_cfg["hats"] + cat_cfg["outfits"] + items:
         for key in ("name", "desc"):
             if f.get(key) and f[key] not in names:
@@ -1414,7 +1420,9 @@ def labels():
         d.text((0, 0), n, font=font_, fill=255)
         box = im.getbbox()
         assert box and box[1] >= 2 and box[3] <= 12, f"标签渲染异常: {n} {box}"
-        for i in range(len(n)):   # 每个字都必须真的画出了像素（防止缺字）
+        for i in range(len(n)):   # 每个字都必须真的画出了像素（防止缺字）；ASCII 字符是窄字形，按 10 像素切会错位，只查 cmap
+            if not all(ord(c) > 127 for c in n):
+                continue      # 含 ASCII 的标签是变宽字形，不能按 10 像素等分检查（cmap 已查过）
             assert im.crop((i * 10, 0, i * 10 + 10, 14)).getbbox(), f"字体缺字: {n}[{i}]"
         strips.append((n, im.crop((0, 2, box[2], 12))))
     w = max(s.width for _, s in strips)

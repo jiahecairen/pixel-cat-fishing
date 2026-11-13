@@ -137,7 +137,9 @@
     "sale_min_ms": 8000,
     "sale_max_ms": 20000,
     "eat_min_ms": 180000,
-    "eat_max_ms": 300000
+    "eat_max_ms": 300000,
+    "dock_snap": 12,
+    "dock_no_fish": 70
   },
   "nap": {
     "lucky_minutes": 5

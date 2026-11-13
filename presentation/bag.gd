@@ -235,6 +235,12 @@ func draw() -> void:
 		tx += 20
 	m.label(def["name"], Vector2(tx, dy), Pal.L_W)
 	m.label(def.get("desc", ""), Vector2(tx, dy + 11), Pal.L_A)
+	if not m.mini:
+		var gs: Array = g.gear_stat(id)      # 装备的属性写在图标右边
+		if not gs.is_empty():
+			m.label(str(gs[0]), Vector2(tx, dy + 22), Pal.L_Y)
+			if str(gs[1]) != "":
+				m.label(str(gs[1]), Vector2(tx + m.label_width(str(gs[0])) + 4, dy + 22), Pal.L_G)
 	# 生效中的效果
 	var status := ""
 	if id == "lucky_bait" and g.lucky_active():

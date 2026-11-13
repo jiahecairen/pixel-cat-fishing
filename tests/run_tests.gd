@@ -48,6 +48,7 @@ func _init() -> void:
 		test_weather(balance, fish)
 		test_water(balance, fish)
 		test_sail_turn(balance, fish)
+		test_dock_shoal(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -708,10 +709,10 @@ func test_sail_turn(balance: Dictionary, fish: Array) -> void:
 	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(34))
 	var c2: FakeClock = g2._clock
 	_run(g2, c2, 2)
-	g2.steer_to(500.0)
+	g2.steer_to(480.0)
 	g2.go_to_town()
 	var near: int = int(g2.state.journey["phase_end_ms"]) - int(g2.state.journey["phase_start_ms"])
-	check(near < far / 10 and near >= int(float(far) * 0.07), "离码头近航行时间按比例缩短 (远 %d / 近 %d)" % [far, near])
+	check(near < far / 5 and near >= int(float(far) * 0.07), "离码头近航行时间按比例缩短 (远 %d / 近 %d)" % [far, near])
 	# 打断：船停在当前位置
 	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(35))
 	var c3: FakeClock = g3._clock
@@ -1152,3 +1153,29 @@ func test_bad_config() -> void:
 	check(ConfigLoader.load_fish("user://bad_fish.json").is_empty(), "权重为 0 的鱼配置被拒绝")
 	check(ConfigLoader.load_balance("user://nope.json").is_empty(), "缺失的 balance 被拒绝")
 	DirAccess.open("user://").remove("bad_fish.json")
+
+
+func test_dock_shoal(balance: Dictionary, fish: Array) -> void:
+	print("dock: 贴码头直接上岸/登船不划桨，浅滩不能钓鱼")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(61))
+	var c: FakeClock = g._clock
+	_run(g, c, 2)
+	var dx: float = g.journey.cfg_dock_x()
+	g.steer_to(dx)
+	check(g.at_dock(), "贴着码头 at_dock")
+	check(g.fishing_blocked(), "码头边不能钓鱼")
+	g.go_to_town()
+	check(int(g.state.journey["activity"]) != Journey.Activity.SAIL_OUT, "在码头直接上岸，不划船")
+	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(62))
+	var c2: FakeClock = g2._clock
+	_run(g2, c2, 2)
+	g2.steer_to(dx - float(balance["town"]["dock_no_fish"]) - 20.0)
+	check(not g2.fishing_blocked(), "浅滩外可以钓鱼")
+	g2.steer_to(dx - 30.0)
+	check(g2.fishing_blocked() and not g2.at_dock(), "浅滩内不能钓鱼但不算靠岸")
+
+	# 装备属性文字
+	check(g.gear_stat("rod_0") == ["挂机速度", "+0％"], "树枝竿属性 +0％")
+	check(str(g.gear_stat("rod_3")[0]) == "挂机速度" and str(g.gear_stat("rod_3")[1]).begins_with("+"), "鱼竿有速度属性")
+	check(g.gear_stat("hook_1") == ["稀有鱼加成", "+25％"], "银钩稀有鱼 +25％")
+	check(g.gear_stat("bell").is_empty(), "非装备没有属性")
