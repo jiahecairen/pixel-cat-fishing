@@ -426,7 +426,15 @@ func _tick_fishing(now: int, events: Array) -> void:
 	if not fishing.is_active():
 		fishing.start(now)
 	fishing.zone = zone_id(float(journey.boat_x()))
+	if fishing.baiting_started:         # 每次甩钩前上饵：装上的饵扣 1 个，没有了就用面团
+		fishing.baiting_started = false
+		events.append(_use_bait())
 	var fish_id := fishing.advance(now)
+	if fishing.tangled_flag:            # 三次动漂都没咬钩：空军
+		fishing.tangled_flag = false
+		state.stats["empty_casts"] = int(state.stats.get("empty_casts", 0)) + 1
+		events.append({"type": "tangle"})
+		dirty = true
 	if fish_id == FishingSystem.CHEST:
 		var loot := _roll_chest()
 		if economy.open_chest(state, state.new_id("c"), int(loot["gold"])):
@@ -435,8 +443,26 @@ func _tick_fishing(now: int, events: Array) -> void:
 			events.append({"type": "chest", "gold": loot["gold"], "tier": loot["tier"], "item": loot["item"]})
 			dirty = true
 	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
-		events.append({"type": "catch", "fish_id": fish_id})
+		var size := fishing.hooked_size
+		var best: Dictionary = state.stats["fish_best"]
+		if size > int(best.get(fish_id, 0)):
+			best[fish_id] = size
+		events.append({"type": "catch", "fish_id": fish_id, "size": size})
 		dirty = true
+
+## 上饵：扣掉装上的饵 1 个（用完自动换回面团），并把它的稀有鱼加成交给钓鱼系统。
+func _use_bait() -> Dictionary:
+	var id := state.equipped_bait
+	var bonus := 0.0
+	if id != "":
+		if inventory.count(state, id) > 0 and inventory.by_id.has(id):
+			inventory.consume(state, id)
+			bonus = float(inventory.by_id[id].get("rarity_bonus", 0.0))
+		if inventory.count(state, id) <= 0:
+			state.equipped_bait = ""
+	fishing.bait_bonus = bonus
+	dirty = true
+	return {"type": "bait", "bait": id, "left": inventory.count(state, id) if id != "" else -1}
 
 ## 鸟：每隔几分钟飞来一次落在船上。送礼（带来物品）或偷鱼（叼走篓里最便宜的非稀有鱼，
 ## 只在小猫盯着浮漂等咬钩、没留意身后的时候来偷）。来访开始时定好种类，到 act_after_ms 后才真正生效，让画面里的鸟先飞到。
@@ -464,7 +490,7 @@ func _tick_birds(now: int, events: Array) -> void:
 		return
 	if now < int(e["bird_next_ms"]):
 		return
-	var watching_float: bool = journey.activity() == Journey.Activity.IDLE_FULL or fishing.state == FishingSystem.State.WAITING
+	var watching_float: bool = journey.activity() == Journey.Activity.IDLE_FULL or (fishing.state == FishingSystem.State.WAITING or fishing.state == FishingSystem.State.TWITCH)
 	var loot := economy.cheapest_common(state)
 	if loot != "" and watching_float and _rng.randf() < float(_birds["steal_chance"]):
 		_bird_kind = "steal"
@@ -581,6 +607,11 @@ func use_item(id: String) -> Dictionary:
 		return {"ok": false, "use": "", "gold": 0}
 	var d: Dictionary = inventory.by_id[id]
 	var now: int = _clock.now_ms()
+	if str(d["use"]) == "bait":          # 鱼饵：装到钩上（下一竿起生效），不消耗
+		state.equipped_bait = id
+		state.revision += 1
+		dirty = true
+		return {"ok": true, "use": "bait", "gold": 0}
 	inventory.consume(state, id)
 	var gold := 0
 	match str(d["use"]):

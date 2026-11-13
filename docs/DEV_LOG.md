@@ -210,3 +210,11 @@
 - 状态页：菜单第 5 页，顶栏猫头按钮（`btn_cat`）或 C 键打开。`Game.equipment_name`、`Game.bait_active`；名字表在 `balance.json` 的 `equipment`。
 - 鸟的数值改成 3–8 分钟一次、偷鱼 30%。
 - 测试 263 项、SIM PASS（模拟里加了随机加速）；Linux 截图看过船、水线、摊位逐帧、状态页。Mac 实机待验。
+
+## v0.34 钓鱼手感
+- `Fishing` 增加三个状态（追加在末尾）：BAITING 上饵、TWITCH 动漂、TANGLED 空军。流程：上饵 → 抛竿 → 等（20–60 秒）→ 动漂 → 咬或再等 → 最多三次；咬钩时按第几次动漂决定稀有鱼倍率（0.3/1/3）和大小区间。参数都在 `balance.json` 的 `fishing`。
+- 鱼有大小：`fish.json` 每种加 `size_cm`；钓到时写进 `catch` 事件，统计里记每种最大值（`stats.fish_best`），空军记 `stats.empty_casts`。
+- 鱼饵：`balance.json` 加蚯蚓、小虾（`use: bait`，`max_stack` 99）；`GameState.equipped_bait`；`Game._use_bait` 每次上饵扣 1 个；`Inventory.add` 支持堆叠上限；物品栏按钮对鱼饵显示"装上"。
+- 画面：上饵动作、浮漂点水、空军头顶乱线（新精灵 `tangle`）、钓到的鱼旁显示厘米、状态页鱼饵格、图鉴悬停显示最大尺寸、新音效 `twitch`。船水线降到 `WATER_Y`。
+- 没做：家里的仓库（下一版）。
+- 测试 281 项、SIM PASS；Linux 截图看过上饵、浮漂、船水位、物品栏。Mac 实机待验，空军画面没截到。

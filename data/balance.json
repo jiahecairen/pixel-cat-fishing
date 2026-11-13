@@ -7,7 +7,44 @@
     "hooked_ms": 900,
     "reel_ms": 1500,
     "settle_ms": 1400,
-    "free_wait_multiplier": 2.0
+    "free_wait_multiplier": 2.0,
+    "bait_ms": 1100,
+    "twitch_ms": 1400,
+    "tangle_ms": 3600,
+    "gap_ms": [
+      [
+        4000,
+        10000
+      ],
+      [
+        2500,
+        5000
+      ]
+    ],
+    "bite_chance": [
+      0.5,
+      0.6,
+      0.85
+    ],
+    "stage_rare_mult": [
+      0.3,
+      1.0,
+      3.0
+    ],
+    "size_u": [
+      [
+        0.0,
+        0.55
+      ],
+      [
+        0.2,
+        0.85
+      ],
+      [
+        0.5,
+        1.0
+      ]
+    ]
   },
   "pomodoro": {
     "focus_min": 25,
@@ -189,6 +226,26 @@
       "sprite": "item_boot",
       "weight": 25,
       "use": ""
+    },
+    {
+      "id": "bait_worm",
+      "name": "蚯蚓",
+      "desc": "稀有鱼更容易上钩",
+      "sprite": "item_bait_worm",
+      "weight": 14,
+      "use": "bait",
+      "rarity_bonus": 0.4,
+      "max_stack": 99
+    },
+    {
+      "id": "bait_shrimp",
+      "name": "小虾",
+      "desc": "稀有鱼很容易上钩",
+      "sprite": "item_bait_shrimp",
+      "weight": 8,
+      "use": "bait",
+      "rarity_bonus": 0.9,
+      "max_stack": 99
     }
   ],
   "water": {
@@ -231,5 +288,8 @@
     "hook": [
       "铁钩"
     ]
+  },
+  "dough": {
+    "name": "面团"
   }
 }

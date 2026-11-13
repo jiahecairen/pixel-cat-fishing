@@ -21,11 +21,13 @@ var inventory: Dictionary = {}
 ## 物品效果：幸运鱼饵的到期时刻、招财铃剩余的单数
 var effects: Dictionary = {"lucky_until_ms": 0, "bell_sales": 0, "napped_end_ms": 0, "bird_next_ms": 0, "bird_act_ms": 0}
 var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0, "next_eat_ms": 0, "paused_at_ms": 0, "sales": 0, "roam_x": 0, "walk_from": -1, "boat_x": 260}
-var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}, "chests": 0}
+var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}, "chests": 0, "fish_best": {}, "empty_casts": 0}
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
 ## view_mode: 0 = 桌面迷你悬浮窗，1 = 全画面窗口
 var settings: Dictionary = {"view_mode": 1, "pixel_scale": 3, "sfx_volume": 2, "real_weather": 0, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}
 var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0}
+## 鱼钩上装的鱼饵（物品 id）；空字符串 = 面团（无限量，不占物品栏）
+var equipped_bait: String = ""
 ## 小猫形象：各项是 data/cat.json 里对应列表的下标；created=false 时首次启动会弹出捏猫面板
 var cat: Dictionary = {"fur": 0, "pattern": 1, "hat": 1, "created": false}
 var window: Dictionary = {"has_pos": false, "x": 0, "y": 0}
@@ -45,7 +47,7 @@ func to_dict() -> Dictionary:
 		"processed_sale_ids": processed_sale_ids.duplicate(),
 		"next_seq": next_seq, "pomodoro": pomodoro.duplicate(true),
 		"stats": stats.duplicate(true), "settings": settings.duplicate(true),
-		"upgrades": upgrades.duplicate(true), "cat": cat.duplicate(true),
+		"upgrades": upgrades.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
 		"window": window.duplicate(true),
 	}
 
@@ -81,6 +83,7 @@ func from_dict(d: Dictionary) -> bool:
 	_merge(window, d.get("window"))
 	_merge(upgrades, d.get("upgrades"))
 	_merge(cat, d.get("cat"))
+	equipped_bait = str(d.get("equipped_bait", ""))
 	# JSON 数字读回来是 float，统一成 int
 	for k in ["phase", "phase_end_ms", "cycle_done"]:
 		pomodoro[k] = int(pomodoro[k])

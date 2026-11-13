@@ -53,6 +53,7 @@ var boat_x: float = FISH_X
 var boat_moving: bool = false   # 玩家正用方向键划船
 var boat_dir: float = 1.0
 var bird: Dictionary = {}       # 正在来访的鸟：{kind, item, t0}
+var bait_id: String = ""        # 这一竿钩上的饵（"" = 面团），画上饵动作用
 var eat_t0: int = -100000
 var eat_fish: String = ""
 var splash_t0: int = -100000
@@ -489,7 +490,7 @@ func _zone_tints(cx: float, zones: Array) -> Array:
 func _draw_waterline(bob_y: float, t: int) -> void:
 	var x0 := boat_x - 1.0
 	var w := 66.0
-	var top := float(WATER_Y - 3)
+	var top := float(WATER_Y)              # 水线和浮漂入水的位置持平，船身只露出水面以上的部分
 	var zones: Array = m.game.zone_bounds(SHORE_X)
 	# 盖住船底的水：颜色要和这里的海一致（含水域染色），按 3 像素一列画
 	var cx := x0
@@ -498,7 +499,7 @@ func _draw_waterline(bob_y: float, t: int) -> void:
 		for tint in _zone_tints(cx + 1.5, zones):
 			col = col.lerp(Color(tint, 1.0), tint.a)
 		var rel := cx - x0
-		var y0 := top + (3.0 if rel < 3.0 or rel > w - 6.0 else (2.0 if rel < 6.0 or rel > w - 9.0 else 0.0))
+		var y0 := top + (1.0 if rel < 3.0 or rel > w - 6.0 else 0.0)
 		m.draw_rect(Rect2(cx, y0, minf(3.0, x0 + w - cx), float(WATER_Y + 10) - y0), col)
 		cx += 3.0
 	for k in int((w - 12.0) / 3.0):                                 # 水线上的白沫，一格格错开起伏
@@ -751,6 +752,8 @@ func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:
 			pos.y -= 1 if (t / 200) % 2 == 0 else 0
 		elif _idle_sleeping(now):
 			frame = 2 + (t / 1100) % 2
+	elif m.game.fishing.state == Fishing.State.TANGLED and act == Journey.Activity.FISHING:
+		frame = 2   # 空军：垂头丧气
 	elif t - hop_t0 < 600:
 		frame = 2   # 钓到鱼：眯眼开心跳一下
 		pos.y -= 2 if t - hop_t0 < 140 else (1 if t - hop_t0 < 280 else 0)
@@ -821,9 +824,23 @@ func _draw_fishing(t: int, now: int) -> void:
 			if prog > 0.4:
 				var k := (prog - 0.4) / 0.6
 				bobber = ((cat_pos + tip).lerp(rest, k) + Vector2(0, -10.0 * sin(k * PI))).round()
+		Fishing.State.BAITING:
+			tip = TIP_IDLE
 		Fishing.State.WAITING:
 			tip = TIP_WAIT
 			bobber = rest + Vector2(0, (t / 800) % 2)
+		Fishing.State.TWITCH:
+			# 浮漂动一下：往下点两次，每次点下去溅起一圈小水纹——可能是鱼，也可能只是虚惊一场
+			tip = TIP_WAIT + Vector2(0, 1 if sin(prog * TAU * 2.0) > 0.4 else 0)
+			var dip := maxf(0.0, sin(prog * TAU * 2.0))
+			bobber = rest + Vector2(0, roundf(dip * 3.0))
+			if dip > 0.5:
+				m.tex_frame("splash", rest + Vector2(-3, 3), 1, 2)
+		Fishing.State.TANGLED:
+			# 空军：把竿提起来，线缠成一团，头顶冒出一团乱麻
+			tip = TIP_WAIT.lerp(TIP_IDLE, clampf(prog * 3.0, 0.0, 1.0))
+			if prog < 0.3:
+				bobber = (rest.lerp(cat_pos + tip, prog / 0.3)).round()
 		Fishing.State.HOOKED:
 			tip = TIP_WAIT + Vector2(1, 2)
 			bobber = rest + Vector2((t / 80) % 2, 3)
@@ -845,8 +862,39 @@ func _draw_fishing(t: int, now: int) -> void:
 		if fs == Fishing.State.REELING:
 			m.pixel_line(tip_abs, fish_pos + Vector2(16, 5), Pal.L_W)
 		_draw_hooked(fish_pos, t)
+	if fs == Fishing.State.BAITING:
+		_draw_baiting(tip_abs, prog)
+	if fs == Fishing.State.TANGLED and prog > 0.25:
+		m.draw_texture(m.tex["tangle"], (cat_pos + Vector2(11, -7 + roundf(sin(float(t) / 140.0) * 1.0))).round())
+	if fs == Fishing.State.SETTLEMENT and m.game.fishing.hooked_size > 0:
+		_draw_size_tag(fish_pos, m.game.fishing.hooked_size)
 	if t - splash_t0 < 360:
 		m.tex_frame("splash", rest + Vector2(-3, 3), 0 if t - splash_t0 < 180 else 1, 2)
+
+## 每次甩钩前的上饵：钩子垂在竿梢下面，小猫把一小团饵从手边送到钩上，装好闪一下。
+func _draw_baiting(tip_abs: Vector2, prog: float) -> void:
+	var hook := tip_abs + Vector2(0, 9)
+	m.pixel_line(tip_abs, hook, Pal.L_W)
+	m.draw_rect(Rect2(hook.x - 1, hook.y, 2, 1), Pal.L_A)
+	var col: Color = Pal.L_W
+	if bait_id == "bait_worm":
+		col = Pal.L_P
+	elif bait_id == "bait_shrimp":
+		col = Pal.L_R
+	var from := cat_pos + HAND + Vector2(-3, -3)
+	var k := _ease(clampf(prog / 0.6, 0.0, 1.0))
+	var pos := from.lerp(hook, k).round()
+	m.draw_rect(Rect2(pos.x - 1, pos.y - 1 + (1 if prog < 0.6 and int(prog * 12.0) % 2 == 0 else 0), 3, 3), col)
+	m.draw_rect(Rect2(pos.x - 1, pos.y + 1, 3, 1), col.darkened(0.2))
+	if prog > 0.6:
+		m.tex_frame("sparkle", hook + Vector2(-2, -2), 0 if prog < 0.8 else 1, 2)
+
+## 钓上来的鱼旁边标出大小（厘米）。
+func _draw_size_tag(fish_pos: Vector2, size: int) -> void:
+	var col: Color = Pal.L_W if float(m.game.sky()["dark"]) > 0.35 else Pal.U_K
+	var s := str(size)
+	m.text(s, fish_pos + Vector2(2, -9), col)
+	m.label("厘米", fish_pos + Vector2(4 + s.length() * 4, -12), col)
 
 func _hooked_tex() -> Texture2D:
 	if m.game.fishing.hooked_fish == Fishing.CHEST:

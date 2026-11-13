@@ -34,6 +34,11 @@ static func load_balance(path: String = "res://data/balance.json") -> Dictionary
 	if float(f.get("bite_min_ms", 0)) <= 0 or float(f.get("bite_max_ms", 0)) < float(f.get("bite_min_ms", 0)):
 		push_error("balance.json 咬钩时间范围非法")
 		return {}
+	if f.has("bite_chance"):
+		var bc = f["bite_chance"]
+		if not (bc is Array and bc.size() == 3) or bc.any(func(x): return float(x) < 0.0 or float(x) > 1.0):
+			push_error("balance.json fishing.bite_chance 必须是 3 个 0–1 的数")
+			return {}
 	# 宝箱是可选的；写了就要写对
 	var chest = b.get("chest", {})
 	if chest is Dictionary and chest.has("tiers"):
@@ -51,7 +56,7 @@ static func load_balance(path: String = "res://data/balance.json") -> Dictionary
 			return {}
 		seen_items[it["id"]] = true
 		var use := str(it.get("use", ""))
-		if not use in ["", "gold", "lucky", "bell"]:
+		if not use in ["", "gold", "lucky", "bell", "bait"]:
 			push_error("balance.json items.%s 的 use 不认识: %s" % [it["id"], use])
 			return {}
 		if use == "gold" and int(it.get("gold_max", -1)) < int(it.get("gold_min", 0)):

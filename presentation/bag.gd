@@ -180,7 +180,7 @@ func draw() -> void:
 		var u := _use_rect()
 		m.draw_rect(u, Pal.L_G if can else Pal.U_A)
 		m.draw_rect(Rect2(u.position.x, u.end.y - 2, u.size.x, 2), Pal.U_G if can else Pal.U_K)
-		m.label_centered("使用", u.position.x + u.size.x / 2, u.position.y + (0 if m.mini else 1), Pal.U_K if can else Pal.L_A)
+		m.label_centered("装上" if str(g.inventory.by_id[id].get("use", "")) == "bait" else "使用", u.position.x + u.size.x / 2, u.position.y + (0 if m.mini else 1), Pal.U_K if can else Pal.L_A)
 	var t := Time.get_ticks_msec()
 	if t - gain_t0 < 1800 and gain_text != "":
 		var gp := Vector2(_use_rect().position.x - 4 - gain_text.length() * 4 - 10, _use_rect().position.y + 2 - (t - gain_t0) / 300)

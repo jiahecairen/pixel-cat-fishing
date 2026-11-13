@@ -31,13 +31,13 @@ const FULL_DEFAULT := Vector2i(960, 540)
 const FONT_ORDER := "0123456789:/+x-"
 const FPS_NORMAL := 30
 const FPS_DRAG := 60
-const SFX := ["click", "cast", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
+const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
-	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "zzz", "font", "dots", "panel", "pips", "labels",
+	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
@@ -621,12 +621,20 @@ func _fishing_feedback() -> void:
 	var fs: int = game.fishing.state
 	if fs == _last_fs:
 		return
+	var prev_fs := _last_fs
 	_last_fs = fs
 	match fs:
+		Fishing.State.BAITING:
+			play("click")
 		Fishing.State.CASTING:
 			play("cast")
+		Fishing.State.TWITCH:
+			play("twitch")
+		Fishing.State.TANGLED:
+			play("deny")
 		Fishing.State.WAITING:
-			world.splash_t0 = Time.get_ticks_msec()
+			if prev_fs == Fishing.State.CASTING:       # 抛竿落水才溅水花，动漂之间的再等待不溅
+				world.splash_t0 = Time.get_ticks_msec()
 		Fishing.State.HOOKED:
 			world.splash_t0 = Time.get_ticks_msec()
 			play("bite")
@@ -693,6 +701,8 @@ func _on_event(e: Dictionary) -> void:
 				var it: Dictionary = game.inventory.by_id.get(e["item"], {})
 				if tex.has(it.get("sprite", "")):
 					_float("+1", it["sprite"], world.cat_pos + Vector2(34, 8))
+		"bait":
+			world.bait_id = e["bait"]
 		"basket_full":
 			if not _full_notified:
 				_full_notified = true

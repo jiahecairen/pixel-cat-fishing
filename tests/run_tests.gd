@@ -50,6 +50,7 @@ func _init() -> void:
 		test_birds(balance, fish)
 		test_inventory(balance, fish)
 		test_stall_walk(balance, fish)
+		test_bait(balance, fish)
 		test_checkpoint(balance, fish)
 		test_event_log()
 		test_save()
@@ -92,23 +93,61 @@ func test_fishing(balance: Dictionary, fish: Array) -> void:
 	fs.zone = "normal"
 	var now := 0
 	fs.start(now)
-	check(fs.state == Fishing.State.CASTING, "开始后进入抛竿")
+	check(fs.state == Fishing.State.BAITING and fs.baiting_started, "开始后先上饵")
 	var waits: Array = []
+	var gaps := [[], []]
 	var catches := 0
+	var tangles := 0
+	var casts := 0
 	var counts := {}
-	for i in 400000:
+	var bites := [0, 0, 0]
+	var rare_by_stage := [0, 0, 0]
+	var size_ok := true
+	var seen_twitch := false
+	var order_ok := true
+	var rare_ids := ["mandarin", "koi", "arowana", "bass", "grass_carp", "catfish"]
+	var fish_def := {}
+	for f in fish:
+		fish_def[f["id"]] = f
+	for i in 3000000:
 		now += 100
 		var before := fs.state
 		var got := fs.advance(now)
+		if fs.baiting_started:
+			fs.baiting_started = false
+			casts += 1
+		if fs.tangled_flag:
+			fs.tangled_flag = false
+			tangles += 1
 		if before == Fishing.State.CASTING and fs.state == Fishing.State.WAITING:
 			waits.append(fs.deadline_ms - now)
+		if before == Fishing.State.TWITCH and fs.state == Fishing.State.WAITING:
+			gaps[fs.stage - 1].append(fs.deadline_ms - now)
+		if before == Fishing.State.WAITING and fs.state == Fishing.State.TWITCH:
+			seen_twitch = true
+		if before == Fishing.State.TWITCH and fs.state == Fishing.State.HOOKED:
+			bites[fs.stage] += 1
+			var fd: Dictionary = fish_def[fs.hooked_fish]
+			if int(fd["rarity"]) > 0:
+				rare_by_stage[fs.stage] += 1
+			size_ok = size_ok and fs.hooked_size >= int(fd["size_cm"][0]) and fs.hooked_size <= int(fd["size_cm"][1])
+		if before == Fishing.State.BAITING and fs.state != before and fs.state != Fishing.State.CASTING:
+			order_ok = false
 		if got != "":
 			catches += 1
 			counts[got] = counts.get(got, 0) + 1
-		if catches >= 300:
+		if catches >= 1500:
 			break
-	check(catches == 300, "跑出 300 次鱼获")
-	check(waits.min() >= 20000 and waits.max() <= 60000, "咬钩等待在 20–60 秒 (%d..%d)" % [waits.min(), waits.max()])
+	check(catches == 1500, "跑出 1500 次鱼获")
+	check(order_ok and seen_twitch, "流程：上饵 → 抛竿 → 等 → 动漂")
+	check(waits.min() >= 20000 and waits.max() <= 60000, "第一次动漂前等待 20–60 秒 (%d..%d)" % [waits.min(), waits.max()])
+	check(gaps[0].min() >= 4000 and gaps[0].max() <= 10000, "第二次动漂在 10 秒内 (%d..%d)" % [gaps[0].min(), gaps[0].max()])
+	check(gaps[1].min() >= 2500 and gaps[1].max() <= 5000, "第三次动漂在 5 秒内 (%d..%d)" % [gaps[1].min(), gaps[1].max()])
+	var tot := float(bites[0] + bites[1] + bites[2])
+	check(float(bites[0]) / tot > 0.45 and float(bites[0]) / tot < 0.62, "约一半在第一次动漂就咬钩 (%.2f)" % (float(bites[0]) / tot))
+	check(tangles > 0 and float(tangles) / float(casts) < 0.06, "三次都没咬的空军很少见 (%d/%d)" % [tangles, casts])
+	check(float(rare_by_stage[2]) / maxf(1.0, float(bites[2])) > 2.0 * float(rare_by_stage[0]) / maxf(1.0, float(bites[0])), "第三次动漂咬的钩更可能是稀有鱼")
+	check(size_ok, "鱼的大小都在种类的尺寸范围内")
 	check(counts.get("crucian", 0) > counts.get("koi", 0) and counts.get("bass", 0) > counts.get("koi", 0),
 			"稀有度分布符合权重 %s" % str(counts))
 	# 睡眠醒来（时间跳 3 小时）不会补钓多条
@@ -667,7 +706,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.size() == 6 and inv.owned(g.state).is_empty(), "6 种物品，开局物品栏为空")
+	check(inv.defs.size() == 8 and inv.owned(g.state).is_empty(), "8 种物品（含两种鱼饵），开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -731,7 +770,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 		total += int(g3.state.inventory[id])
 	var gifts := ev.filter(func(e): return e["type"] == "bird_gift").size()
 	check(total == with_item.size() + gifts, "开出的物品和鸟送的礼物都进了物品栏 (%d = %d + %d)" % [total, with_item.size(), gifts])
-	check(g3.inventory.owned(g3.state).size() == 6, "跑够久，6 种物品都开出来过")
+	check(g3.inventory.owned(g3.state).size() == 8, "跑够久，8 种物品都开出来过")
 	# 存档
 	var s4 := GameState.new(); s4.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
 	check(s4.inventory == g.state.inventory and typeof(s4.inventory["boot"]) == TYPE_INT and s4.effects == g.state.effects, "物品栏和效果随存档恢复")
@@ -772,6 +811,44 @@ func test_stall_walk(balance: Dictionary, fish: Array) -> void:
 	g.state.upgrades["rod"] = 2
 	check(g.equipment_name("rod") == "玻纤" and not g.bait_active(), "鱼竿随升级换名字；没有幸运鱼饵时鱼饵格为空")
 
+func test_bait(balance: Dictionary, fish: Array) -> void:
+	print("鱼饵、上饵动作、空军、鱼的大小")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(21))
+	g.set_chest_chance(0.0)
+	check(g.inventory.add(g.state, "bait_worm", 200) and g.inventory.count(g.state, "bait_worm") == 99, "鱼饵最多 99 个")
+	check(not g.inventory.add(g.state, "bait_worm", 1), "满 99 个再加不进去")
+	g.inventory.add(g.state, "bait_shrimp", 2)
+	var r: Dictionary = g.use_item("bait_shrimp")
+	check(r["ok"] and g.state.equipped_bait == "bait_shrimp" and g.inventory.count(g.state, "bait_shrimp") == 2, "使用鱼饵 = 装上，不消耗")
+	var ev := _run(g, clock, 1)
+	check(_count(ev, "bait") == 1 and g.inventory.count(g.state, "bait_shrimp") == 1, "第一竿上饵扣 1 个")
+	check(g.fishing.state == Fishing.State.BAITING and g.fishing.bait_bonus > 0.8, "鱼饵加成交给钓鱼系统")
+	var baits := 1
+	var tangles := 0
+	var sized := true
+	for i in 20000:
+		clock.t += 250
+		for e in g.tick():
+			if e["type"] == "bait":
+				baits += 1
+			elif e["type"] == "tangle":
+				tangles += 1
+			elif e["type"] == "catch":
+				sized = sized and int(e["size"]) > 0
+		if g.state.equipped_bait == "" and baits >= 4 and tangles >= 1:
+			break
+		if g.economy.basket_full(g.state):
+			g.state.basket.clear()
+	check(g.state.equipped_bait == "" and g.inventory.count(g.state, "bait_shrimp") == 0, "饵用完自动换回面团")
+	check(g.fishing.bait_bonus == 0.0 or g.state.equipped_bait == "", "面团没有加成")
+	check(sized and not g.state.stats["fish_best"].is_empty(), "钓到的鱼有大小，记下每种的最大值")
+	check(tangles >= 1 and int(g.state.stats["empty_casts"]) == tangles, "空军记进统计")
+	# 存档往返：装上的饵、动漂次数、鱼的大小不丢
+	g.use_item("bait_worm")
+	var s2 := GameState.new(); s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
+	check(s2.equipped_bait == "bait_worm", "装上的鱼饵写进存档")
+
 func test_checkpoint(balance: Dictionary, fish: Array) -> void:
 	print("fishing checkpoint")
 	var clock := FakeClock.new()
@@ -783,8 +860,8 @@ func test_checkpoint(balance: Dictionary, fish: Array) -> void:
 	clock.t += 3000    # 关掉 3 秒再打开
 	var g2 := Game.new(balance, fish, s2, clock, _rng(99))
 	check(g2.fishing.state == Fishing.State.WAITING and g2.fishing.deadline_ms == deadline, "重启后接着等同一竿，咬钩时刻不变")
-	var ev := _run(g2, clock, (deadline - clock.t) / 1000.0 + 5)
-	check(_count(ev, "catch") == 1, "到点照常上鱼，只上一条")
+	var ev := _run(g2, clock, (deadline - clock.t) / 1000.0 + 60)
+	check(_count(ev, "catch") <= 1 and (_count(ev, "catch") == 1 or g2.fishing.stage > 0 or g2.fishing.state != Fishing.State.WAITING), "到点照常动漂/上鱼，一竿最多一条")
 	# 断点里是没见过的鱼或非法状态：放弃断点，正常重新抛竿
 	var s3 := GameState.new()
 	s3.fishing_checkpoint = {"state": Fishing.State.REELING, "state_start_ms": 0, "deadline_ms": 0, "hooked_fish": "shark"}

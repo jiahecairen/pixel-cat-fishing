@@ -23,7 +23,13 @@ func count(s: GameState, id: String) -> int:
 func add(s: GameState, id: String, n: int = 1) -> bool:
 	if not by_id.has(id) or n <= 0:
 		return false
-	s.inventory[id] = count(s, id) + n
+	var cap := int(by_id[id].get("max_stack", 0))      # 鱼饵最多 99 个，其他物品没有上限
+	var total := count(s, id) + n
+	if cap > 0:
+		total = mini(total, cap)
+		if total <= count(s, id):
+			return false
+	s.inventory[id] = total
 	s.revision += 1
 	return true
 

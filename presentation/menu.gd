@@ -128,13 +128,15 @@ func _draw_dex() -> void:
 		m.draw_texture(m.tex[f["sprite"]], Vector2(cx, cy), Color.WHITE if n > 0 else Color(0.25, 0.25, 0.35))
 		if Rect2(cx - 1, cy - 1, 31, 14).has_point(hover):
 			tip = f["name"] if n > 0 else "？？？"
-			tip_price = int(f["price"]) if n > 0 else 0
+			tip_price = int(g.state.stats["fish_best"].get(f["id"], 0)) if n > 0 else 0      # 这里放这种鱼钓到过的最大尺寸
 			tip_count = n
 	if tip != "":
 		m.label(tip, Vector2(19, 82), Pal.L_W)
-		if tip_price > 0:
+		if tip_count > 0:
 			m.text("x%d" % tip_count, Vector2(60, 85), Pal.L_W)      # 鼠标放上去才显示数量，免得和旁边的鱼图叠在一起
-			m.text_right(str(tip_price), 110, 85, Pal.L_Y)
+		if tip_price > 0:
+			m.label("厘米", Vector2(90, 82), Pal.L_Y)
+			m.text_right(str(tip_price), 89, 85, Pal.L_Y)             # 这种鱼钓到过的最大尺寸
 	else:
 		m.label("共钓到", Vector2(19, 82), Pal.L_A)
 		m.text(str(int(g.state.stats["total_fish"])), Vector2(52, 85), Pal.L_W)
@@ -203,10 +205,12 @@ func _draw_status() -> void:
 		m.label(EQUIP[i][0], Vector2(56, y), Pal.L_A)
 		m.label(g.equipment_name(EQUIP[i][1]), Vector2(82, y), Pal.L_W)
 	m.label("鱼饵", Vector2(56, 73), Pal.L_A)
-	if g.bait_active():
-		m.label("幸运", Vector2(82, 73), Pal.L_Y)
+	var bid: String = g.state.equipped_bait       # 装上的饵；没装就是面团（无限量）
+	if bid == "" or not g.inventory.by_id.has(bid):
+		m.label("面团", Vector2(82, 73), Pal.L_W)
 	else:
-		m.label("空", Vector2(82, 73), Pal.L_A)
+		m.label(String(g.inventory.by_id[bid]["name"]), Vector2(82, 73), Pal.L_Y)
+		m.text("x%d" % g.inventory.count(g.state, bid), Vector2(103, 76), Pal.L_W)
 	m.draw_rect(Rect2(17, 84, 94, 1), Pal.U_A)
 	m.draw_texture(m.tex["coin"], Vector2(19, 85))
 	m.text(str(g.state.wallet_gold), Vector2(30, 88), Pal.L_Y)

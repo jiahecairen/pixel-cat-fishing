@@ -69,6 +69,7 @@ def build():
                     tone(NOTE["E5"], 0.07, 0.3, "tri", slide=-8, decay=25)),
         "bite": seq(tone(NOTE["A5"], 0.06, 0.4, duty=0.25, decay=12), silence(0.03),
                     tone(NOTE["A5"], 0.09, 0.4, duty=0.25, decay=12)),
+        "twitch": seq(tone(NOTE["E5"], 0.035, 0.3, "tri", decay=20), silence(0.035), tone(NOTE["G5"], 0.05, 0.3, "tri", decay=16)),
         "reel": seq(*[seq(tone(300 + i * 45, 0.025, 0.25, duty=0.125, decay=30), silence(0.02)) for i in range(9)]),
         "catch": arp(["C5", "E5", "G5"], 0.07, vol=0.4, decay=9),
         "rare": mix(arp(["C5", "E5", "G5", "C6", "E6", "G6"], 0.075, vol=0.4, decay=7, duty=0.25),

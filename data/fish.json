@@ -11,7 +11,11 @@
       "zone_weights": {
         "shallow": 45,
         "normal": 10
-      }
+      },
+      "size_cm": [
+        8,
+        18
+      ]
     },
     {
       "id": "crucian",
@@ -24,7 +28,11 @@
         "shallow": 45,
         "normal": 35,
         "deep": 5
-      }
+      },
+      "size_cm": [
+        10,
+        28
+      ]
     },
     {
       "id": "bream",
@@ -36,7 +44,11 @@
       "zone_weights": {
         "shallow": 10,
         "normal": 35
-      }
+      },
+      "size_cm": [
+        20,
+        45
+      ]
     },
     {
       "id": "bass",
@@ -49,7 +61,11 @@
         "shallow": 3,
         "normal": 30,
         "deep": 15
-      }
+      },
+      "size_cm": [
+        30,
+        70
+      ]
     },
     {
       "id": "grass_carp",
@@ -61,7 +77,11 @@
       "zone_weights": {
         "normal": 15,
         "deep": 25
-      }
+      },
+      "size_cm": [
+        40,
+        100
+      ]
     },
     {
       "id": "catfish",
@@ -73,7 +93,11 @@
       "zone_weights": {
         "normal": 5,
         "deep": 30
-      }
+      },
+      "size_cm": [
+        40,
+        120
+      ]
     },
     {
       "id": "mandarin",
@@ -85,7 +109,11 @@
       "zone_weights": {
         "normal": 8,
         "deep": 15
-      }
+      },
+      "size_cm": [
+        25,
+        60
+      ]
     },
     {
       "id": "koi",
@@ -97,7 +125,11 @@
       "zone_weights": {
         "normal": 3,
         "deep": 10
-      }
+      },
+      "size_cm": [
+        40,
+        90
+      ]
     },
     {
       "id": "arowana",
@@ -108,7 +140,11 @@
       "rarity": 2,
       "zone_weights": {
         "deep": 6
-      }
+      },
+      "size_cm": [
+        60,
+        120
+      ]
     }
   ]
 }

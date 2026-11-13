@@ -930,12 +930,28 @@ def item_icon(kind):
         c.rows(2, 8, ["a..........a", "aa........aa", ".aaaaaaaaaa.", "..aaaaaaaa..", "...AAAAAA..."])   # 贝壳
         c.ellipse(8, 6, 3, 3, "W")
         c.pts([(9, 7), (10, 6), (9, 8)], "c"); c.set(7, 5, "p")
+    elif kind == "bait_worm":
+        c.rows(3, 4, ["pp.....pp", ".pppp.ppp", "..pRRppR.", ".pp.RR.pp", "pR....R.R"][:5])    # 一条弯弯的蚯蚓
+        c.rect(3, 9, 12, 12, "n"); c.rect(3, 12, 12, 12, "O")                                 # 下面一小块泥
+        c.pts([(5, 10), (8, 11), (10, 10)], "O")
+    elif kind == "bait_shrimp":
+        c.rows(3, 3, ["..rrrrr...", ".rrFFrrr..", "rrFrrrrrr.", "rr..rrFrrr", ".r...rrrr.", "......rr.r"])
+        c.set(4, 5, "K"); c.pts([(2, 3), (1, 2)], "F")                                       # 眼睛和触须
+        c.pts([(11, 8), (12, 9)], "F")
     elif kind == "boot":
         c.rect(5, 2, 9, 10, "o"); c.rect(5, 2, 9, 3, "n")
         c.rect(5, 9, 13, 12, "o"); c.rect(5, 13, 13, 13, "O")
         c.rect(9, 5, 9, 9, "O"); c.pts([(6, 5), (7, 7), (6, 9)], "h")   # 鞋带
         c.pts([(12, 10), (11, 9)], "n")
     c.outline()
+    return c
+
+
+def tangle():
+    """空军：头顶一团乱麻似的黑线。13×10。"""
+    c = Canvas(13, 10)
+    c.rows(0, 1, ["..KKK.K...K..", ".K..KKKK.KK..", "KKKKK..KKK.KK", "K.KK.KKK..K..", "KKK.KK..KKKK.",
+                  ".K.KKKKK.K.K.", "..KK..K.KKK..", "...KKKK.K..KK"])
     return c
 
 
@@ -970,7 +986,7 @@ LABELS = [
     "我的小猫", "给小猫选个样子", "完成",
     "方向键走动", "空格键互动", "空格键去小镇", "空格键去钓鱼", "市场", "鱼摊", "方向键划船", "空格键摆摊", "浅滩", "普通水域", "深水区", "水果", "蔬菜", "面包", "鲜花",
     "小猫的家", "裁缝铺", "渔具店", "空格键进入", "空格键聊天",
-    "确定要退出吗", "退出", "取消", "宝箱", "状态", "鱼线", "鱼钩", "树枝", "竹竿", "玻纤", "碳素", "合金", "金竿", "棉线", "铁钩", "幸运", "空", "钓到",
+    "确定要退出吗", "退出", "取消", "宝箱", "状态", "鱼线", "鱼钩", "树枝", "竹竿", "玻纤", "碳素", "合金", "金竿", "棉线", "铁钩", "空", "钓到", "面团", "厘米", "装上",
     "物品栏", "使用", "空空如也", "生效中", "去钓宝箱吧",
     "欢迎光临", "空格键出门", "空格键看货", "空格键照镜子", "空格键看图鉴", "空格键看统计", "空格键小睡", "Z", "真实天气", "开", "关", "休息时才能小睡", "已经睡饱了", "小猫睡得真香",
     "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
@@ -1070,6 +1086,7 @@ def build():
         "basket": save(basket(), "basket"),
         "bobber": save(bobber(), "bobber"),
         "bang": save(bang(), "bang"),
+        "tangle": save(tangle(), "tangle"),
         "zzz": save(zzz(), "zzz"),
         "font": save(font(), "font"),
         "dots": save(dots(), "dots"),
@@ -1092,7 +1109,7 @@ def build():
         "rug": save(rug(), "rug"),
         "labels": labels(),
     }
-    for k in ("bottle", "lucky_bait", "bell", "map_piece", "pearl", "boot"):
+    for k in ("bottle", "lucky_bait", "bell", "map_piece", "pearl", "boot", "bait_worm", "bait_shrimp"):
         made["item_" + k] = save(item_icon(k), "item_" + k)
     for k in ("fruit", "veg", "bread", "flower"):
         made["goods_" + k] = save(goods(k), "goods_" + k)

@@ -2,7 +2,9 @@ extends RefCounted
 ## 自动钓鱼状态机。只靠传入的时间戳推进，不看帧数。
 ## 每次 advance 最多走一步，所以电脑睡眠醒来不会"补钓"一大堆鱼。
 
-enum State { IDLE, CASTING, WAITING, HOOKED, REELING, SETTLEMENT, PAUSED }
+## 一竿的流程：上饵 → 抛竿 → 等（第一次动漂）→ 动漂 → [没咬：再等 → 动漂] ×最多 3 次 → 咬钩/收线/结算；
+## 三次都没咬就是空军（收杆，线缠成一团，饵丢了）。新增状态都追加在末尾，旧存档里的数值含义不变。
+enum State { IDLE, CASTING, WAITING, HOOKED, REELING, SETTLEMENT, PAUSED, BAITING, TWITCH, TANGLED }
 
 var state: int = State.IDLE
 var state_start_ms: int = 0
@@ -11,6 +13,11 @@ var wait_multiplier: float = 1.0
 const CHEST := "chest"            # 钓上来的不是鱼而是宝箱时，hooked_fish 取这个值
 
 var hooked_fish: String = ""
+var hooked_size: int = 0            # 这条鱼的大小（厘米），咬钩时在种类的尺寸范围里随机
+var stage: int = 0                  # 这一竿已经动过几次漂（0..2），决定下一次咬钩的概率和鱼的档次
+var baiting_started: bool = false   # 刚开始上饵：Game 读到后扣一个饵并清掉这个标记
+var tangled_flag: bool = false      # 刚空军：Game 读到后记一笔并清掉
+var bait_bonus: float = 0.0         # 本竿所用鱼饵带来的稀有鱼加成（Game 在上饵时设置）
 var chest_chance: float = 0.0     # 每一竿钓到宝箱的概率（来自 balance.json 的 chest.chance）
 var zone: String = ""               # 当前水域 id；鱼表里有 zone_weights 的鱼按它取权重
 var rarity_bonus: float = 0.0     # 鱼饵升级：稀有鱼权重 ×(1 + rarity_bonus × rarity)
@@ -26,7 +33,7 @@ func _init(cfg: Dictionary, fish_table: Array, rng: RandomNumberGenerator) -> vo
 
 ## 断点：把当前这一竿的进度存下来，重启后接着等，而不是重新抛竿。
 func checkpoint() -> Dictionary:
-	return {"state": state, "state_start_ms": state_start_ms, "deadline_ms": deadline_ms, "hooked_fish": hooked_fish}
+	return {"state": state, "state_start_ms": state_start_ms, "deadline_ms": deadline_ms, "hooked_fish": hooked_fish, "stage": stage, "hooked_size": hooked_size}
 
 ## 从断点恢复。数据不合法（未知状态、未知鱼种）时返回 false 并保持空闲。
 func restore(cp: Dictionary) -> bool:
@@ -36,7 +43,7 @@ func restore(cp: Dictionary) -> bool:
 	for f in _fish:
 		if f["id"] == fish:
 			known = true
-	if s <= State.IDLE or s >= State.PAUSED or not known:
+	if s <= State.IDLE or s == State.PAUSED or s > State.TANGLED or not known:
 		return false
 	if s in [State.HOOKED, State.REELING, State.SETTLEMENT] and fish == "":
 		return false
@@ -44,6 +51,8 @@ func restore(cp: Dictionary) -> bool:
 	state_start_ms = int(cp.get("state_start_ms", 0))
 	deadline_ms = int(cp.get("deadline_ms", 0))
 	hooked_fish = fish
+	stage = clampi(int(cp.get("stage", 0)), 0, 2)
+	hooked_size = int(cp.get("hooked_size", 0))
 	return true
 
 func is_active() -> bool:
@@ -51,7 +60,7 @@ func is_active() -> bool:
 
 func start(now_ms: int) -> void:
 	if not is_active():
-		_enter(State.CASTING, now_ms, int(_cfg["cast_ms"]))
+		_begin_baiting(now_ms)
 
 func stop(now_ms: int) -> void:
 	hooked_fish = ""
@@ -76,17 +85,20 @@ func advance(now_ms: int) -> String:
 	if not is_active() or now_ms < deadline_ms:
 		return ""
 	match state:
+		State.BAITING:
+			_enter(State.CASTING, now_ms, int(_cfg["cast_ms"]))
 		State.CASTING:
+			stage = 0
 			var lo := float(_cfg["bite_min_ms"])
 			var hi := float(_cfg["bite_max_ms"])
 			_enter(State.WAITING, now_ms, int(_rng.randf_range(lo, hi) * wait_multiplier))
 		State.WAITING:
-			# chest_chance 为 0 时不消耗随机数，保持没有宝箱时的随机序列不变
-			if chest_chance > 0.0 and _rng.randf() < chest_chance:
-				hooked_fish = CHEST
-			else:
-				hooked_fish = _roll_fish()
-			_enter(State.HOOKED, now_ms, int(_cfg["hooked_ms"]))
+			_enter(State.TWITCH, now_ms, int(_cfg.get("twitch_ms", 1400)))
+		State.TWITCH:
+			_after_twitch(now_ms)
+		State.TANGLED:
+			hooked_fish = ""
+			_begin_baiting(now_ms)
 		State.HOOKED:
 			_enter(State.REELING, now_ms, int(_cfg["reel_ms"]))
 		State.REELING:
@@ -94,8 +106,34 @@ func advance(now_ms: int) -> String:
 			return hooked_fish
 		State.SETTLEMENT:
 			hooked_fish = ""
-			_enter(State.CASTING, now_ms, int(_cfg["cast_ms"]))
+			_begin_baiting(now_ms)
 	return ""
+
+func _begin_baiting(now_ms: int) -> void:
+	baiting_started = true
+	_enter(State.BAITING, now_ms, int(_cfg.get("bait_ms", 1100)))
+
+## 一次动漂结束：按这是第几次决定咬不咬。咬了就按档次抽鱼（或宝箱）；没咬就接着等，三次都没咬则空军。
+func _after_twitch(now_ms: int) -> void:
+	var chances: Array = _cfg.get("bite_chance", [1.0, 1.0, 1.0])
+	if _rng.randf() < float(chances[clampi(stage, 0, chances.size() - 1)]):
+		hooked_size = 0
+		# chest_chance 为 0 时不消耗随机数，保持没有宝箱时的随机序列不变
+		if chest_chance > 0.0 and _rng.randf() < chest_chance:
+			hooked_fish = CHEST
+		else:
+			hooked_fish = _roll_fish()
+			hooked_size = _roll_size(hooked_fish)
+		_enter(State.HOOKED, now_ms, int(_cfg["hooked_ms"]))
+		return
+	stage += 1
+	if stage >= 3:
+		tangled_flag = true
+		_enter(State.TANGLED, now_ms, int(_cfg.get("tangle_ms", 3600)))
+		return
+	var gaps: Array = _cfg.get("gap_ms", [[4000, 10000], [2500, 5000]])
+	var g: Array = gaps[clampi(stage - 1, 0, gaps.size() - 1)]
+	_enter(State.WAITING, now_ms, int(_rng.randf_range(float(g[0]), float(g[1]))))
 
 func _enter(s: int, now_ms: int, duration_ms: int) -> void:
 	state = s
@@ -106,7 +144,11 @@ func _weight(f: Dictionary) -> float:
 	var base := float(f["weight"])
 	if f.has("zone_weights"):          # 这种鱼只在列出的水域出现
 		base = float(f["zone_weights"].get(zone, 0.0))
-	return base * (1.0 + rarity_bonus * float(f.get("rarity", 0)))
+	var w := base * (1.0 + (rarity_bonus + bait_bonus) * float(f.get("rarity", 0)))
+	if int(f.get("rarity", 0)) > 0:      # 第几次动漂咬的钩：一次就中多是普通鱼，第三次更可能是稀有的
+		var mults: Array = _cfg.get("stage_rare_mult", [1.0, 1.0, 1.0])
+		w *= float(mults[clampi(stage, 0, mults.size() - 1)])
+	return w
 
 func _roll_fish() -> String:
 	var total := 0.0
@@ -118,3 +160,13 @@ func _roll_fish() -> String:
 		if r < 0.0:
 			return f["id"]
 	return _fish[-1]["id"]
+
+## 鱼的大小（厘米）：在这个种类的尺寸范围里取一个随机值；档次越高（动漂次数越多）越偏大。
+func _roll_size(fish_id: String) -> int:
+	for f in _fish:
+		if f["id"] == fish_id and f.has("size_cm"):
+			var us: Array = _cfg.get("size_u", [[0.0, 1.0]])
+			var u: Array = us[clampi(stage, 0, us.size() - 1)]
+			var r: Array = f["size_cm"]
+			return int(round(lerpf(float(r[0]), float(r[1]), _rng.randf_range(float(u[0]), float(u[1])))))
+	return 0
