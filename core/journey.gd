@@ -17,6 +17,9 @@ func _dur(key: String, scale: float = 1.0) -> int:
 
 ## 航行时长按路程折算：sail_ms 对应从默认钓点到码头的路程，船停得离码头近就按比例缩短（太近也不低于 sail_min_scale），
 ## 这样不管船在哪儿，航行速度都差不多，不会出现最后一小段慢得像爬。
+func cfg_dock_x() -> float:
+	return float(_cfg.get("dock_x", 512))
+
 func sail_scale() -> float:
 	var dist := absf(float(_cfg.get("dock_x", 512)) - float(boat_x()))
 	return clampf(dist / float(_cfg.get("sail_ref_dist", 252)), float(_cfg.get("sail_min_scale", 0.08)), 3.0)

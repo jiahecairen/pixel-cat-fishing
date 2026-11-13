@@ -94,7 +94,7 @@ func shift_month(delta: int) -> void:
 # ------------------------------------------------------------------ 输入
 func _chart_rect() -> Rect2:
 	var r := rect()
-	return Rect2(r.position.x + 12, r.position.y + 40, r.size.x * 0.5 - 22, 66)
+	return Rect2(r.position.x + 12, r.position.y + 40, r.size.x * 0.5 - 22, clampf(r.size.y - 52.0, 24.0, 66.0))
 
 func _prev_month_rect() -> Rect2:
 	var r := rect()
@@ -102,7 +102,7 @@ func _prev_month_rect() -> Rect2:
 
 func _next_month_rect() -> Rect2:
 	var r := rect()
-	return Rect2(r.position.x + 70, r.position.y + 17, 11, 11)
+	return Rect2(r.position.x + 52, r.position.y + 17, 11, 11)
 
 func _prev_day_rect() -> Rect2:
 	var r := rect()
@@ -110,7 +110,7 @@ func _prev_day_rect() -> Rect2:
 
 func _next_day_rect() -> Rect2:
 	var r := rect()
-	return Rect2(r.position.x + r.size.x * 0.5 + 78, r.position.y + 17, 11, 11)
+	return Rect2(r.position.x + r.size.x * 0.5 + 46, r.position.y + 17, 11, 11)
 
 func click(p: Vector2) -> bool:
 	if not open or not rect().has_point(p):
@@ -270,7 +270,7 @@ func _draw_stats(r: Rect2) -> void:
 	m.tex_frame("btn_left", _prev_month_rect().position, 0, 2)
 	m.text("%04d-%02d" % [sel_y, sel_m], Vector2(r.position.x + 22, r.position.y + 21), Pal.L_W)
 	m.tex_frame("btn_right", _next_month_rect().position, 0, 2)
-	m.label("每月番茄", Vector2(r.position.x + 88, r.position.y + 18), Pal.L_A)
+	m.label("每月番茄", Vector2(r.position.x + 68, r.position.y + 18), Pal.L_A)
 	var counts: Array = []
 	var peak := 4
 	for d in range(1, n + 1):
@@ -305,28 +305,32 @@ func _draw_stats(r: Rect2) -> void:
 		m.text(s, Vector2(lx - s.length() * 2, cr.end.y + 3), Pal.L_A)
 	# ---- 右：选中那天每小时的专注分钟 ----
 	var rx := r.position.x + r.size.x * 0.5
-	var hours: Array = g.focus_hours_of(_key(sel_y, sel_m, sel_d))
+	var hours: Array = g.focus_hours_live(_key(sel_y, sel_m, sel_d))
 	var total := 0
 	for h in 24:
 		total += int(hours[h])
 	m.tex_frame("btn_left", _prev_day_rect().position, 0, 2)
 	m.text("%02d-%02d" % [sel_m, sel_d], Vector2(rx + 23, r.position.y + 21), Pal.L_W)
 	m.tex_frame("btn_right", _next_day_rect().position, 0, 2)
-	m.label("当日专注", Vector2(rx + 94, r.position.y + 18), Pal.L_A)
+	m.label("当日专注", Vector2(rx + 62, r.position.y + 18), Pal.L_A)
 	var by := cr.end.y
 	var bx := rx + 12.0
 	var bh := cr.size.y
-	m.draw_rect(Rect2(bx - 1, by, 24 * 5 + 1, 1), Pal.U_A)
+	var pitch := clampi(int((r.end.x - 6.0 - bx) / 24.0), 2, 5)         # 窗口窄时柱子挤一点，保证 24 小时都画得下
+	m.draw_rect(Rect2(bx - 1, by, 24 * pitch + 1, 1), Pal.U_A)
 	m.draw_rect(Rect2(bx - 1, by - bh, 1, bh), Pal.U_A)
 	for h in 24:
 		var mins := float(hours[h]) / 60.0
 		var hh := int(round(minf(mins, 60.0) * bh / 60.0))
 		if mins > 0.0:
 			hh = maxi(hh, 1)
-			m.draw_rect(Rect2(bx + h * 5, by - hh, 4, hh), Pal.L_R if (h == int(m.clock.local_s() % 86400 / 3600) and _key(sel_y, sel_m, sel_d) == m.clock.today_key()) else Pal.L_G)
+			m.draw_rect(Rect2(bx + h * pitch, by - hh, maxi(1, pitch - 1), hh), Pal.L_R if (h == int(m.clock.local_s() % 86400 / 3600) and _key(sel_y, sel_m, sel_d) == m.clock.today_key()) else Pal.L_G)
 	for h in [0, 6, 12, 18]:
 		var s := str(h)
-		m.text(s, Vector2(bx + h * 5, by + 3), Pal.L_A)
+		m.text(s, Vector2(bx + h * pitch, by + 3), Pal.L_A)
 	m.text("60", Vector2(bx - 12, by - bh - 2), Pal.L_A)
+	if total <= 0:
+		var has_old := int(daily.get(_key(sel_y, sel_m, sel_d), 0)) > 0
+		m.label("当天没有小时记录" if has_old else "这天还没有专注", Vector2(bx + 14, by - bh / 2 - 5), Pal.L_A)
 	m.text(str(int(round(total / 60.0))), Vector2(rx + 14, by + 12), Pal.L_Y)
 	m.label("分钟", Vector2(rx + 14 + str(int(round(total / 60.0))).length() * 4 + 3, by + 9), Pal.L_A)

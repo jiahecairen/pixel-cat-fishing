@@ -253,3 +253,13 @@
 - 装修：渔具店/帽子店/摊位地面共 30 多张新精灵（灯笼、门帘、浮漂板、鱼标本、木桶竿、饵料罐、帽子挂板、帽架、布卷、货箱、看板、招牌旗、石灯笼）；`_draw_stall_deco`。
 - 调试变量：`CATFISH_BOOK=页`、`CATFISH_SHOP=1`。测试新增按小时记录和买鱼饵。
 - 测试 ALL TESTS PASS、SIM PASS；Linux 截图看过各页面和装修。Mac 实机待验。
+
+## v0.40（11-13）
+- 码头不能钓鱼：`Game.at_dock()`（船离码头 < 12 像素），`cast_line` 拒绝，提示不显示；`Journey.cfg_dock_x`。
+- 帽子店 / 服装店：`Game.set_cat_cfg/cat_items/cat_price/cat_owns/buy_cat_item/wear_cat_item`，存档 `cat.own_hats / own_outfits / outfit`（老存档戴着的帽子自动算已拥有）；新面板 `presentation/outfit_shop.gd`；`data/cat.json` 加价格和 `outfits`。
+- 新房子 `house_3`（服装店，x=760，门 782），室内人台、衣物挂板；3 件衣服覆盖层 `assets/cat/outfit_*.png`（`draw_outfit` 只改毛色像素，贴合所有 6 帧）。
+- 开发者模式：` 键 / unicode 96、183，`Wardrobe.dev`，换形象面板加"衣服"一行。
+- 统计页：箭头紧挨日期；`Game.focus_hours_live`；窄窗口柱宽自适应；没数据时写原因。
+- 调试变量：`CATFISH_OUTFITSHOP=hat|outfit`；`CATFISH_LOOK` 可带第 4 项衣服。
+- 测试 ALL TESTS PASS（325 项）、SIM PASS；Linux 截图看过两个货架、统计页。Mac 实机待验。
+

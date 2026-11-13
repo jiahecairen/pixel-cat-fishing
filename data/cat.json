@@ -1,24 +1,113 @@
 {
   "version": 1,
   "furs": [
-    {"name": "橘色", "base": "f", "shade": "F", "light": "l"},
-    {"name": "灰色", "base": "a", "shade": "A", "light": "W"},
-    {"name": "黑色", "base": "A", "shade": "K", "light": "a"},
-    {"name": "白色", "base": "w", "shade": "a", "light": "W"},
-    {"name": "棕色", "base": "o", "shade": "O", "light": "n"},
-    {"name": "金色", "base": "h", "shade": "H", "light": "w"}
+    {
+      "name": "橘色",
+      "base": "f",
+      "shade": "F",
+      "light": "l"
+    },
+    {
+      "name": "灰色",
+      "base": "a",
+      "shade": "A",
+      "light": "W"
+    },
+    {
+      "name": "黑色",
+      "base": "A",
+      "shade": "K",
+      "light": "a"
+    },
+    {
+      "name": "白色",
+      "base": "w",
+      "shade": "a",
+      "light": "W"
+    },
+    {
+      "name": "棕色",
+      "base": "o",
+      "shade": "O",
+      "light": "n"
+    },
+    {
+      "name": "金色",
+      "base": "h",
+      "shade": "H",
+      "light": "w"
+    }
   ],
   "patterns": [
-    {"name": "纯色", "white": false, "stripes": false},
-    {"name": "白肚", "white": true,  "stripes": false},
-    {"name": "虎斑", "white": true,  "stripes": true},
-    {"name": "条纹", "white": false, "stripes": true}
+    {
+      "name": "纯色",
+      "white": false,
+      "stripes": false
+    },
+    {
+      "name": "白肚",
+      "white": true,
+      "stripes": false
+    },
+    {
+      "name": "虎斑",
+      "white": true,
+      "stripes": true
+    },
+    {
+      "name": "条纹",
+      "white": false,
+      "stripes": true
+    }
   ],
   "hats": [
-    {"name": "无帽",   "sprite": ""},
-    {"name": "草帽",   "sprite": "hat_straw"},
-    {"name": "渔夫帽", "sprite": "hat_bucket"},
-    {"name": "贝雷帽", "sprite": "hat_beret"}
+    {
+      "name": "无帽",
+      "sprite": "",
+      "price": 0
+    },
+    {
+      "name": "草帽",
+      "sprite": "hat_straw",
+      "price": 0
+    },
+    {
+      "name": "渔夫帽",
+      "sprite": "hat_bucket",
+      "price": 150
+    },
+    {
+      "name": "贝雷帽",
+      "sprite": "hat_beret",
+      "price": 220
+    }
   ],
-  "default": {"fur": 0, "pattern": 1, "hat": 1}
+  "default": {
+    "fur": 0,
+    "pattern": 1,
+    "hat": 1,
+    "outfit": 0
+  },
+  "outfits": [
+    {
+      "name": "没穿",
+      "sprite": "",
+      "price": 0
+    },
+    {
+      "name": "红围巾",
+      "sprite": "outfit_scarf",
+      "price": 120
+    },
+    {
+      "name": "蓝浴衣",
+      "sprite": "outfit_yukata",
+      "price": 260
+    },
+    {
+      "name": "背带裤",
+      "sprite": "outfit_overalls",
+      "price": 200
+    }
+  ]
 }

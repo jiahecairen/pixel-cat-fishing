@@ -50,6 +50,7 @@ func _init() -> void:
 		test_sail_turn(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
+		test_outfit_shop_and_dock(balance, fish)
 		test_birds(balance, fish)
 		test_inventory(balance, fish)
 		test_stall_walk(balance, fish)
@@ -470,9 +471,16 @@ func test_cat_config() -> void:
 			check(FileAccess.file_exists("res://assets/cat/%s.png" % h["sprite"]), "帽子素材存在: " + h["sprite"])
 	for layer in ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed"]:
 		check(FileAccess.file_exists("res://assets/cat/%s.png" % layer), "猫图层存在: " + layer)
-	s.cat = {"fur": 3, "pattern": 2, "hat": 0, "created": true}
+	for o in c["outfits"]:
+		if o["sprite"] != "":
+			check(FileAccess.file_exists("res://assets/cat/%s.png" % o["sprite"]), "衣服素材存在: " + o["sprite"])
+	s.cat["fur"] = 3
+	s.cat["pattern"] = 2
+	s.cat["hat"] = 0
+	s.cat["outfit"] = 2
+	s.cat["created"] = true
 	var s2 := GameState.new(); s2.from_dict(JSON.parse_string(JSON.stringify(s.to_dict())))
-	check(s2.cat == {"fur": 3, "pattern": 2, "hat": 0, "created": true}, "形象随存档恢复")
+	check(int(s2.cat["fur"]) == 3 and int(s2.cat["pattern"]) == 2 and int(s2.cat["hat"]) == 0 and int(s2.cat["outfit"]) == 2 and s2.cat["created"], "形象随存档恢复")
 	# 第一阶段的旧存档没有 cat 字段：应保留默认形象且视为未捏猫
 	var old := s.to_dict(); old.erase("cat")
 	var s3 := GameState.new()
@@ -675,6 +683,7 @@ func test_water(balance: Dictionary, fish: Array) -> void:
 	var c0: FakeClock = g._clock
 	_run(g, c0, 30)
 	check(g.fishing.state == Fishing.State.IDLE and not g.fishing.is_active(), "停船后不会自己甩竿")
+	g.steer_to(300.0)
 	check(g.cast_line() and g.line_out() and not g.cast_line(), "按互动键重新甩竿，不能重复")
 	_run(g, c0, 2)
 	check(g.fishing.is_active(), "甩竿后恢复钓鱼")
@@ -684,7 +693,7 @@ func test_water(balance: Dictionary, fish: Array) -> void:
 	var c: FakeClock = g._clock
 	g.steer_to(200.0)
 	_run(g, c, 100)
-	check(g.journey.boat_x() == 512, "往返小镇不改变船的位置")
+	check(g.journey.boat_x() == 300, "往返小镇不改变船的位置")
 
 func test_sail_turn(balance: Dictionary, fish: Array) -> void:
 	print("sail: 航行时长按路程折算、途中掉头")
@@ -766,6 +775,39 @@ func test_stats_and_bait_shop(balance: Dictionary, fish: Array) -> void:
 	g.state.wallet_gold = 9999
 	g.inventory.add(g.state, "bait_worm", 98)
 	check(not g.buy_bait("bait_worm") and g.inventory.count(g.state, "bait_worm") == 99, "鱼饵到 99 个上限不能再买")
+
+func test_outfit_shop_and_dock(balance: Dictionary, fish: Array) -> void:
+	print("outfit: 买帽子 / 买衣服 / 码头不能钓鱼")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(52))
+	g.set_cat_cfg(ConfigLoader.load_cat())
+	check(g.cat_owns("hat", 1) and g.cat_owns("hat", 0) and not g.cat_owns("hat", 2), "草帽和无帽一开始就有，渔夫帽没有")
+	check(g.cat_owns("outfit", 0) and not g.cat_owns("outfit", 1), "衣服一开始只有没穿")
+	check(not g.wear_cat_item("outfit", 1), "没买不能穿")
+	g.state.wallet_gold = 100
+	check(not g.buy_cat_item("outfit", 1) and g.state.wallet_gold == 100, "钱不够不扣钱")
+	g.state.wallet_gold = 500
+	check(g.buy_cat_item("outfit", 1) and g.state.wallet_gold == 380, "红围巾 120 金币")
+	check(not g.buy_cat_item("outfit", 1) and g.state.wallet_gold == 380, "重复买不会再扣钱")
+	check(g.wear_cat_item("outfit", 1) and int(g.state.cat["outfit"]) == 1, "买下后可以穿上")
+	check(g.buy_cat_item("hat", 2) and g.wear_cat_item("hat", 2) and int(g.state.cat["hat"]) == 2, "买渔夫帽并戴上")
+	var st2 := GameState.new()
+	var ok: bool = st2.from_dict(g.state.to_dict())
+	var g2 := Game.new(balance, fish, st2, FakeClock.new(), _rng(53))
+	g2.set_cat_cfg(ConfigLoader.load_cat())
+	check(ok and g2.cat_owns("outfit", 1) and g2.cat_owns("hat", 2) and int(st2.cat["outfit"]) == 1, "买过的东西随存档保存")
+	var old := GameState.new()
+	old.cat = {"fur": 0, "pattern": 1, "hat": 3, "created": true}     # 老存档里没有 own_* 字段，戴着贝雷帽
+	var g3 := Game.new(balance, fish, old, FakeClock.new(), _rng(54))
+	g3.state.cat["own_hats"] = [0, 1]
+	g3.state.cat["own_outfits"] = [0]
+	g3.set_cat_cfg(ConfigLoader.load_cat())
+	check(g3.cat_owns("hat", 3), "老存档里正戴着的帽子算已拥有")
+	# 船停在码头边上不能钓鱼
+	var g4 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(55))
+	g4.journey.set_boat_x(float(balance["town"]["dock_x"]))
+	check(g4.at_dock() and not g4.cast_line(), "靠着码头不能甩竿")
+	g4.journey.set_boat_x(float(balance["town"]["dock_x"]) - 60.0)
+	check(not g4.at_dock(), "离码头远了不算靠码头")
 
 func test_birds(balance: Dictionary, fish: Array) -> void:
 	print("birds: 鸟来访（送礼 / 偷鱼）")

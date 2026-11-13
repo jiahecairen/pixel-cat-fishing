@@ -396,9 +396,13 @@ func reel_in() -> bool:
 	dirty = true
 	return true
 
+## 船停在码头边上（离码头太近，不能钓鱼）。
+func at_dock() -> bool:
+	return float(journey.boat_x()) >= float(journey.cfg_dock_x()) - 12.0
+
 ## 停船后重新开始钓鱼。
 func cast_line() -> bool:
-	if line_out() or journey.activity() != Journey.Activity.FISHING or pomodoro.is_break():
+	if at_dock() or line_out() or journey.activity() != Journey.Activity.FISHING or pomodoro.is_break():
 		return false
 	state.journey["line_out"] = 1
 	dirty = true
@@ -757,6 +761,81 @@ func focus_hours_of(day_key: String) -> Array:
 	for h in 24:
 		out.append(int(hours[h]) if hours.size() == 24 else 0)
 	return out
+
+## 同上，但当天正在进行的专注也算进去（只算到现在为止的那一段）。
+func focus_hours_live(day_key: String) -> Array:
+	var out: Array = focus_hours_of(day_key)
+	if day_key != _clock.today_key() or not in_focus():
+		return out
+	var now: int = _clock.now_ms()
+	var elapsed_s: int = maxi(0, duration("focus_min") * 60 - int(pomodoro.remaining_ms(now) / 1000))
+	var end_s: int = _clock.local_s() % 86400
+	var start_s: int = maxi(0, end_s - elapsed_s)
+	for h in 24:
+		var o := mini(end_s, (h + 1) * 3600) - maxi(start_s, h * 3600)
+		if o > 0:
+			out[h] = int(out[h]) + o
+	return out
+
+## ---- 帽子店 / 服装店 ----
+## data/cat.json 的内容，由表现层交给 Game（价格在里面）。kind: "hat" 或 "outfit"。
+var cat_cfg: Dictionary = {}
+
+func set_cat_cfg(cfg: Dictionary) -> void:
+	cat_cfg = cfg
+	# 老存档：现在戴着的帽子、穿着的衣服一定算已拥有
+	_own_add("hat", int(state.cat.get("hat", 0)))
+	_own_add("outfit", int(state.cat.get("outfit", 0)))
+
+func cat_items(kind: String) -> Array:
+	return cat_cfg.get("hats" if kind == "hat" else "outfits", [])
+
+func _own_key(kind: String) -> String:
+	return "own_hats" if kind == "hat" else "own_outfits"
+
+func _own_add(kind: String, idx: int) -> void:
+	var own: Array = state.cat[_own_key(kind)]
+	for v in own:
+		if int(v) == idx:
+			return
+	own.append(idx)
+
+func cat_price(kind: String, idx: int) -> int:
+	var list := cat_items(kind)
+	return int(list[idx].get("price", 0)) if idx >= 0 and idx < list.size() else 0
+
+func cat_owns(kind: String, idx: int) -> bool:
+	if idx < 0 or idx >= cat_items(kind).size():
+		return false
+	if cat_price(kind, idx) <= 0:
+		return true
+	for v in state.cat[_own_key(kind)]:
+		if int(v) == idx:
+			return true
+	return false
+
+func cat_wearing(kind: String, idx: int) -> bool:
+	return int(state.cat.get(kind, 0)) == idx
+
+## 买下。已经拥有或钱不够都不会扣钱（重复提交不会重复生效）。
+func buy_cat_item(kind: String, idx: int) -> bool:
+	if cat_owns(kind, idx) or idx < 0 or idx >= cat_items(kind).size():
+		return false
+	var price := cat_price(kind, idx)
+	if state.wallet_gold < price:
+		return false
+	state.wallet_gold -= price
+	_own_add(kind, idx)
+	dirty = true
+	return true
+
+## 穿上 / 戴上（必须已经拥有）。
+func wear_cat_item(kind: String, idx: int) -> bool:
+	if not cat_owns(kind, idx):
+		return false
+	state.cat[kind] = idx
+	dirty = true
+	return true
 
 ## ---- 渔具店买鱼饵 ----
 func shop_baits() -> Array:

@@ -5,13 +5,15 @@ extends RefCounted
 const Pal := preload("res://presentation/palette.gd")
 
 const RECT := Rect2(15, 28, 98, 66)
+## 开发者模式（按 ` 键）：随便换毛色、花纹、帽子、衣服，不花钱，也不影响已买的东西。首次启动捏猫也用这块面板。
 ## [存档里的键, cat.json 里的列表名]
-const ROWS := [["fur", "furs"], ["pattern", "patterns"], ["hat", "hats"]]
-const ROW_Y := 45
-const ROW_H := 12
-const DONE_RECT := Rect2(85, 81, 25, 11)
+const ROWS := [["fur", "furs"], ["pattern", "patterns"], ["hat", "hats"], ["outfit", "outfits"]]
+const ROW_Y := 44
+const ROW_H := 10
+const DONE_RECT := Rect2(25, 82, 25, 10)
 
 var open: bool = false
+var dev: bool = false
 var m
 
 func _init(main) -> void:
@@ -25,6 +27,7 @@ func _right(row: int) -> Rect2:
 
 func close() -> void:
 	open = false
+	dev = false
 	if not m.game.state.cat.get("created", false):
 		m.game.state.cat["created"] = true
 		m.game.dirty = true
@@ -56,7 +59,7 @@ func draw() -> void:
 	var cat: Dictionary = m.game.state.cat
 	m.draw_rect(RECT, Pal.U_A)
 	m.draw_rect(RECT.grow(-1), Pal.U_K)
-	m.label("我的小猫" if cat.get("created", false) else "给小猫选个样子", Vector2(19, 31), Pal.L_W)
+	m.label("开发者模式" if dev else ("我的小猫" if cat.get("created", false) else "给小猫选个样子"), Vector2(19, 31), Pal.L_W)
 	# 预览：天空 + 水面小景
 	m.draw_rect(Rect2(19, 44, 36, 36), Pal.L_C)
 	m.draw_rect(Rect2(19, 72, 36, 8), Pal.L_B)
@@ -71,4 +74,4 @@ func draw() -> void:
 		m.label_centered(item["name"], 84, y, Pal.L_W)
 	m.draw_rect(DONE_RECT, Pal.L_G)
 	m.draw_rect(Rect2(DONE_RECT.position.x, DONE_RECT.end.y - 1, DONE_RECT.size.x, 1), Pal.U_G)
-	m.label_centered("完成", DONE_RECT.position.x + 13, DONE_RECT.position.y, Pal.U_K)
+	m.label_centered("完成", DONE_RECT.position.x + 13, DONE_RECT.position.y - 1, Pal.U_K)

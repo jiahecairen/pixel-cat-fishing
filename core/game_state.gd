@@ -30,7 +30,7 @@ var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0}
 ## 鱼钩上装的鱼饵（物品 id）；空字符串 = 面团（无限量，不占物品栏）
 var equipped_bait: String = ""
 ## 小猫形象：各项是 data/cat.json 里对应列表的下标；created=false 时首次启动会弹出捏猫面板
-var cat: Dictionary = {"fur": 0, "pattern": 1, "hat": 1, "created": false}
+var cat: Dictionary = {"fur": 0, "pattern": 1, "hat": 1, "outfit": 0, "own_hats": [0, 1], "own_outfits": [0], "created": false}
 var window: Dictionary = {"has_pos": false, "x": 0, "y": 0}
 
 func new_id(prefix: String) -> String:

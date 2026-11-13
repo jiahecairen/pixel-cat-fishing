@@ -133,6 +133,60 @@ def draw_hat(c, hat, by, dx=0):
         c.pts([(14 + dx, 5 + by), (15 + dx, 4 + by)], "p")
 
 
+OUTFITS = ["scarf", "yukata", "overalls"]
+
+
+def draw_outfit(b, kind, pose, by):
+    """给已经描好边的小猫身体上色：只改毛色像素（FUR_SLOTS），不动描边，所以一定贴合身体。"""
+    c = Canvas(32, 32)
+    for y in range(32):
+        for x in range(32):
+            c.px[y][x] = b.px[y][x]
+    fur = set(FUR_SLOTS)
+    done = set()
+
+    def paint(x0, y0, x1, y1, k):
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                if 0 <= x < 32 and 0 <= y < 32 and (c.px[y][x] in fur or (x, y) in done):
+                    c.px[y][x] = k
+                    done.add((x, y))
+
+    walk = pose == "walk"
+    if kind == "scarf":
+        if walk:
+            paint(14, 19 + by, 20, 20 + by, "r"); paint(14, 21 + by, 16, 21 + by, "R")
+            paint(14, 22 + by, 15, 24 + by, "r")
+        else:
+            paint(10, 19, 18, 20, "r"); paint(10, 21, 11, 21, "R")
+            paint(9, 22, 10, 25, "r"); paint(9, 25, 10, 25, "R")
+            paint(12, 20, 14, 20, "R")
+    elif kind == "yukata":
+        if walk:
+            paint(12, 20 + by, 21, 27 + by, "b"); paint(12, 26 + by, 21, 27 + by, "B")
+            paint(12, 24 + by, 21, 24 + by, "w"); paint(12, 25 + by, 21, 25 + by, "y")
+            for x, y in ((14, 21), (17, 22), (19, 21), (16, 26)):
+                paint(x, y + by, x, y + by, "W")
+        else:
+            paint(6, 21 + by, 18, 29, "b"); paint(6, 28, 18, 29, "B")
+            paint(6, 25, 18, 25, "w"); paint(6, 26, 18, 26, "y")
+            for x, y in ((8, 22), (11, 23), (14, 22), (16, 24), (9, 27), (13, 28)):
+                paint(x, y + by, x, y + by, "W")
+    elif kind == "overalls":
+        if walk:
+            paint(13, 23 + by, 20, 27 + by, "g"); paint(13, 27 + by, 20, 27 + by, "G")
+            paint(14, 20 + by, 14, 22 + by, "g"); paint(19, 20 + by, 19, 22 + by, "g")
+            paint(14, 22 + by, 14, 22 + by, "y"); paint(19, 22 + by, 19, 22 + by, "y")
+            paint(13, 26, 20, 29, "g")
+            paint(13, 29, 20, 29, "G")
+        else:
+            paint(6, 22 + by, 18, 29, "g"); paint(6, 28, 18, 29, "G")
+            paint(10, 20 + by, 11, 21 + by, "g"); paint(17, 20 + by, 18, 21 + by, "g")
+            paint(10, 22 + by, 11, 22 + by, "y"); paint(17, 22 + by, 18, 22 + by, "y")
+            paint(11, 26, 13, 27, "G"); paint(12, 26, 12, 26, "y")
+    return c
+
+
 def cat_raw(tail_up=False, eyes_closed=False, breathe=0, hat=None, pose="sit", step=0, rain=False):
     c = Canvas(32, 32)
     by = breathe
@@ -272,6 +326,18 @@ def cat_layers():
         write("hat_" + hat, overlays, False)
 
 
+    for kind in OUTFITS:
+        overlays = []
+        for f, b in zip(CAT_FRAMES, bare):
+            h = draw_outfit(b, kind, f.get("pose", "sit"), f.get("step", f.get("breathe", 0)))
+            o = Canvas(32, 32)
+            for y in range(32):
+                for x in range(32):
+                    if h.px[y][x] != b.px[y][x]:
+                        o.px[y][x] = h.px[y][x]
+            overlays.append(o)
+        write("outfit_" + kind, overlays, False)
+
     gear = []
     for f, b in zip(CAT_FRAMES, bare):
         h = cat_raw(hat="rain", rain=True, **f)
@@ -294,6 +360,7 @@ def cat_gallery():
             assert f[k] in PALETTE, f"cat.json 毛色用了调色板以外的键: {f}"
     hats = [None] + HATS
     assert len(cfg["hats"]) == len(hats), "cat.json 的帽子数量与生成器不一致"
+    assert len(cfg["outfits"]) == len(OUTFITS) + 1, "cat.json 的衣服数量与生成器不一致"
     cols = len(cfg["patterns"]) * len(hats)
     g = Canvas(34 * cols, 34 * len(cfg["furs"]))
     for r, f in enumerate(cfg["furs"]):
@@ -1003,11 +1070,15 @@ def noren(kind):
     """门帘（挂在门楣）：渔具店是蓝布白鱼，帽子店是粉布草帽。18×10。"""
     c = Canvas(18, 10)
     c.rect(0, 0, 17, 0, "O")
-    base = "b" if kind == "tackle" else "p"
+    base = {"tackle": "b", "clothes": "g"}.get(kind, "p")
     for x0 in (1, 6, 11):
         c.rect(x0, 1, x0 + 4, 8, base)
-        c.rect(x0, 8, x0 + 4, 8, "B" if kind == "tackle" else "R")
-    if kind == "tackle":
+        c.rect(x0, 8, x0 + 4, 8, {"tackle": "B", "clothes": "G"}.get(kind, "R"))
+    if kind == "clothes":
+        c.rows(6, 3, ["W...W", "WWWWW", ".WWW.", ".WWW."])
+        c.pts([(2, 4), (3, 4)], "W")
+        c.pts([(12, 4), (13, 4), (14, 4)], "W")
+    elif kind == "tackle":
         c.rows(6, 3, [".WWW.", "WWWKW", ".WWW."])
         c.pts([(2, 4), (3, 4)], "W")
         c.pts([(12, 4), (13, 4), (14, 4)], "W")
@@ -1015,6 +1086,41 @@ def noren(kind):
         c.rows(6, 3, ["..hh.", ".hhhh", "HHHHH"])
         c.pts([(2, 4), (3, 4)], "W")
         c.pts([(12, 4), (13, 4), (14, 4)], "W")
+    c.outline()
+    return c
+
+
+def wall_clothes():
+    """墙上的衣物挂板：围巾、浴衣、背带裤挂在横杆上。40×26。"""
+    c = Canvas(40, 26)
+    c.rect(1, 1, 38, 24, "O")
+    c.rect(2, 2, 37, 23, "n")
+    c.rect(3, 4, 36, 4, "O")
+    # 红围巾
+    c.rect(5, 5, 8, 7, "r"); c.rect(5, 8, 6, 14, "r"); c.rect(5, 14, 6, 14, "R"); c.rect(5, 5, 8, 5, "R")
+    # 蓝浴衣
+    c.rect(14, 5, 24, 6, "b"); c.rect(11, 7, 27, 8, "b"); c.rect(14, 9, 24, 20, "b"); c.rect(14, 18, 24, 20, "B")
+    c.rect(14, 13, 24, 13, "w"); c.rect(14, 14, 24, 14, "y")
+    c.pts([(16, 10), (20, 11), (22, 16), (17, 17)], "W")
+    # 背带裤
+    c.rect(30, 5, 31, 8, "g"); c.rect(34, 5, 35, 8, "g"); c.rect(29, 9, 36, 20, "g"); c.rect(29, 19, 36, 20, "G")
+    c.pts([(30, 8), (35, 8)], "y")
+    c.rect(32, 10, 33, 12, "G")
+    c.outline()
+    return c
+
+
+def mannequin():
+    """立着的人台，穿着蓝浴衣，脖子上围红围巾。14×30。"""
+    c = Canvas(14, 30)
+    c.rect(6, 22, 7, 27, "O")
+    c.rect(2, 28, 11, 29, "o")
+    c.ellipse(7, 15, 4.8, 8, "b")
+    c.rect(2, 20, 11, 22, "B")
+    c.rect(2, 16, 11, 16, "w"); c.rect(2, 17, 11, 17, "y")
+    c.pts([(5, 12), (9, 13), (8, 19), (4, 14)], "W")
+    c.ellipse(7, 4, 3, 3, "w")
+    c.rect(4, 7, 10, 8, "r"); c.rect(4, 9, 5, 12, "r"); c.rect(4, 12, 5, 12, "R")
     c.outline()
     return c
 
@@ -1254,6 +1360,7 @@ LABELS = [
     "确定要退出吗", "退出", "取消", "宝箱", "状态", "鱼线", "鱼钩", "树枝", "竹竿", "玻纤", "碳素", "合金", "金竿", "棉线", "铁钩", "空", "钓到", "面团", "装上", "空格键开始钓鱼", "仓库", "身上", "存入", "取出", "全部", "空格键开仓库", "装备", "未解锁", "最高纪录", "最大的鱼", "空军", "番茄", "分钟", "最忙的一天", "每月番茄", "当日专注", "暂无记录", "钓过的鱼", "天", "月", "时",
     "物品栏", "使用", "空空如也", "生效中", "去钓宝箱吧",
     "欢迎光临", "空格键出门", "空格键看货", "空格键照镜子", "空格键看图鉴", "空格键看统计", "空格键小睡", "Z", "真实天气", "开", "关", "休息时才能小睡", "已经睡饱了", "小猫睡得真香",
+    "服装店", "帽子店", "空格键看帽子", "空格键看衣服", "买下", "穿上", "穿着", "已有", "金币不够", "开发者模式", "帽子", "衣服", "可以穿了",
     "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
 ]
 FONT_FILE = os.path.join(os.path.dirname(__file__), "fonts", "fusion-pixel-10px-proportional-zh_hans.otf.woff")
@@ -1268,7 +1375,7 @@ def labels():
     extra = json.load(open(os.path.join(ROOT, "data", "fish.json"), encoding="utf-8"))["fish"]
     cat_cfg = json.load(open(os.path.join(ROOT, "data", "cat.json"), encoding="utf-8"))
     items = json.load(open(os.path.join(ROOT, "data", "balance.json"), encoding="utf-8")).get("items", [])
-    for f in extra + cat_cfg["furs"] + cat_cfg["patterns"] + cat_cfg["hats"] + items:
+    for f in extra + cat_cfg["furs"] + cat_cfg["patterns"] + cat_cfg["hats"] + cat_cfg["outfits"] + items:
         for key in ("name", "desc"):
             if f.get(key) and f[key] not in names:
                 names.append(f[key])
@@ -1356,6 +1463,10 @@ def build():
         "lantern": save(lantern(), "lantern"),
         "noren_tackle": save(noren("tackle"), "noren_tackle"),
         "noren_tailor": save(noren("tailor"), "noren_tailor"),
+        "noren_clothes": save(noren("clothes"), "noren_clothes"),
+        "wall_clothes": save(wall_clothes(), "wall_clothes"),
+        "mannequin": save(mannequin(), "mannequin"),
+        "house_3": save(house("w", "p", "g", "G", w=46, door_x=18), "house_3"),
         "wall_bobbers": save(wall_bobbers(), "wall_bobbers"),
         "specimen_0": save(specimen(0), "specimen_0"),
         "specimen_1": save(specimen(1), "specimen_1"),

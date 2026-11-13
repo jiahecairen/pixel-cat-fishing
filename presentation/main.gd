@@ -21,6 +21,7 @@ const Pal := preload("res://presentation/palette.gd")
 const Labels := preload("res://presentation/labels.gd")
 const Menu := preload("res://presentation/menu.gd")
 const Wardrobe := preload("res://presentation/wardrobe.gd")
+const OutfitShop := preload("res://presentation/outfit_shop.gd")
 const World := preload("res://presentation/world.gd")
 const Bag := preload("res://presentation/bag.gd")
 const Book := preload("res://presentation/book.gd")
@@ -34,7 +35,7 @@ const FPS_NORMAL := 30
 const FPS_DRAG := 60
 const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
-const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "tree", "stall_back",
+const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "noren_clothes", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
@@ -74,6 +75,7 @@ const FPS_HIDDEN := 5            # 窗口最小化时的帧率
 var clock: Clock
 var menu: Menu
 var wardrobe: Wardrobe
+var outfit_shop: OutfitShop
 var bag: Bag
 var book: Book
 var world: World
@@ -159,6 +161,8 @@ func _ready() -> void:
 	game = Game.new(balance, fish, state, clock, rng)
 	menu = Menu.new(self)
 	wardrobe = Wardrobe.new(self)
+	outfit_shop = OutfitShop.new(self)
+	game.set_cat_cfg(cat_cfg)
 	bag = Bag.new(self)
 	book = Book.new(self)
 	world = World.new(self)
@@ -171,7 +175,7 @@ func _ready() -> void:
 		tex[f["sprite"]] = load("res://assets/sprites/%s.png" % f["sprite"])
 	for n in CAT_LAYERS:
 		tex["cat/" + n] = load("res://assets/cat/%s.png" % n)
-	for h in cat_cfg["hats"]:
+	for h in cat_cfg["hats"] + cat_cfg["outfits"]:
 		if h.get("sprite", "") != "":
 			tex["cat/" + h["sprite"]] = load("res://assets/cat/%s.png" % h["sprite"])
 	for it in balance.get("items", []):
@@ -219,8 +223,14 @@ func _apply_debug_env() -> void:
 	if OS.has_environment("CATFISH_LOOK"):
 		var parts := OS.get_environment("CATFISH_LOOK").split(",")
 		if parts.size() == 3:
-			st.cat = {"fur": parts[0].to_int(), "pattern": parts[1].to_int(), "hat": parts[2].to_int(), "created": true}
+			st.cat["fur"] = parts[0].to_int()
+			st.cat["pattern"] = parts[1].to_int()
+			st.cat["hat"] = parts[2].to_int()
+			st.cat["created"] = true
+			if parts.size() > 3:
+				st.cat["outfit"] = parts[3].to_int()
 			wardrobe.open = false
+			outfit_shop.open = false
 	if OS.has_environment("CATFISH_FILL"):
 		var ids: Array = game.fish_by_id.keys()
 		for i in OS.get_environment("CATFISH_FILL").to_int():
@@ -235,12 +245,14 @@ func _apply_debug_env() -> void:
 		for d in game.inventory.defs:
 			game.inventory.add(st, d["id"], OS.get_environment("CATFISH_ITEMS").to_int())
 		wardrobe.open = false
+		outfit_shop.open = false
 		bag.open = true
 	if OS.has_environment("CATFISH_WH"):          # 调试：物品各给 N 个，一半存进仓库，并打开仓库面板
 		for d in game.inventory.defs:
 			game.inventory.add(st, d["id"], OS.get_environment("CATFISH_WH").to_int())
 			game.inventory.stash(st, d["id"], OS.get_environment("CATFISH_WH").to_int() / 2)
 		wardrobe.open = false
+		outfit_shop.open = false
 		bag.open_warehouse()
 	if OS.has_environment("CATFISH_BOOK"):        # 调试：造一些统计数据并打开图鉴册的第 N 页
 		var rngd := RandomNumberGenerator.new()
@@ -257,6 +269,7 @@ func _apply_debug_env() -> void:
 			st.stats["fish_best"][fid] = rngd.randi_range(8, 90)
 		st.stats["total_fish"] = 77
 		wardrobe.open = false
+		outfit_shop.open = false
 		book.open_page(OS.get_environment("CATFISH_BOOK").to_int())
 	if OS.has_environment("CATFISH_AUTOFOCUS"):
 		game.start_focus()
@@ -287,6 +300,7 @@ func _apply_debug_env() -> void:
 		game.go_to_town()
 	if OS.has_environment("CATFISH_MENU"):
 		wardrobe.open = false
+		outfit_shop.open = false
 		menu.open = true
 		menu.tab = OS.get_environment("CATFISH_MENU").to_int()
 		menu.shop_page = OS.get_environment("CATFISH_SHOP").to_int() if OS.has_environment("CATFISH_SHOP") else 0
@@ -442,6 +456,25 @@ func _end_roam_auto(x: float) -> void:
 	game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))
 
 
+## ` 键（中文输入法下是"·"）：开发者模式，随便换形象，不花钱。
+func _is_dev_key(event: InputEventKey) -> bool:
+	return event.keycode == KEY_QUOTELEFT or event.unicode == 96 or event.unicode == 183
+
+
+func _toggle_dev_mode() -> void:
+	if wardrobe.open:
+		wardrobe.close()
+	else:
+		menu.open = false
+		bag.open = false
+		book.open = false
+		outfit_shop.close()
+		wardrobe.open = true
+		wardrobe.dev = true
+	play("click")
+	_update_polygon()
+
+
 ## 互动键：在海上 = 收着竿时重新甩竿；自由走动时在摊位旁 = 开张，在码头 = 上船。
 func _interact() -> void:
 	var j: Journey = game.journey
@@ -508,9 +541,12 @@ func _interact_inside() -> void:
 				return
 			menu.tab = 2
 			menu.open = true
-		"mirror":
+		"hats":
 			play("click")
-			wardrobe.open = true
+			outfit_shop.open_kind("hat")
+		"clothes":
+			play("click")
+			outfit_shop.open_kind("outfit")
 		"bed":
 			if world.napping:
 				pass
@@ -627,6 +663,9 @@ func _process(dt: float) -> void:
 			game.state.pomodoro["phase_end_ms"] = game.now_ms() + 3600000
 		_enter_building(_debug_room)
 		_debug_room = ""
+		if OS.has_environment("CATFISH_OUTFITSHOP"):   # 调试：进屋后直接打开货架（hat / outfit）
+			game.state.wallet_gold = 150
+			outfit_shop.open_kind(OS.get_environment("CATFISH_OUTFITSHOP"))
 		if OS.has_environment("CATFISH_NAP"):     # 调试：进屋后直接走到床边按一下
 			world.room_x = 156.0
 			_interact_inside()
@@ -861,11 +900,19 @@ func _unhandled_input(event: InputEvent) -> void:
 					_update_polygon()
 				else:
 					bag.key(event.keycode)     # 方向键选格子，空格使用
+			elif outfit_shop.open:
+				if event.keycode == KEY_ESCAPE:
+					outfit_shop.close()
+					_update_polygon()
+				else:
+					outfit_shop.key(event.keycode)     # 上下选货，空格买下 / 穿上
 			elif (menu.open or wardrobe.open) and event.keycode == KEY_ESCAPE:
 				menu.open = false          # Esc 关闭面板（从店里出来）
 				if wardrobe.open:
 					wardrobe.close()
 				_update_polygon()
+			elif _is_dev_key(event):
+				_toggle_dev_mode()
 			elif not panel_open() and event.keycode in KEYS_ACT:
 				_interact()
 		return
@@ -919,7 +966,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
-	elif book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p):
+	elif book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_town_button()
@@ -937,7 +984,7 @@ func _quit_button_visible() -> bool:
 
 ## 有任何面板（菜单、换形象、物品栏）开着。
 func panel_open() -> bool:
-	return menu.open or wardrobe.open or bag.open or book.open
+	return menu.open or wardrobe.open or outfit_shop.open or bag.open or book.open
 
 
 ## 小猫状态页（菜单的第 5 页）：已经开着就关，否则打开。
@@ -946,6 +993,7 @@ func toggle_status() -> void:
 	book.open = false
 	if wardrobe.open:
 		wardrobe.close()
+	outfit_shop.close()
 	bag.open = false
 	if menu.open and menu.tab == 4:
 		menu.open = false
@@ -963,6 +1011,7 @@ func open_book(page: int) -> void:
 	bag.open = false
 	if wardrobe.open:
 		wardrobe.close()
+	outfit_shop.close()
 	book.open_page(page)
 	_update_polygon()
 
@@ -973,6 +1022,7 @@ func toggle_bag() -> void:
 	menu.open = false
 	if wardrobe.open:
 		wardrobe.close()
+	outfit_shop.close()
 	bag.toggle()
 	_update_polygon()
 
@@ -1093,6 +1143,7 @@ func _draw() -> void:
 		draw_set_transform(ui_off)
 	menu.draw()
 	wardrobe.draw()
+	outfit_shop.draw()
 	bag.draw()
 	book.draw()
 	if _confirm_quit:
@@ -1203,7 +1254,7 @@ func _draw_hud(now: int) -> void:
 				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_pier(rx):
 					hint = "空格键聊天"
 				label(hint, Vector2(17, 41), hint_col)
-		elif game.journey.activity() == Journey.Activity.FISHING and not game.line_out() and not game.pomodoro.is_break():
+		elif game.journey.activity() == Journey.Activity.FISHING and not game.line_out() and not game.pomodoro.is_break() and not game.at_dock():
 			label("空格键开始钓鱼", Vector2(17, 30), hint_col)
 		if game.can_steer():
 			label("方向键划船", Vector2(17, 41), hint_col)
@@ -1246,6 +1297,8 @@ func draw_cat(pos: Vector2, frame: int, flip := false) -> void:
 	var fur: Dictionary = furs[posmod(int(look.get("fur", 0)), furs.size())]
 	var pat: Dictionary = pats[posmod(int(look.get("pattern", 0)), pats.size())]
 	var hat: Dictionary = hats[posmod(int(look.get("hat", 0)), hats.size())]
+	var outfits: Array = cat_cfg["outfits"]
+	var outfit: Dictionary = outfits[posmod(int(look.get("outfit", 0)), outfits.size())]
 	var base: Color = Pal.BY_KEY.get(fur["base"], Pal.L_F)
 	var shade: Color = Pal.BY_KEY.get(fur["shade"], Pal.U_F)
 	var light: Color = Pal.BY_KEY.get(fur["light"], Pal.L_L)
@@ -1255,6 +1308,8 @@ func draw_cat(pos: Vector2, frame: int, flip := false) -> void:
 	_tex_frame("cat/pat_white", pos, frame, CAT_FRAMES, Pal.L_W if pat.get("white", false) else light, flip)
 	_tex_frame("cat/pat_stripe", pos, frame, CAT_FRAMES, shade if pat.get("stripes", false) else base, flip)
 	_tex_frame("cat/fixed", pos, frame, CAT_FRAMES, Color.WHITE, flip)
+	if outfit.get("sprite", "") != "" and not (game.is_raining() and interior == "" and not wardrobe.open):
+		_tex_frame("cat/" + outfit["sprite"], pos, frame, CAT_FRAMES, Color.WHITE, flip)
 	if game.is_raining() and interior == "" and not wardrobe.open:
 		# 下雨天在室外：穿蓑衣、戴蓑衣帽（盖掉平时的帽子），进屋就脱掉
 		_tex_frame("cat/rain_gear", pos, frame, CAT_FRAMES, Color.WHITE, flip)
