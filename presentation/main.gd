@@ -49,6 +49,10 @@ const BTN_TOWN := Rect2(89, 3, 11, 11)
 const BTN_MENU := Rect2(100, 3, 11, 11)     # 齿轮：只打开设置
 const BTN_VIEW := Rect2(111, 3, 11, 11)
 const BTN_CLOSE := Rect2(111, 14, 11, 11)
+# 退出确认框
+const QUIT_BOX := Rect2(15, 30, 110, 36)
+const QUIT_YES := Rect2(24, 49, 36, 13)
+const QUIT_NO := Rect2(80, 49, 36, 13)
 const MINI_SCENE := Rect2(4, 28, 121, 66)     # 迷你视图里可拖动/可点击的场景区域
 const MINI_CAM_Y := World.WATER_Y - 74
 const MINI_CAT_X := 44                        # 迷你视图里小猫固定出现的横坐标
@@ -88,6 +92,7 @@ var _limits: Dictionary = {}
 var _missing_labels: Dictionary = {}
 var _full_notified: bool = false
 var _roam_fx: float = 0.0        # 自由走动的亚像素位置
+var _confirm_quit: bool = false   # 正在显示"确定要退出吗"
 var interior: String = ""        # 小猫所在的屋子（"" = 在室外）；不存档，重启后回到门口
 var _last_walk_input: int = -100000
 const KEYS_LEFT := [KEY_LEFT, KEY_A]
@@ -612,7 +617,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey:
 		if event.pressed and not event.echo and not mini:
-			if (menu.open or wardrobe.open) and event.keycode == KEY_ESCAPE:
+			if _confirm_quit:
+				if event.keycode == KEY_ESCAPE:
+					_confirm_quit = false
+			elif (menu.open or wardrobe.open) and event.keycode == KEY_ESCAPE:
 				menu.open = false          # Esc 关闭面板（从店里出来）
 				if wardrobe.open:
 					wardrobe.close()
@@ -630,6 +638,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var v: Vector2 = event.position / float(px_scale)   # 视图坐标
 	var p := v - ui_off                                  # 界面坐标
+	if _confirm_quit:
+		# 确认框打开时只认这两个按钮，点别处一律当作取消
+		if QUIT_YES.has_point(p):
+			_quit()
+		else:
+			_confirm_quit = false
+			play("click")
+		return
 	if BTN_MAIN.has_point(p):
 		_pressed_btn = "main"
 		_press_main()
@@ -650,8 +666,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif BTN_VIEW.has_point(p):
 		play("click")
 		toggle_view_mode()
-	elif BTN_CLOSE.has_point(p):
-		_quit()
+	elif BTN_CLOSE.has_point(p) and _quit_button_visible():
+		play("click")
+		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(p):
 		pass
 	elif menu.click(p) or wardrobe.click(p):
@@ -663,6 +680,23 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dragging = true
 			_pos_stable_since = Time.get_ticks_msec()
 			adapter.set_fps(FPS_DRAG)
+
+
+## 商店、图鉴、统计、设置、换形象任何一个面板开着时，不显示退出按钮，免得把它当成"关闭面板"点错。
+func _quit_button_visible() -> bool:
+	return not menu.open and not wardrobe.open
+
+
+func _draw_quit_confirm() -> void:
+	draw_rect(QUIT_BOX, Pal.U_A)
+	draw_rect(QUIT_BOX.grow(-1), Pal.U_K)
+	label_centered("确定要退出吗", QUIT_BOX.position.x + QUIT_BOX.size.x / 2, QUIT_BOX.position.y + 5, Pal.L_W)
+	draw_rect(QUIT_YES, Pal.L_R)
+	draw_rect(Rect2(QUIT_YES.position.x, QUIT_YES.end.y - 2, QUIT_YES.size.x, 2), Pal.U_R)
+	label_centered("退出", QUIT_YES.position.x + QUIT_YES.size.x / 2, QUIT_YES.position.y + 1, Pal.L_W)
+	draw_rect(QUIT_NO, Pal.L_A)
+	draw_rect(Rect2(QUIT_NO.position.x, QUIT_NO.end.y - 2, QUIT_NO.size.x, 2), Pal.U_A)
+	label_centered("取消", QUIT_NO.position.x + QUIT_NO.size.x / 2, QUIT_NO.position.y + 1, Pal.U_K)
 
 
 func _go_to_town() -> void:
@@ -705,6 +739,8 @@ func _draw() -> void:
 	_draw_hud(now)
 	menu.draw()
 	wardrobe.draw()
+	if _confirm_quit:
+		_draw_quit_confirm()
 	draw_set_transform(Vector2.ZERO)
 	_draw_particles(t)
 
@@ -731,7 +767,8 @@ func _draw_hud(now: int) -> void:
 	_tex_frame("btn_gear", BTN_MENU.position, 1 if menu.open and menu.tab == 3 else 0, 2)
 	if adapter.is_overlay():
 		_tex_frame("btn_view", BTN_VIEW.position, 0, 2)
-	_tex_frame("btn_close", BTN_CLOSE.position, 0, 2)
+	if _quit_button_visible():
+		_tex_frame("btn_close", BTN_CLOSE.position, 1 if _confirm_quit else 0, 2)
 
 	draw_texture(tex["coin"], Vector2(20, 15))
 	_text(str(game.state.wallet_gold), Vector2(31, 17), Pal.L_Y)

@@ -360,28 +360,25 @@ func _draw_boat_extras(act: int, on_break: bool, now: int, t: int) -> void:
 			if b.size.x > 0:
 				m.draw_texture(m.tex["bubble"], b.position)
 		Journey.Activity.SAIL_OUT, Journey.Activity.SAIL_BACK:
-			# 划桨：一个完整的划水循环，让人能看出船往哪边走。
-			#   前半（划水）：桨叶在水里，从船头方向推向船尾方向，入水时溅起水花，身后留下水纹
-			#   后半（回桨）：桨叶抬出水面，从船尾方向收回船头方向
+			# 划桨：桨叶沿一个扁椭圆连续转动，没有突变，所以看起来是顺的。
+			#   椭圆下半圈在水面以下 = 划水：桨叶从船头一侧推向船尾一侧，入水溅水花，身后留水纹
+			#   椭圆上半圈在水面以上 = 回桨：桨叶贴着水面收回船头一侧（只抬高几个像素）
 			var dir := -1.0 if act == Journey.Activity.SAIL_BACK else 1.0    # 船前进的方向
-			var ph := fposmod(t / 1300.0, 1.0)
-			var in_water := ph < 0.5
-			var k := ph / 0.5 if in_water else (ph - 0.5) / 0.5              # 本半程的进度 0..1
-			var reach := 9.0
-			var off := lerpf(reach, -reach, k) if in_water else lerpf(-reach, reach, k)   # 相对桨架，正 = 船头方向
-			var pivot_x := boat_x + 32 - dir * 4
-			var blade := Vector2(roundf(pivot_x + dir * off), WATER_Y + 3 if in_water else WATER_Y - 13 - roundf(sin(k * PI) * 4.0))
+			var ang := fposmod(t / 1700.0, 1.0) * TAU                        # 0 = 桨叶在最靠船头处、正好在水面
+			var depth := sin(ang)                                            # >0 在水里，<0 在空中
+			var pivot_x := boat_x + 32 - dir * 3
+			var blade := Vector2(pivot_x + dir * 10.0 * cos(ang), WATER_Y + (depth * 3.0 if depth > 0 else depth * 4.0)).round()
 			var hand := cat_pos + (Vector2(10, 23) if dir < 0 else Vector2(21, 23))
 			m.pixel_line(hand, blade, Pal.U_O)
 			m.draw_rect(Rect2(blade.x - 1, blade.y, 3, 3), Pal.L_N)
-			if in_water:
-				if k < 0.3:      # 入水的水花
-					m.tex_frame("splash", blade + Vector2(-5, -4), 0 if k < 0.15 else 1, 2)
-				# 桨叶划过的地方留下水纹（在桨叶的船头一侧，划得越远水纹越长）
-				for i in int(k * 5.0):
-					m.draw_rect(Rect2(blade.x + dir * (3 + i * 4), WATER_Y + 2 + (i % 2), 2, 1), Pal.U_W if i == 0 else Pal.L_C)
-			elif k < 0.35:   # 出水时甩下的水滴
-				m.draw_rect(Rect2(blade.x, blade.y + 4 + roundf(k * 10.0), 1, 1), Pal.L_C)
+			if depth > 0:
+				if ang < 0.9:        # 刚入水：水花
+					m.tex_frame("splash", Vector2(blade.x - 5, WATER_Y - 3), 0 if ang < 0.45 else 1, 2)
+				# 桨叶划过的地方留下水纹（在桨叶的船头一侧，划得越远越长）
+				for i in int(ang / PI * 5.0):
+					m.draw_rect(Rect2(blade.x + dir * (3 + i * 4), WATER_Y + 1 + (i % 2), 2, 1), Pal.U_W if i == 0 else Pal.L_C)
+			elif ang < PI + 0.7:     # 刚出水：甩下一滴水
+				m.draw_rect(Rect2(blade.x, WATER_Y - 1, 1, 1), Pal.L_C)
 
 func _draw_fishing(t: int, now: int) -> void:
 	var fs: int = m.game.fishing.state

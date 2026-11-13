@@ -14,6 +14,7 @@ const UPGRADES := [
 const SETTINGS := [["focus_min", "专注"], ["short_break_min", "短休"], ["long_break_min", "长休"]]
 ## 第 4 行放两个"点一下换一档"的设置：[键, 标签, 标签x, 数值x, 按钮x]
 const CYCLES := [["pixel_scale", "大小", 19, 40, 50], ["sfx_volume", "音效", 66, 87, 99]]
+const CLOSE_RECT := Rect2(100, 30, 11, 11)   # 面板右上角的关闭按钮
 const ROW_Y := 44
 const ROW_H := 12
 
@@ -36,6 +37,11 @@ func _plus_rect(row: int, x: float = 99) -> Rect2:
 func click(p: Vector2) -> bool:
 	if not open or not RECT.has_point(p):
 		return false
+	if CLOSE_RECT.has_point(p):
+		open = false
+		m.play("click")
+		m.on_panel_toggled()
+		return true
 	# 面板一次只显示一页：商店/图鉴/统计要走进镇上对应的房子才能打开，设置从面板上的齿轮按钮打开
 	match tab:
 		0:
@@ -67,6 +73,7 @@ func draw() -> void:
 	var r := _tab_rect(0)
 	m.label(TABS[tab], r.position + Vector2(2, 0), Pal.L_W)
 	m.draw_rect(Rect2(r.position.x + 2, 41, 19, 1), Pal.L_R)
+	m.tex_frame("btn_close", CLOSE_RECT.position, 0, 2)
 	match tab:
 		0: _draw_shop()
 		1: _draw_dex()
