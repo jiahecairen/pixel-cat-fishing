@@ -46,6 +46,10 @@ var leaving: Array = []       # 买完离开的顾客: {kind, t0}
 var walk_flip: bool = false   # 自动行走时是否朝左
 var roam_flip: bool = false   # 自由走动时是否朝左
 var roam_moving: bool = false
+var customer_kind: int = 0        # 当前这一单的顾客样子
+var approach_visible: bool = false
+var approach_x: float = 0.0
+var _customer_phase: int = -1
 var chat_who: int = -1        # 正在说话的居民下标
 var chat_line: String = ""
 var chat_t0: int = -100000
@@ -65,6 +69,7 @@ func bobber_rest() -> Vector2:
 
 ## 每帧先调用：根据活动状态算出船和猫的位置。
 func update(now: int, t: int) -> void:
+	_update_customer(now)
 	var j: Journey = m.game.journey
 	var p := _ease(j.progress(now))
 	match j.activity():
@@ -163,8 +168,30 @@ func _draw_chat(t: int) -> void:
 	m.draw_rect(Rect2(pos.x + 6, box.end.y, 3, 2), Pal.U_W)
 	m.label(chat_line, box.position + Vector2(3, 1), Pal.U_K)
 
-func on_sale() -> void:
-	leaving.append({"kind": (m.game.journey.sales_made() - 1) % 3, "t0": Time.get_ticks_msec()})
+func on_sale(fish_id: String) -> void:
+	var f: Dictionary = m.game.fish_by_id.get(fish_id, {})
+	leaving.append({"kind": customer_kind, "t0": Time.get_ticks_msec(), "x0": float(STALL_X + 50), "fish": f.get("sprite", "")})
+	approach_visible = false
+
+## 这一单的顾客：每单换一位（不连续重复），在这一单的后半段从右边走过来。
+## 如果顾客走到一半小猫离开了摊位（被玩家带走、或进入休息），顾客空手掉头回去，而不是凭空消失。
+func _update_customer(now: int) -> void:
+	var g = m.game
+	var j: Journey = g.journey
+	var selling: bool = j.activity() == Journey.Activity.VENDING and not g.pomodoro.is_break() and not g.state.basket.is_empty()
+	if not selling:
+		if approach_visible:
+			leaving.append({"kind": customer_kind, "t0": Time.get_ticks_msec(), "x0": approach_x, "fish": ""})
+			approach_visible = false
+		return
+	var phase := int(g.state.journey["phase_start_ms"])
+	if phase != _customer_phase:
+		_customer_phase = phase
+		customer_kind = (customer_kind + 1 + randi() % 2) % 3
+	var p: float = j.progress(now)
+	approach_visible = p > 0.45
+	if approach_visible:
+		approach_x = STALL_X + 50 + roundf((1.0 - minf(1.0, (p - 0.45) / 0.5)) * 80.0)
 
 # ------------------------------------------------------------------ 绘制
 func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
@@ -211,9 +238,10 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	if in_town and behind_counter:
 		_draw_town_cat(act, on_break, now, t)
 	m.draw_texture(m.tex["stall_front"], Vector2(STALL_X, GROUND_Y - 15))
-	_draw_strollers(t)
 	if act == Journey.Activity.VENDING:
-		_draw_stall_goods(now, t, on_break)
+		_draw_stall_goods()
+	_draw_strollers(t)
+	_draw_customer(t)
 	_draw_leaving(t)
 	if in_town and not behind_counter:
 		_draw_town_cat(act, on_break, now, t)
@@ -261,33 +289,32 @@ func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 				p.y -= 2 if t - hop_t0 < 140 else (1 if t - hop_t0 < 280 else 0)
 			m.draw_cat(p, frame)
 
-func _draw_stall_goods(now: int, t: int, on_break: bool) -> void:
+## 柜台上摆出接下来要卖的两条鱼（先卖的在前面）。
+func _draw_stall_goods() -> void:
 	var g = m.game
-	# 柜台右半边摆出接下来要卖的两条鱼（先卖的在前面）
 	var n: int = mini(g.state.basket.size(), 2)
 	for i in n:
 		var f: Dictionary = g.fish_by_id.get(g.state.basket[n - 1 - i], {})
 		if m.tex.has(f.get("sprite", "")):
 			m.draw_texture(m.tex[f["sprite"]], Vector2(STALL_X + 29 - (n - 1 - i) * 3, GROUND_Y - 24 - (n - 1 - i) * 3))
-	if on_break or g.state.basket.is_empty():
-		return
-	# 顾客在这一单的后半段从右边走过来
-	var p: float = g.journey.progress(now)
-	if p > 0.45:
-		var q := minf(1.0, (p - 0.45) / 0.5)
-		var x := STALL_X + 50 + roundf((1.0 - q) * 80.0)
-		var walking := q < 1.0
-		m.tex_frame("villager_%d" % (g.journey.sales_made() % 3), Vector2(x, GROUND_Y - 21), (t / 200) % 2 if walking else 0, 2)
 
+## 正走向摊位的顾客（位置在 update 里算好）。
+func _draw_customer(t: int) -> void:
+	if approach_visible:
+		var arrived := approach_x <= STALL_X + 50
+		m.tex_frame("villager_%d" % customer_kind, Vector2(approach_x, GROUND_Y - 21), 0 if arrived else (t / 200) % 2, 2)
+
+## 离开的顾客：买到鱼的拎着鱼走；没买成的（小猫被玩家带走了）空手掉头回去。
 func _draw_leaving(t: int) -> void:
 	var keep: Array = []
 	for c in leaving:
 		var age: int = t - int(c["t0"])
-		if age < 4500:
+		var x: float = float(c["x0"]) + roundf(age * 0.028)
+		if age < 6000 and x < STALL_X + 190:
 			keep.append(c)
-			var x := STALL_X + 50 + roundf(age * 0.028)
+			if m.tex.has(c["fish"]):      # 鱼先画，人在鱼前面
+				m.draw_texture(m.tex[c["fish"]], Vector2(x + 6, GROUND_Y - 12))
 			m.tex_frame_flipped("villager_%d" % int(c["kind"]), Vector2(x, GROUND_Y - 21), (t / 200) % 2, 2)
-			m.draw_texture(m.tex["fish_crucian"], Vector2(x + 8, GROUND_Y - 12))   # 拎着买到的鱼
 	leaving = keep
 
 func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:

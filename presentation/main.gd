@@ -96,6 +96,7 @@ var _cam_snap: bool = true
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
 var _debug_last: String = ""
 var _debug_act_frame: int = -1
+var _debug_dir_from: int = 0    # 调试：CATFISH_ROAM_AT=帧号，从这一帧才开始"按住方向键"
 var _debug_dir: int = 0         # 调试：CATFISH_ROAM=1/-1 模拟一直按着右/左方向键
 var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  在这些帧截图后退出
 var _shot_frames: Array = []
@@ -182,6 +183,8 @@ func _apply_debug_env() -> void:
 		game.start_focus()
 	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
 		_debug_act_frame = OS.get_environment("CATFISH_ACT_AT").to_int()
+	if OS.has_environment("CATFISH_ROAM_AT"):
+		_debug_dir_from = OS.get_environment("CATFISH_ROAM_AT").to_int()
 	if OS.has_environment("CATFISH_ROAM"):
 		_debug_dir = OS.get_environment("CATFISH_ROAM").to_int()
 	if OS.has_environment("CATFISH_GO"):
@@ -261,7 +264,7 @@ func _update_roam(dt: float) -> void:
 	var t := Time.get_ticks_msec()
 	world.roam_moving = false
 	var dir := 0
-	if _debug_dir != 0:
+	if _debug_dir != 0 and Engine.get_frames_drawn() >= _debug_dir_from:
 		dir = _debug_dir
 	elif not mini and not menu.open and not wardrobe.open and get_window().has_focus():
 		for k in KEYS_LEFT:
@@ -503,7 +506,7 @@ func _on_event(e: Dictionary) -> void:
 		"sale":
 			play("coin")
 			world.hop_t0 = t
-			world.on_sale()
+			world.on_sale(e["fish_id"])
 			_float("+%d" % e["gold"], "coin", Vector2(World.STALL_X + 8, World.GROUND_Y - 52))
 		"ate":
 			world.eat_t0 = t
