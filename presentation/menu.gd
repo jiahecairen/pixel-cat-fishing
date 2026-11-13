@@ -24,6 +24,7 @@ const SET_ROW_H := 10
 
 var open: bool = false
 var tab: int = 0
+var shop_page: int = 0    # 商店：0 装备升级，1 鱼饵
 var hover := Vector2(-1, -1)
 var m   # 主节点 (presentation/main.gd)
 
@@ -32,6 +33,12 @@ func _init(main) -> void:
 
 func _tab_rect(i: int) -> Rect2:
 	return Rect2(17 + i * 23, 30, 23, 12)
+
+func _book_btn_rect() -> Rect2:
+	return Rect2(42, 31, 24, 10)
+
+func _shop_tab_rect(i: int) -> Rect2:
+	return Rect2(44 + i * 24, 31, 22, 10)
 
 func _plus_rect(row: int, x: float = 99) -> Rect2:
 	return Rect2(x, ROW_Y + row * ROW_H - 1, 11, 11)
@@ -52,9 +59,25 @@ func click(p: Vector2) -> bool:
 	# 面板一次只显示一页：商店/图鉴/统计要走进镇上对应的房子才能打开，设置从面板上的齿轮按钮打开
 	match tab:
 		0:
+			for i in 2:
+				if _shop_tab_rect(i).has_point(p):
+					if shop_page != i:
+						shop_page = i
+						m.play("click")
+					return true
+			if shop_page == 1:
+				var baits: Array = m.game.shop_baits()
+				for i in baits.size():
+					if _plus_rect(i).has_point(p):
+						m.play("buy" if m.game.buy_bait(baits[i]) else "deny")
+				return true
 			for i in UPGRADES.size():
 				if _plus_rect(i).has_point(p):
 					m.play("buy" if m.game.buy_upgrade(UPGRADES[i][0]) else "deny")
+		4:
+			if not m.mini and _book_btn_rect().has_point(p):
+				m.play("click")
+				m.open_book(0)
 		3:
 			for i in SETTINGS.size():
 				var dir := 0
@@ -94,6 +117,14 @@ func draw() -> void:
 
 func _draw_shop() -> void:
 	var g = m.game
+	for i in 2:
+		var tr := _shop_tab_rect(i)
+		m.draw_rect(tr, Pal.L_Y if shop_page == i else Pal.U_A)
+		m.draw_rect(tr.grow(-1), Pal.L_A if shop_page == i else Pal.U_K)
+		m.label_centered("装备" if i == 0 else "鱼饵", tr.position.x + tr.size.x / 2, tr.position.y - 1, Pal.U_K if shop_page == i else Pal.L_A)
+	if shop_page == 1:
+		_draw_bait_shop()
+		return
 	var desc := "金币可以升级装备"
 	for i in UPGRADES.size():
 		var id: String = UPGRADES[i][0]
@@ -111,6 +142,29 @@ func _draw_shop() -> void:
 			var ok: bool = g.upgrades.can_buy(g.state, id)
 			m.text_right(str(cost), 96, y + 3, Pal.L_Y if ok else Pal.L_A)
 			m.tex_frame("btn_plus", _plus_rect(i).position, 0, 2, Color.WHITE if ok else Color(1, 1, 1, 0.35))
+	m.label(desc, Vector2(19, 81), Pal.L_A)
+
+## 渔具店的鱼饵：名字、手里有几个、价格和买按钮。没解锁的整行变灰，按钮位置换成小锁，鼠标放上去提示"未解锁"。
+func _draw_bait_shop() -> void:
+	var g = m.game
+	var baits: Array = g.shop_baits()
+	var desc := "买来的鱼饵每竿用 1 个"
+	for i in baits.size():
+		var id: String = baits[i]
+		var d: Dictionary = g.inventory.by_id[id]
+		var y: int = ROW_Y + i * ROW_H
+		var open: bool = g.bait_unlocked(id)
+		var row := Rect2(RECT.position.x, y - 1, RECT.size.x, ROW_H)
+		if row.has_point(hover):
+			desc = String(d.get("desc", "")) if open else "未解锁"
+		m.label(String(d["name"]), Vector2(19, y), Pal.L_W if open else Pal.U_A)
+		if open:
+			m.text("x%d" % g.inventory.count(g.state, id), Vector2(44, y + 3), Pal.L_A)
+			var ok: bool = g.can_buy_bait(id)
+			m.text_right(str(int(d["price"])), 96, y + 3, Pal.L_Y if ok else Pal.L_A)
+			m.tex_frame("btn_plus", _plus_rect(i).position, 0, 2, Color.WHITE if ok else Color(1, 1, 1, 0.35))
+		else:
+			m.draw_texture(m.tex["lock"], Vector2(99, y), Color(1, 1, 1, 0.8))
 	m.label(desc, Vector2(19, 81), Pal.L_A)
 
 func _draw_dex() -> void:
@@ -196,24 +250,25 @@ const EQUIP := [["鱼竿", "rod"], ["鱼线", "line"], ["鱼钩", "hook"]]
 
 func _draw_status() -> void:
 	var g = m.game
+	if not m.mini:                                # 图鉴册只有完整窗口里有
+		var br := _book_btn_rect()
+		m.draw_rect(br, Pal.L_Y)
+		m.draw_rect(br.grow(-1), Pal.U_K)
+		m.label_centered("图鉴", br.position.x + br.size.x / 2, br.position.y - 1, Pal.L_Y)
 	m.draw_rect(Rect2(17, 42, 34, 34), Pal.U_A)
 	m.draw_rect(Rect2(18, 43, 32, 32), Pal.U_B)
 	m.draw_cat(Vector2(18, 44), 0)
-	for i in EQUIP.size():
-		var y: int = 43 + i * 10
-		m.label(EQUIP[i][0], Vector2(56, y), Pal.L_A)
-		m.label(g.equipment_name(EQUIP[i][1]), Vector2(82, y), Pal.L_W)
-	m.label("鱼饵", Vector2(56, 73), Pal.L_A)
+	for i in EQUIP.size():                         # 直接写装备名，不加"鱼竿/鱼线/鱼钩"前缀
+		m.label(g.equipment_name(EQUIP[i][1]), Vector2(56, 43 + i * 10), Pal.L_W)
 	var bid: String = g.state.equipped_bait       # 装上的饵；没装就是面团（无限量）
 	if bid == "" or not g.inventory.by_id.has(bid):
-		m.label("面团", Vector2(82, 73), Pal.L_W)
+		m.label("面团", Vector2(56, 73), Pal.L_W)
 	else:
-		m.label(String(g.inventory.by_id[bid]["name"]), Vector2(82, 73), Pal.L_Y)
-		m.text("x%d" % g.inventory.count(g.state, bid), Vector2(103, 76), Pal.L_W)
+		var nm := String(g.inventory.by_id[bid]["name"])
+		m.label(nm, Vector2(56, 73), Pal.L_Y)
+		m.text("x%d" % g.inventory.count(g.state, bid), Vector2(56 + m.label_width(nm) + 3, 76), Pal.L_W)
 	m.draw_rect(Rect2(17, 84, 94, 1), Pal.U_A)
 	m.draw_texture(m.tex["coin"], Vector2(19, 85))
 	m.text(str(g.state.wallet_gold), Vector2(30, 88), Pal.L_Y)
-	m.label("钓到", Vector2(54, 85), Pal.L_A)
-	m.text(str(int(g.state.stats["total_fish"])), Vector2(75, 88), Pal.L_W)
-	m.draw_texture(m.tex["tomato"], Vector2(92, 85))
-	m.text(str(int(g.state.stats["total_pomodoros"])), Vector2(103, 88), Pal.L_W)
+	m.label("钓到", Vector2(62, 85), Pal.L_A)
+	m.text(str(int(g.state.stats["total_fish"])), Vector2(83, 88), Pal.L_W)

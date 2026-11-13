@@ -303,7 +303,15 @@ func _draw_market_stalls(t: int) -> void:
 		m.tex_frame("villager_%d" % int(s[3]), Vector2(x + 15, GROUND_Y - 27 + hop), (t / 900 + i) % 2, 2)
 		m.draw_texture(m.tex["stall_front"], Vector2(x, GROUND_Y - 11))
 		m.draw_texture(m.tex["goods_" + s[1]], Vector2(x + 5, GROUND_Y - 18))
+		_draw_stall_deco(s[1], x)
 		_plate(x + 23, GROUND_Y - 53, s[2])
+	m.draw_texture(m.tex["ishidoro"], Vector2(float(MARKET[0][0]) - 13.0, GROUND_Y - 16))   # 市场口的石灯笼
+
+## 摊位地面上的装饰：左边货箱、右边小黑板看板、再右边的缝里立一面招牌旗；每种摊位画法不同。
+func _draw_stall_deco(kind: String, x: float) -> void:
+	m.draw_texture(m.tex["deco_crate_" + kind], Vector2(x + 1, GROUND_Y - 9))
+	m.draw_texture(m.tex["deco_board_" + kind], Vector2(x + 31, GROUND_Y - 12))
+	m.draw_texture(m.tex["deco_nobori_" + kind], Vector2(x + 46, GROUND_Y - 32))
 
 ## 逛市场的顾客：走一圈，在摊位前停下，付钱，拿到货拎着走。
 func _draw_shoppers(t: int) -> void:
@@ -442,6 +450,7 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	for px in [2.0, 40.0]:     # 两根立柱在猫前面：小猫从柜台后面走过时被立柱挡一下
 		m.draw_texture_rect_region(m.tex["stall_back"], Rect2(STALL_X + px, GROUND_Y - 30, 4, 32), Rect2(px, 10, 4, 32))
 	m.draw_texture(m.tex["stall_front"], Vector2(STALL_X, GROUND_Y - 11))
+	_draw_stall_deco("fish", float(STALL_X))
 	if act == Journey.Activity.VENDING:
 		_draw_stall_goods()
 	if act == Journey.Activity.SOLD_OUT:
@@ -584,8 +593,8 @@ func _draw_ripples(t: int) -> void:
 		var f := float(age) / float(life)
 		var col := Color(Pal.L_W, 0.2 + 0.7 * sin(PI * f))
 		if r["k"] == "ring":
-			var wd := 6.0 + f * 4.0
-			var x: float = float(r["x"]) + float(r["side"]) * f * 14.0
+			var wd: float = float(r.get("w", 6.0)) + f * float(r.get("w", 6.0)) * 0.6
+			var x: float = float(r["x"]) + float(r["side"]) * f * float(r.get("span", 14.0))
 			m.draw_rect(Rect2(x if r["side"] > 0.0 else x - wd, float(r["y"]), wd, 1), col)
 		else:
 			var dir: float = r["dir"]
@@ -598,6 +607,75 @@ func _draw_ripples(t: int) -> void:
 			if sp > 0.0:
 				m.draw_rect(Rect2(x0, y + sp, len, 1), col)
 	_ripples = keep
+	_draw_drops(t)
+
+## ---- 浮漂处的水花：圈圈涟漪 + 飞起来又落回水里的小水珠 ----
+var _drops: Array = []
+var _fx_prev_fs: int = -1
+var _fx_dip_up: bool = false
+var _fx_wait_ring_at: int = 0
+var _fx_retract_t: int = -1
+
+func _bobber_ring(x: float, t: int, span: float, w: float, delay: int = 0, life: int = 1500) -> void:
+	for side in [-1.0, 1.0]:
+		_ripples.append({"k": "ring", "x": x, "y": float(WATER_Y + 1), "t0": t + delay, "life": life, "side": side, "span": span, "w": w})
+
+func _bobber_drops(p: Vector2, n: int, power: float, t: int) -> void:
+	for i in n:
+		var ang := randf_range(-PI * 0.88, -PI * 0.12)
+		var v := Vector2(cos(ang), sin(ang)) * power * randf_range(0.45, 1.0)
+		_drops.append({"p": p + Vector2(randf_range(-2.0, 2.0), 0), "v": v, "t0": t, "big": randf() < 0.35})
+
+func _draw_drops(t: int) -> void:
+	var keep: Array = []
+	for d in _drops:
+		var age := float(t - int(d["t0"])) / 1000.0
+		if age < 0.0:
+			keep.append(d)
+			continue
+		var pos: Vector2 = d["p"] + d["v"] * age + Vector2(0, 0.5 * 190.0 * age * age)
+		if pos.y > WATER_Y + 1 or age > 1.2:
+			continue
+		keep.append(d)
+		var col: Color = Pal.L_W if int(age * 20.0) % 3 != 0 else Pal.L_C
+		m.draw_rect(Rect2(roundf(pos.x), roundf(pos.y), 2 if d["big"] else 1, 2 if d["big"] else 1), col)
+	_drops = keep
+
+## 浮漂水面上的各种动静：落水、漂动、咬钩、拉鱼、空军收线时的涟漪和水花。
+func _bobber_fx(fs: int, rest: Vector2, t: int) -> void:
+	var cx := rest.x + 2.0
+	var at := Vector2(cx, float(WATER_Y))
+	if fs != _fx_prev_fs:
+		match fs:
+			Fishing.State.WAITING:
+				if _fx_prev_fs == Fishing.State.CASTING:       # 浮漂落水
+					_bobber_ring(cx, t, 13.0, 5.0)
+					_bobber_ring(cx, t, 9.0, 4.0, 180)
+					_bobber_ring(cx, t, 5.0, 3.0, 360)
+					_bobber_drops(at, 9, 75.0, t)
+				_fx_wait_ring_at = t + 1800
+			Fishing.State.HOOKED:                              # 咬钩：猛地往下一拽
+				_bobber_ring(cx, t, 15.0, 6.0)
+				_bobber_ring(cx, t, 10.0, 5.0, 200)
+				_bobber_drops(at, 9, 85.0, t)
+			Fishing.State.REELING:                             # 拉鱼：水面炸开一片水花
+				_bobber_ring(cx, t, 18.0, 7.0)
+				_bobber_drops(at, 12, 105.0, t)
+			Fishing.State.TANGLED:                             # 空军：竿一提，浮漂离水
+				_bobber_ring(cx, t, 10.0, 5.0)
+				_bobber_drops(at, 7, 65.0, t)
+		_fx_prev_fs = fs
+	if fs == Fishing.State.WAITING and t >= _fx_wait_ring_at:      # 静静漂着时偶尔荡开一圈很小的涟漪
+		_bobber_ring(cx, t, 6.0, 3.0, 0, 1900)
+		_fx_wait_ring_at = t + 2300 + (t / 7) % 700
+
+## 收杆时浮漂离开水面的那一下。
+func _retract_fx(prog: float, t: int) -> void:
+	if prog > 0.18 and _fx_retract_t != retract_t0:
+		_fx_retract_t = retract_t0
+		var r := bobber_rest()
+		_bobber_ring(r.x + 2.0, t, 11.0, 5.0)
+		_bobber_drops(Vector2(r.x + 2.0, float(WATER_Y)), 8, 70.0, t)
 
 var _fish_colors: Dictionary = {}
 func _fish_color(fish_id: String) -> Color:
@@ -908,6 +986,7 @@ const RETRACT_MS := 380
 func _draw_retract(t: int) -> void:
 	var prog := clampf(float(t - retract_t0) / float(RETRACT_MS), 0.0, 1.0)
 	var tip := TIP_WAIT.lerp(TIP_IDLE, prog)
+	_retract_fx(prog, t)
 	var tip_abs := (cat_pos + tip).round()
 	m.pixel_line(cat_pos + HAND, tip_abs, Pal.U_O)
 	var b := bobber_rest().lerp(tip_abs + Vector2(-2, 0), prog * prog).round() + Vector2(0, roundf(-6.0 * sin(prog * PI)))
@@ -974,6 +1053,7 @@ func _draw_fishing(t: int, now: int) -> void:
 	var fs: int = m.game.fishing.state
 	var prog: float = m.game.fishing.progress(now)
 	var rest := bobber_rest()
+	_bobber_fx(fs, rest, t)
 	var tip := TIP_IDLE
 	var bobber := Vector2.INF     # INF = 不画浮漂
 	var fish_tex: Texture2D = null
@@ -996,6 +1076,12 @@ func _draw_fishing(t: int, now: int) -> void:
 			bobber = rest + Vector2(0, roundf(dip * 3.0))
 			if dip > 0.5:
 				m.tex_frame("splash", rest + Vector2(-3, 3), 1, 2)
+				if not _fx_dip_up:                        # 每点一下水，荡出一圈涟漪、溅几滴水
+					_fx_dip_up = true
+					_bobber_ring(rest.x + 2.0, t, 8.0, 4.0)
+					_bobber_drops(Vector2(rest.x + 2.0, float(WATER_Y)), 4, 45.0, t)
+			elif dip < 0.2:
+				_fx_dip_up = false
 		Fishing.State.TANGLED:
 			# 空军：把竿提起来，线缠成一团，头顶冒出一团乱麻
 			tip = TIP_WAIT.lerp(TIP_IDLE, clampf(prog * 3.0, 0.0, 1.0))
@@ -1139,13 +1225,28 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 	var keeper_pos := Vector2.INF
 	match kind:
 		"tackle":
+			m.draw_texture(m.tex["noren_tackle"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
 			m.draw_texture(m.tex["shelf_tackle"], Vector2(ox + 76, fy - 62))
-			m.draw_texture(m.tex["barrel"] if m.tex.has("barrel") else m.tex["hold"], Vector2(ox + 196, fy - 10))
+			m.draw_texture(m.tex["wall_bobbers"], Vector2(ox + 138, fy - 72))
+			m.draw_texture(m.tex["specimen_0"], Vector2(ox + 184, fy - 68))
+			m.draw_texture(m.tex["specimen_1"], Vector2(ox + 184, fy - 52))
+			m.draw_texture(m.tex["lantern"], Vector2(ox + 112 + roundf(sin(float(t) / 900.0)), fy - ROOM_H))
+			m.draw_texture(m.tex["barrel_rods"], Vector2(ox + 62, fy - 26))
+			m.draw_texture(m.tex["barrel_rods"], Vector2(ox + 94, fy - 26))
+			m.draw_texture(m.tex["barrel_rods"], Vector2(ox + 184, fy - 26))
+			m.draw_texture(m.tex["barrel_rods"], Vector2(ox + 199, fy - 24))
+			m.draw_texture(m.tex["bait_jars"], Vector2(ox + 112, fy - 14))
 			keeper_pos = Vector2(ox + 156, fy - 31)      # 店主站在柜台后的踏板上，露出上半身
 			m.tex_frame("villager_%d" % int(room["keeper"]), keeper_pos, 0, 2)
 			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
 			m.draw_texture(m.tex["fish_bass"], Vector2(ox + 135, fy - 26))
 		"tailor":
+			m.draw_texture(m.tex["noren_tailor"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
+			m.draw_texture(m.tex["wall_hats"], Vector2(ox + 62, fy - 64))
+			m.draw_texture(m.tex["lantern"], Vector2(ox + 100 + roundf(sin(float(t) / 900.0)), fy - ROOM_H))
+			m.draw_texture(m.tex["hat_stand"], Vector2(ox + 64, fy - 28))
+			m.draw_texture(m.tex["hat_stand"], Vector2(ox + 86, fy - 28))
+			m.draw_texture(m.tex["fabric_rolls"], Vector2(ox + 192, fy - 16))
 			m.draw_texture(m.tex["shelf_hats"], Vector2(ox + 150, fy - 62))
 			m.draw_texture(m.tex["mirror"], Vector2(ox + 120, fy - 32))
 			m.draw_texture(m.tex["rug"], Vector2(ox + 108, fy + 3))

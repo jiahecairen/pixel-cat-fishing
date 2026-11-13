@@ -724,8 +724,64 @@ func _finish_focus(is_long: bool) -> Dictionary:
 	var daily: Dictionary = state.stats["daily"]
 	var key: String = _clock.today_key()
 	daily[key] = int(daily.get(key, 0)) + 1
+	_record_focus_hours(key, duration("focus_min"))
 	dirty = true
 	return {"type": "focus_done", "gold": gold, "fish_count": count, "long": is_long}
+
+## 把这次专注的时长按小时记下来（统计页的按小时柱状图用）。以现在为终点往前推 dur_min 分钟，只记当天的部分；单位是秒。
+func _record_focus_hours(day_key: String, dur_min: int) -> void:
+	var end_s: int = _clock.local_s() % 86400
+	var start_s: int = maxi(0, end_s - dur_min * 60)
+	var all: Dictionary = state.stats["focus_hours"]
+	var hours: Array = all.get(day_key, [])
+	if hours.size() != 24:
+		hours = []
+		for h in 24:
+			hours.append(0)
+	for h in 24:
+		var o := mini(end_s, (h + 1) * 3600) - maxi(start_s, h * 3600)
+		if o > 0:
+			hours[h] = int(hours[h]) + o
+	all[day_key] = hours
+	while all.size() > 400:                  # 只留最近 400 天
+		var oldest := ""
+		for k in all:
+			if oldest == "" or String(k) < oldest:
+				oldest = String(k)
+		all.erase(oldest)
+
+## 某天每个小时的专注秒数（没有记录就全是 0）。
+func focus_hours_of(day_key: String) -> Array:
+	var hours: Array = state.stats["focus_hours"].get(day_key, [])
+	var out: Array = []
+	for h in 24:
+		out.append(int(hours[h]) if hours.size() == 24 else 0)
+	return out
+
+## ---- 渔具店买鱼饵 ----
+func shop_baits() -> Array:
+	var out: Array = []
+	for d in inventory.defs:
+		if str(d.get("use", "")) == "bait" and int(d.get("price", 0)) > 0:
+			out.append(d["id"])
+	return out
+
+func bait_unlocked(id: String) -> bool:
+	var d: Dictionary = inventory.by_id.get(id, {})
+	return int(state.stats["total_fish"]) >= int(d.get("unlock_fish", 0))
+
+func can_buy_bait(id: String) -> bool:
+	var d: Dictionary = inventory.by_id.get(id, {})
+	return not d.is_empty() and bait_unlocked(id) and state.wallet_gold >= int(d.get("price", 0)) and int(d.get("price", 0)) > 0 \
+			and inventory.count(state, id) < int(d.get("max_stack", 99))
+
+func buy_bait(id: String) -> bool:
+	if not can_buy_bait(id):
+		return false
+	state.wallet_gold -= int(inventory.by_id[id]["price"])
+	inventory.add(state, id)
+	dirty = true
+	return true
 
 func _clamp_setting(key: String, v: int) -> int:
 	var lim: Array = _cfg.get("settings_limits", {}).get(key, [1, 120, 1])

@@ -49,6 +49,7 @@ func _init() -> void:
 		test_water(balance, fish)
 		test_sail_turn(balance, fish)
 		test_warehouse(balance, fish)
+		test_stats_and_bait_shop(balance, fish)
 		test_birds(balance, fish)
 		test_inventory(balance, fish)
 		test_stall_walk(balance, fish)
@@ -740,6 +741,31 @@ func test_warehouse(balance: Dictionary, fish: Array) -> void:
 		g.stash_item("bait_worm", i % 2 == 0)
 		g.fetch_item("bait_worm", i % 3 == 0)
 	check(g.inventory.count(g.state, "bait_worm") + g.inventory.count_w(g.state, "bait_worm") == total_before, "来回搬不丢不多")
+
+func test_stats_and_bait_shop(balance: Dictionary, fish: Array) -> void:
+	print("stats: 按小时专注记录 / 买鱼饵")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(51))
+	g._record_focus_hours("2026-01-01", 25)         # 假时钟固定 15:00，往前 25 分钟 = 14:35–15:00
+	var h: Array = g.focus_hours_of("2026-01-01")
+	check(h.size() == 24 and int(h[14]) + int(h[15]) == 25 * 60, "25 分钟的专注全部记进了某些小时里")
+	check(int(h[14]) == 1500 and int(h[15]) == 0, "14:35–15:00 全在 14 点那一格")
+	check(g.focus_hours_of("2026-01-02").size() == 24 and int(g.focus_hours_of("2026-01-02")[10]) == 0, "没记录的一天全是 0")
+	g._record_focus_hours("2026-01-01", 25)
+	check(int(g.focus_hours_of("2026-01-01")[14]) == 3000, "同一天累加")
+	var st2 := GameState.new()
+	check(st2.from_dict(g.state.to_dict()) and int(st2.stats["focus_hours"]["2026-01-01"][14]) == 3000, "按小时记录随存档保存")
+	check(g.shop_baits().has("bait_worm") and g.shop_baits().has("bait_shrimp"), "商店里有蚯蚓和小虾")
+	g.state.wallet_gold = 100
+	check(g.bait_unlocked("bait_worm") and not g.bait_unlocked("bait_shrimp"), "小虾要钓够 20 条鱼才解锁")
+	check(not g.buy_bait("bait_shrimp") and g.state.wallet_gold == 100, "没解锁不能买")
+	check(g.buy_bait("bait_worm") and g.state.wallet_gold == 85 and g.inventory.count(g.state, "bait_worm") == 1, "买蚯蚓扣 15 金币")
+	g.state.stats["total_fish"] = 20
+	check(g.bait_unlocked("bait_shrimp") and g.buy_bait("bait_shrimp") and g.state.wallet_gold == 45, "解锁后能买小虾")
+	g.state.wallet_gold = 0
+	check(not g.can_buy_bait("bait_worm"), "钱不够不能买")
+	g.state.wallet_gold = 9999
+	g.inventory.add(g.state, "bait_worm", 98)
+	check(not g.buy_bait("bait_worm") and g.inventory.count(g.state, "bait_worm") == 99, "鱼饵到 99 个上限不能再买")
 
 func test_birds(balance: Dictionary, fish: Array) -> void:
 	print("birds: 鸟来访（送礼 / 偷鱼）")

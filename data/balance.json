@@ -237,6 +237,7 @@
       "sprite": "item_bait_worm",
       "weight": 14,
       "use": "bait",
+      "price": 15,
       "rarity_bonus": 0.4,
       "max_stack": 99
     },
@@ -247,6 +248,8 @@
       "sprite": "item_bait_shrimp",
       "weight": 8,
       "use": "bait",
+      "price": 40,
+      "unlock_fish": 20,
       "rarity_bonus": 0.9,
       "max_stack": 99
     }

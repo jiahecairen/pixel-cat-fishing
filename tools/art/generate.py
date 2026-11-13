@@ -956,6 +956,17 @@ def tangle():
     return c
 
 
+def lock():
+    """未解锁的小锁。7×9。"""
+    c = Canvas(7, 9)
+    c.rows(1, 0, [".aaa.", "a...a", "a...a"])
+    c.rect(0, 3, 6, 8, "y")
+    c.rect(0, 3, 6, 3, "h")
+    c.rect(3, 5, 3, 6, "O")
+    c.outline()
+    return c
+
+
 def storage():
     """家里的仓库：两只叠起来的木箱。24×20。"""
     c = Canvas(24, 20)
@@ -968,6 +979,235 @@ def storage():
     c.rect(5, 4, 17, 7, "o")
     c.rect(11, 0, 11, 7, "O")
     c.pts([(7, 2), (15, 2)], "O")
+    c.outline()
+    return c
+
+
+# ------------------------------------------------------------------ 装饰：渔具店 / 帽子店 / 摊位地面（日式阳光可爱风）
+def lantern():
+    """红灯笼（吊在天花板下）。9×16。"""
+    c = Canvas(9, 16)
+    c.rect(4, 0, 4, 3, "a")
+    c.rect(2, 3, 6, 3, "K")
+    c.ellipse(4, 8, 3.6, 4.2, "r")
+    c.pts([(3, 6), (3, 7)], "W")
+    for x in (2, 4, 6):
+        c.rect(x, 5, x, 11, "R")
+    c.rect(2, 12, 6, 12, "K")
+    c.rect(4, 13, 4, 15, "y")
+    c.outline()
+    return c
+
+
+def noren(kind):
+    """门帘（挂在门楣）：渔具店是蓝布白鱼，帽子店是粉布草帽。18×10。"""
+    c = Canvas(18, 10)
+    c.rect(0, 0, 17, 0, "O")
+    base = "b" if kind == "tackle" else "p"
+    for x0 in (1, 6, 11):
+        c.rect(x0, 1, x0 + 4, 8, base)
+        c.rect(x0, 8, x0 + 4, 8, "B" if kind == "tackle" else "R")
+    if kind == "tackle":
+        c.rows(6, 3, [".WWW.", "WWWKW", ".WWW."])
+        c.pts([(2, 4), (3, 4)], "W")
+        c.pts([(12, 4), (13, 4), (14, 4)], "W")
+    else:
+        c.rows(6, 3, ["..hh.", ".hhhh", "HHHHH"])
+        c.pts([(2, 4), (3, 4)], "W")
+        c.pts([(12, 4), (13, 4), (14, 4)], "W")
+    c.outline()
+    return c
+
+
+def wall_bobbers():
+    """墙上的浮漂展示板：两排彩色浮漂挂在钉子上。34×26。"""
+    c = Canvas(34, 26)
+    c.rect(1, 1, 32, 24, "O")
+    c.rect(2, 2, 31, 23, "n")
+    c.rect(2, 12, 31, 12, "o")
+    cols = ["r", "y", "b", "g", "p", "h"]
+    for row in range(2):
+        for i in range(3):
+            x = 6 + i * 10
+            y = 3 + row * 11
+            k = cols[row * 3 + i]
+            c.set(x + 1, y, "K")
+            c.rect(x + 1, y + 1, x + 1, y + 2, "a")
+            c.rows(x, y + 3, [".kk.", "kkkk", "wwww", "kkkk", ".kk."], {"k": k})
+    c.outline()
+    return c
+
+
+def specimen(variant):
+    """鱼标本：木牌上钉着一条鱼。28×14。"""
+    c = Canvas(28, 14)
+    c.rect(1, 1, 26, 12, "O")
+    c.rect(2, 2, 25, 11, "n")
+    body, belly = ("s", "w") if variant == 0 else ("f", "y")
+    c.ellipse(13, 7, 7.5, 3.2, body)
+    c.rect(8, 8, 18, 9, belly)
+    c.rows(19, 4, ["..f.", ".ff.", "fff.", ".ff.", "..f."][:5], {"f": body})
+    c.set(8, 6, "K")
+    c.pts([(10, 5), (12, 4), (14, 4)], "S" if variant == 0 else "F")
+    c.pts([(3, 3), (24, 3), (3, 10), (24, 10)], "H")
+    c.outline()
+    return c
+
+
+def barrel_rods():
+    """木桶里插着几根钓竿。16×28。"""
+    c = Canvas(16, 28)
+    for pts, k in (([(4, 14), (4, 12), (3, 10), (3, 8), (2, 6), (2, 4), (1, 2)], "O"),
+                   ([(8, 14), (8, 12), (8, 10), (8, 8), (9, 6), (9, 4), (9, 2)], "h"),
+                   ([(11, 14), (11, 12), (12, 10), (12, 8), (13, 6), (13, 4), (14, 2)], "H")):
+        c.pts(pts, k)
+    c.pts([(1, 2), (9, 2), (14, 2)], "r")
+    c.rect(1, 14, 14, 26, "o")
+    c.rect(1, 14, 14, 15, "n")
+    c.rect(1, 18, 14, 18, "O")
+    c.rect(1, 23, 14, 23, "O")
+    c.rect(1, 26, 14, 26, "O")
+    c.rect(3, 15, 3, 25, "n")
+    c.outline()
+    return c
+
+
+def bait_jars():
+    """柜台边的饵料罐和小桶。20×14。"""
+    c = Canvas(20, 14)
+    c.rect(1, 3, 6, 11, "c"); c.rect(1, 2, 6, 2, "a")
+    c.rows(2, 6, ["pp.p", ".pp.", "pp.p"], {"p": "p"})
+    c.pts([(2, 4)], "W")
+    c.rect(8, 3, 13, 11, "c"); c.rect(8, 2, 13, 2, "a")
+    c.rows(9, 6, ["rr.r", ".rr.", "rr.r"], {"r": "r"})
+    c.pts([(9, 4)], "W")
+    c.rect(15, 6, 18, 11, "o"); c.rect(15, 5, 18, 5, "n"); c.rect(15, 9, 18, 9, "O")
+    c.rect(1, 12, 18, 12, "n")
+    c.outline()
+    return c
+
+
+def wall_hats():
+    """墙上的帽子挂板：几顶帽子挂在木钉上。40×18。"""
+    c = Canvas(40, 18)
+    c.rect(1, 1, 38, 16, "O")
+    c.rect(2, 2, 37, 15, "n")
+    spec = [("h", "r", 4), ("b", "W", 14), ("g", "y", 24), ("r", "w", 33)]
+    for body, band, x in spec:
+        c.pts([(x + 2, 2)], "K")
+        c.rect(x, 7, x + 5, 8, body)
+        c.rect(x + 1, 4, x + 4, 6, body)
+        c.rect(x + 1, 6, x + 4, 6, band)
+        c.rect(x - 1, 9, x + 6, 9, "H" if body == "h" else body)
+    c.outline()
+    return c
+
+
+def hat_stand():
+    """立着的帽架，顶上戴着一顶帽子。14×28。"""
+    c = Canvas(14, 28)
+    c.rect(6, 10, 7, 24, "O")
+    c.rect(2, 25, 11, 26, "o")
+    c.rect(4, 24, 9, 24, "n")
+    c.ellipse(7, 8, 2.6, 2.6, "w")
+    c.rect(4, 5, 9, 6, "p")
+    c.rows(3, 1, [".hhhhhh.", "hhhhhhhh", "hrrrrrrh", "HHHHHHHH"])
+    c.rect(0, 5, 13, 5, "H")
+    c.rect(1, 4, 12, 4, "h")
+    c.outline()
+    return c
+
+
+def fabric_rolls():
+    """叠着的布卷。24×16。"""
+    c = Canvas(24, 16)
+    for x0, y0, k, s in ((1, 8, "p", "R"), (8, 8, "c", "b"), (15, 8, "y", "H"), (4, 1, "g", "G"), (12, 1, "r", "R")):
+        c.rect(x0, y0, x0 + 6, y0 + 5, k)
+        c.rect(x0, y0 + 5, x0 + 6, y0 + 5, s)
+        c.ellipse(x0 + 1, y0 + 3, 1.2, 2.2, "w")
+    c.outline()
+    return c
+
+
+def deco_crate(kind):
+    """摊位前的小木箱，里面放着各自的货。12×11。"""
+    c = Canvas(12, 11)
+    c.rect(0, 4, 11, 10, "o")
+    c.rect(0, 4, 11, 5, "n")
+    c.rect(0, 8, 11, 8, "O")
+    c.rect(0, 4, 0, 10, "O"); c.rect(11, 4, 11, 10, "O")
+    if kind == "fruit":
+        for x, k in ((1, "r"), (4, "y"), (7, "r"), (9, "f")):
+            c.rect(x, 1, x + 2, 3, k)
+            c.set(x + 1, 0, "g")
+    elif kind == "veg":
+        c.rect(1, 0, 4, 3, "g"); c.rect(2, 1, 3, 2, "G")
+        c.rect(6, 0, 7, 3, "f"); c.rect(9, 1, 10, 3, "f"); c.rect(6, 3, 10, 3, "g")
+    elif kind == "bread":
+        for x in (1, 5, 8):
+            c.rect(x, 1, x + 3, 3, "h"); c.rect(x + 1, 1, x + 2, 1, "H")
+    elif kind == "flower":
+        for x, k in ((1, "p"), (4, "y"), (7, "w"), (9, "p")):
+            c.rect(x, 1, x + 1, 2, k)
+            c.set(x, 3, "g")
+    else:                                    # fish：冰盒
+        c.rect(0, 4, 11, 10, "c")
+        c.rect(0, 4, 11, 5, "W")
+        c.rect(0, 8, 11, 8, "b")
+        c.rect(0, 4, 0, 10, "B"); c.rect(11, 4, 11, 10, "B")
+        c.rows(1, 1, ["ss.ss.s", "SsKSsKS"][:2])
+        c.pts([(1, 3), (4, 3), (7, 3)], "W")
+    c.outline()
+    return c
+
+
+def deco_board(kind):
+    """看板：小黑板立在摊位前，粉笔画着货。13×15。"""
+    c = Canvas(13, 15)
+    c.rect(1, 1, 11, 10, "o")
+    c.rect(2, 2, 10, 9, "K")
+    c.rect(2, 10, 3, 14, "O"); c.rect(9, 10, 10, 14, "O")
+    ic = {"fruit": ("r", [".W.", "rrr", "rrr"]), "veg": ("g", ["gg.", "ggg", ".g."]),
+          "bread": ("h", [".hh.", "hhhh"]), "flower": ("p", ["p.p", ".y.", "p.p"]),
+          "fish": ("W", ["WW.W", "WKWW", "WW.W"])}[kind][1]
+    colk = {"fruit": "r", "veg": "g", "bread": "h", "flower": "p", "fish": "c"}[kind]
+    c.rows(3, 3, ic, {"r": colk, "g": colk, "h": colk, "p": colk, "y": "y", "W": "W"} if kind != "fish" else {"W": "W", "K": "K"})
+    c.rect(3, 8, 9, 8, "W")
+    c.outline()
+    return c
+
+
+def deco_nobori(kind):
+    """招牌旗（のぼり）：细竹竿挂一面竖旗，旗上是各摊位的记号。10×34。"""
+    c = Canvas(10, 34)
+    flag = {"fruit": "r", "veg": "g", "bread": "y", "flower": "p", "fish": "b"}[kind]
+    dark = {"fruit": "R", "veg": "G", "bread": "H", "flower": "R", "fish": "B"}[kind]
+    c.rect(1, 1, 1, 32, "O")
+    c.rect(1, 1, 7, 1, "O")
+    c.rect(2, 2, 7, 25, flag)
+    c.rect(2, 2, 2, 25, dark)
+    for x in (3, 5, 7):
+        c.rect(x, 26, x, 27, flag)
+    icon = {"fruit": [".g.", "WWW", "WWW", ".W."], "veg": ["..W", ".WW", "WWW", ".W."], "bread": [".WW.", "WWWW", "WWWW"],
+            "flower": ["W.W", ".W.", "W.W"], "fish": ["WWW.", "WKWW", "WWW."]}[kind]
+    c.rows(3, 6, icon)
+    c.rows(3, 14, ["W.W.W", ".W.W."])
+    c.rect(3, 19, 6, 19, "W")
+    c.outline()
+    return c
+
+
+def ishidoro():
+    """石灯笼，立在市场口。12×18。"""
+    c = Canvas(12, 18)
+    c.rect(5, 7, 6, 15, "a")
+    c.rect(2, 15, 9, 16, "A")
+    c.rect(3, 7, 8, 8, "a")
+    c.rect(3, 9, 8, 12, "y")
+    c.rect(3, 9, 4, 12, "h")
+    c.rect(2, 4, 9, 6, "a")
+    c.rect(4, 2, 7, 3, "a")
+    c.pts([(5, 1), (6, 1)], "A")
     c.outline()
     return c
 
@@ -1011,7 +1251,7 @@ LABELS = [
     "我的小猫", "给小猫选个样子", "完成",
     "方向键走动", "空格键互动", "空格键去小镇", "空格键去钓鱼", "市场", "鱼摊", "方向键划船", "空格键摆摊", "浅滩", "普通水域", "深水区", "水果", "蔬菜", "面包", "鲜花",
     "小猫的家", "裁缝铺", "渔具店", "空格键进入", "空格键聊天",
-    "确定要退出吗", "退出", "取消", "宝箱", "状态", "鱼线", "鱼钩", "树枝", "竹竿", "玻纤", "碳素", "合金", "金竿", "棉线", "铁钩", "空", "钓到", "面团", "装上", "空格键开始钓鱼", "仓库", "身上", "存入", "取出", "全部", "空格键开仓库",
+    "确定要退出吗", "退出", "取消", "宝箱", "状态", "鱼线", "鱼钩", "树枝", "竹竿", "玻纤", "碳素", "合金", "金竿", "棉线", "铁钩", "空", "钓到", "面团", "装上", "空格键开始钓鱼", "仓库", "身上", "存入", "取出", "全部", "空格键开仓库", "装备", "未解锁", "最高纪录", "最大的鱼", "空军", "番茄", "分钟", "最忙的一天", "每月番茄", "当日专注", "暂无记录", "钓过的鱼", "天", "月", "时",
     "物品栏", "使用", "空空如也", "生效中", "去钓宝箱吧",
     "欢迎光临", "空格键出门", "空格键看货", "空格键照镜子", "空格键看图鉴", "空格键看统计", "空格键小睡", "Z", "真实天气", "开", "关", "休息时才能小睡", "已经睡饱了", "小猫睡得真香",
     "今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看",
@@ -1113,7 +1353,35 @@ def build():
         "bang": save(bang(), "bang"),
         "tangle": save(tangle(), "tangle"),
         "anger": save(anger(), "anger"),
+        "lantern": save(lantern(), "lantern"),
+        "noren_tackle": save(noren("tackle"), "noren_tackle"),
+        "noren_tailor": save(noren("tailor"), "noren_tailor"),
+        "wall_bobbers": save(wall_bobbers(), "wall_bobbers"),
+        "specimen_0": save(specimen(0), "specimen_0"),
+        "specimen_1": save(specimen(1), "specimen_1"),
+        "barrel_rods": save(barrel_rods(), "barrel_rods"),
+        "bait_jars": save(bait_jars(), "bait_jars"),
+        "wall_hats": save(wall_hats(), "wall_hats"),
+        "hat_stand": save(hat_stand(), "hat_stand"),
+        "fabric_rolls": save(fabric_rolls(), "fabric_rolls"),
+        "ishidoro": save(ishidoro(), "ishidoro"),
+        "deco_crate_fruit": save(deco_crate("fruit"), "deco_crate_fruit"),
+        "deco_board_fruit": save(deco_board("fruit"), "deco_board_fruit"),
+        "deco_nobori_fruit": save(deco_nobori("fruit"), "deco_nobori_fruit"),
+        "deco_crate_veg": save(deco_crate("veg"), "deco_crate_veg"),
+        "deco_board_veg": save(deco_board("veg"), "deco_board_veg"),
+        "deco_nobori_veg": save(deco_nobori("veg"), "deco_nobori_veg"),
+        "deco_crate_bread": save(deco_crate("bread"), "deco_crate_bread"),
+        "deco_board_bread": save(deco_board("bread"), "deco_board_bread"),
+        "deco_nobori_bread": save(deco_nobori("bread"), "deco_nobori_bread"),
+        "deco_crate_flower": save(deco_crate("flower"), "deco_crate_flower"),
+        "deco_board_flower": save(deco_board("flower"), "deco_board_flower"),
+        "deco_nobori_flower": save(deco_nobori("flower"), "deco_nobori_flower"),
+        "deco_crate_fish": save(deco_crate("fish"), "deco_crate_fish"),
+        "deco_board_fish": save(deco_board("fish"), "deco_board_fish"),
+        "deco_nobori_fish": save(deco_nobori("fish"), "deco_nobori_fish"),
         "storage": save(storage(), "storage"),
+        "lock": save(lock(), "lock"),
         "zzz": save(zzz(), "zzz"),
         "font": save(font(), "font"),
         "dots": save(dots(), "dots"),

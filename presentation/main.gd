@@ -23,6 +23,7 @@ const Menu := preload("res://presentation/menu.gd")
 const Wardrobe := preload("res://presentation/wardrobe.gd")
 const World := preload("res://presentation/world.gd")
 const Bag := preload("res://presentation/bag.gd")
+const Book := preload("res://presentation/book.gd")
 
 const MINI_VIEW := Vector2i(128, 96)
 const FULL_MIN_H := 180          # 全画面至少能看到这么高的世界
@@ -39,7 +40,7 @@ const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_
 	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
-	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage"]
+	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 6
 
@@ -74,6 +75,7 @@ var clock: Clock
 var menu: Menu
 var wardrobe: Wardrobe
 var bag: Bag
+var book: Book
 var world: World
 var cat_cfg: Dictionary = {}
 var tex: Dictionary = {}
@@ -158,6 +160,7 @@ func _ready() -> void:
 	menu = Menu.new(self)
 	wardrobe = Wardrobe.new(self)
 	bag = Bag.new(self)
+	book = Book.new(self)
 	world = World.new(self)
 	wardrobe.open = not state.cat.get("created", false)   # 第一次启动先捏猫
 	_apply_debug_env()
@@ -239,6 +242,22 @@ func _apply_debug_env() -> void:
 			game.inventory.stash(st, d["id"], OS.get_environment("CATFISH_WH").to_int() / 2)
 		wardrobe.open = false
 		bag.open_warehouse()
+	if OS.has_environment("CATFISH_BOOK"):        # 调试：造一些统计数据并打开图鉴册的第 N 页
+		var rngd := RandomNumberGenerator.new()
+		rngd.seed = 7
+		for i in 20:
+			var key := clock.day_key(i)
+			st.stats["daily"][key] = rngd.randi_range(0, 9)
+			var hrs: Array = []
+			for h in 24:
+				hrs.append(rngd.randi_range(0, 3600) if (h >= 9 and h <= 21 and rngd.randf() < 0.5) else 0)
+			st.stats["focus_hours"][key] = hrs
+		for fid in game.fish_by_id.keys():
+			st.stats["fish_counts"][fid] = rngd.randi_range(0, 12)
+			st.stats["fish_best"][fid] = rngd.randi_range(8, 90)
+		st.stats["total_fish"] = 77
+		wardrobe.open = false
+		book.open_page(OS.get_environment("CATFISH_BOOK").to_int())
 	if OS.has_environment("CATFISH_AUTOFOCUS"):
 		game.start_focus()
 	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
@@ -270,6 +289,7 @@ func _apply_debug_env() -> void:
 		wardrobe.open = false
 		menu.open = true
 		menu.tab = OS.get_environment("CATFISH_MENU").to_int()
+		menu.shop_page = OS.get_environment("CATFISH_SHOP").to_int() if OS.has_environment("CATFISH_SHOP") else 0
 
 
 # ------------------------------------------------------------------ 视图模式
@@ -280,6 +300,7 @@ func _apply_view_mode() -> void:
 	_mini_shown = true
 	_mini_hide_at = Time.get_ticks_msec() + 2000   # 刚切到迷你窗时先显示 2 秒，方便找到它
 	if mini:
+		book.open = false                 # 图鉴册只有完整窗口里有
 		px_scale = adapter.pixel_scale(int(game.state.settings.get("pixel_scale", 3)))
 		view = Vector2(MINI_VIEW)
 		ui_off = Vector2.ZERO
@@ -475,10 +496,16 @@ func _interact_inside() -> void:
 			_update_polygon()
 		"dex":
 			play("click")
+			if not mini:
+				open_book(0)
+				return
 			menu.tab = 1
 			menu.open = true
 		"stats":
 			play("click")
+			if not mini:
+				open_book(2)
+				return
 			menu.tab = 2
 			menu.open = true
 		"mirror":
@@ -818,6 +845,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				play("click")
 			elif event.keycode == KEY_C and not wardrobe.open:
 				toggle_status()            # C 开关小猫状态
+			elif book.open:
+				if event.keycode == KEY_ESCAPE:
+					book.open = false
+					_update_polygon()
+				else:
+					book.key(event.keycode)    # Tab 换页，左右换日，上下换月
 			elif (event.keycode == KEY_TAB or event.keycode == KEY_I) and bag.open and bag.wh:
 				bag.switch_tab()           # 在仓库里：Tab 切换"身上 / 仓库"
 			elif event.keycode == KEY_TAB or event.keycode == KEY_I:
@@ -867,6 +900,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if wardrobe.open:
 			wardrobe.close()
 		bag.open = false
+		book.open = false
 		if menu.open:
 			menu.open = false
 		else:
@@ -885,7 +919,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
-	elif bag.click(p) or menu.click(p) or wardrobe.click(p):
+	elif book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_town_button()
@@ -903,12 +937,13 @@ func _quit_button_visible() -> bool:
 
 ## 有任何面板（菜单、换形象、物品栏）开着。
 func panel_open() -> bool:
-	return menu.open or wardrobe.open or bag.open
+	return menu.open or wardrobe.open or bag.open or book.open
 
 
 ## 小猫状态页（菜单的第 5 页）：已经开着就关，否则打开。
 func toggle_status() -> void:
 	play("click")
+	book.open = false
 	if wardrobe.open:
 		wardrobe.close()
 	bag.open = false
@@ -920,8 +955,21 @@ func toggle_status() -> void:
 	_update_polygon()
 
 
+## 打开图鉴册（只有完整窗口里有）：0 图鉴 / 1 最高纪录 / 2 统计。
+func open_book(page: int) -> void:
+	if mini:
+		return
+	menu.open = false
+	bag.open = false
+	if wardrobe.open:
+		wardrobe.close()
+	book.open_page(page)
+	_update_polygon()
+
+
 func toggle_bag() -> void:
 	play("click")
+	book.open = false
 	menu.open = false
 	if wardrobe.open:
 		wardrobe.close()
@@ -1046,6 +1094,7 @@ func _draw() -> void:
 	menu.draw()
 	wardrobe.draw()
 	bag.draw()
+	book.draw()
 	if _confirm_quit:
 		_draw_quit_confirm()
 	draw_set_transform(Vector2.ZERO)

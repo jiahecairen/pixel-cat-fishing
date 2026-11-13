@@ -7,3 +7,7 @@ tools/art/preview_cats.png
 .Trash*/
 _to_delete*
 Claude outputs/
+b*.bundle
+v0*.tar.gz
+v35_*.bundle
+CatFishing35.zip

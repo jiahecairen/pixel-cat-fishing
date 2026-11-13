@@ -245,3 +245,11 @@
 - 调试变量：`CATFISH_BIRDKIND`（原 CATFISH_BIRD 与旧调试撞名，改名）、`CATFISH_WH=N`。
 - 测试 ALL TESTS PASS（新增仓库测试）、SIM PASS（改动前）；Linux 截图看过仓库面板和家里木箱。Mac 实机待验。
 - 没做：鱼竿/鱼线/鱼钩作为物品存进仓库（它们还不是物品）；物品栏容量上限。
+
+## v0.39（11-13）
+- 状态页精简；新增 `presentation/book.gd`（图鉴 / 最高纪录 / 统计，完整窗口专用）；core 记 `stats.focus_hours`（`Game._record_focus_hours`、`focus_hours_of`）。
+- 渔具店鱼饵页：`Game.shop_baits/bait_unlocked/can_buy_bait/buy_bait`，balance 里鱼饵加 `price`/`unlock_fish`；`Menu` 商店分"装备/鱼饵"两页，未解锁灰色 + 小锁（新精灵 `lock`）。
+- 浮漂水花：`World._bobber_fx/_retract_fx/_draw_drops`，复用世界坐标涟漪。
+- 装修：渔具店/帽子店/摊位地面共 30 多张新精灵（灯笼、门帘、浮漂板、鱼标本、木桶竿、饵料罐、帽子挂板、帽架、布卷、货箱、看板、招牌旗、石灯笼）；`_draw_stall_deco`。
+- 调试变量：`CATFISH_BOOK=页`、`CATFISH_SHOP=1`。测试新增按小时记录和买鱼饵。
+- 测试 ALL TESTS PASS、SIM PASS；Linux 截图看过各页面和装修。Mac 实机待验。
