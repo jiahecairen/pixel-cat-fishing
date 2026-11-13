@@ -238,3 +238,10 @@
 - 回小镇按钮跑马灯 `_draw_marquee`；出发先收杆（`retract_t0`）；最后 10% 不画船桨。
 - 鸟：船动即惊飞（`bird["flee"]`，世界坐标）；`steer_to` 取消来访。V 形尾迹从船前端起。
 - 测试 ALL TESTS PASS、SIM PASS；Linux 截图看到跑马灯。Mac 实机待验。
+
+## v0.38（11-13）
+- 去钓鱼按钮同回小镇：`_town_button` 覆盖 WALK_TO_BOAT / SAIL_BACK，跑马灯扩到这两个阶段。
+- 家里仓库：`GameState.warehouse`、`Inventory.stash/fetch/count_w/owned_w`、`Game.stash_item/fetch_item`；`Bag` 加仓库模式（`wh`、`tab`、`move_selected`），家里新增 `storage` 点位和木箱精灵；新标签：仓库、身上、存入、取出、全部、空格键开仓库。
+- 调试变量：`CATFISH_BIRDKIND`（原 CATFISH_BIRD 与旧调试撞名，改名）、`CATFISH_WH=N`。
+- 测试 ALL TESTS PASS（新增仓库测试）、SIM PASS（改动前）；Linux 截图看过仓库面板和家里木箱。Mac 实机待验。
+- 没做：鱼竿/鱼线/鱼钩作为物品存进仓库（它们还不是物品）；物品栏容量上限。

@@ -18,6 +18,7 @@ var pomodoro: Dictionary = {"phase": 0, "phase_end_ms": 0, "cycle_done": 0}
 var fishing_checkpoint: Dictionary = {"state": 0, "state_start_ms": 0, "deadline_ms": 0, "hooked_fish": ""}
 ## 物品栏：物品 id → 数量
 var inventory: Dictionary = {}
+var warehouse: Dictionary = {}      # 家里仓库：和物品栏一样 {物品 id: 数量}
 ## 物品效果：幸运鱼饵的到期时刻、招财铃剩余的单数
 var effects: Dictionary = {"lucky_until_ms": 0, "bell_sales": 0, "napped_end_ms": 0, "bird_next_ms": 0, "bird_act_ms": 0}
 var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0, "next_eat_ms": 0, "paused_at_ms": 0, "sales": 0, "roam_x": 0, "walk_from": -1, "boat_x": 260, "line_out": 1}
@@ -41,7 +42,7 @@ func to_dict() -> Dictionary:
 	return {
 		"save_version": save_version, "revision": revision,
 		"wallet_gold": wallet_gold, "basket_capacity": basket_capacity,
-		"journey": journey.duplicate(true), "inventory": inventory.duplicate(true), "effects": effects.duplicate(true), "fishing_checkpoint": fishing_checkpoint.duplicate(true),
+		"journey": journey.duplicate(true), "inventory": inventory.duplicate(true), "warehouse": warehouse.duplicate(true), "effects": effects.duplicate(true), "fishing_checkpoint": fishing_checkpoint.duplicate(true),
 		"basket": basket.duplicate(), "session_haul": session_haul.duplicate(),
 		"processed_catch_ids": processed_catch_ids.duplicate(),
 		"processed_sale_ids": processed_sale_ids.duplicate(),
@@ -72,6 +73,11 @@ func from_dict(d: Dictionary) -> bool:
 		for k in d["inventory"]:
 			if int(d["inventory"][k]) > 0:
 				inventory[str(k)] = int(d["inventory"][k])
+	warehouse = {}
+	if d.get("warehouse") is Dictionary:
+		for k in d["warehouse"]:
+			if int(d["warehouse"][k]) > 0:
+				warehouse[str(k)] = int(d["warehouse"][k])
 	_merge(effects, d.get("effects"))
 	for k in effects.keys():
 		effects[k] = int(effects[k])

@@ -1094,9 +1094,9 @@ const ROOM_DOOR_X := 14          # 门的中心
 const ROOMS := {
 	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"]]},
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[128, "mirror"]]},
-	"home": {"keeper": -1, "wall": "w", "spots": [[84, "dex"], [128, "stats"], [172, "bed"]]},
+	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "shop": "空格键看货", "mirror": "空格键照镜子", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡"}
+const SPOT_HINT := {"exit": "空格键出门", "shop": "空格键看货", "mirror": "空格键照镜子", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false
@@ -1152,6 +1152,7 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 			keeper_pos = Vector2(ox + 176, fy - 21)
 			m.tex_frame("villager_%d" % int(room["keeper"]), keeper_pos, 0, 2)
 		"home":
+			m.draw_texture(m.tex["storage"], Vector2(ox + 34, fy - 20))
 			m.draw_texture(m.tex["bookshelf"], Vector2(ox + 70, fy - 39))
 			m.draw_texture(m.tex["calendar"], Vector2(ox + 120, fy - 50))
 			m.draw_texture(m.tex["bed"], Vector2(ox + 160, fy - 19))

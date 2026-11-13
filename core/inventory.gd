@@ -33,6 +33,52 @@ func add(s: GameState, id: String, n: int = 1) -> bool:
 	s.revision += 1
 	return true
 
+## ---- 家里的仓库 ----
+func count_w(s: GameState, id: String) -> int:
+	return int(s.warehouse.get(id, 0))
+
+func owned_w(s: GameState) -> Array:
+	var out: Array = []
+	for d in defs:
+		if count_w(s, d["id"]) > 0:
+			out.append(d["id"])
+	return out
+
+## 把物品栏里的 n 个存进仓库（不够就存剩下的），返回实际存了几个。仓库没有数量上限。
+func stash(s: GameState, id: String, n: int = 1) -> int:
+	var moved := mini(n, count(s, id))
+	if not by_id.has(id) or moved <= 0:
+		return 0
+	var left := count(s, id) - moved
+	if left > 0:
+		s.inventory[id] = left
+	else:
+		s.inventory.erase(id)
+		if s.equipped_bait == id:
+			s.equipped_bait = ""      # 装着的鱼饵都存走了，换回面团
+	s.warehouse[id] = count_w(s, id) + moved
+	s.revision += 1
+	return moved
+
+## 从仓库取 n 个回物品栏（受鱼饵 99 个上限限制，放不下的留在仓库），返回实际取了几个。
+func fetch(s: GameState, id: String, n: int = 1) -> int:
+	var moved := mini(n, count_w(s, id))
+	if not by_id.has(id) or moved <= 0:
+		return 0
+	var cap := int(by_id[id].get("max_stack", 0))
+	if cap > 0:
+		moved = mini(moved, cap - count(s, id))
+		if moved <= 0:
+			return 0
+	var left := count_w(s, id) - moved
+	if left > 0:
+		s.warehouse[id] = left
+	else:
+		s.warehouse.erase(id)
+	s.inventory[id] = count(s, id) + moved
+	s.revision += 1
+	return moved
+
 ## 玩家手里有的物品 id，按定义顺序排列。
 func owned(s: GameState) -> Array:
 	var out: Array = []

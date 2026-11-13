@@ -48,6 +48,7 @@ func _init() -> void:
 		test_weather(balance, fish)
 		test_water(balance, fish)
 		test_sail_turn(balance, fish)
+		test_warehouse(balance, fish)
 		test_birds(balance, fish)
 		test_inventory(balance, fish)
 		test_stall_walk(balance, fish)
@@ -717,6 +718,28 @@ func test_sail_turn(balance: Dictionary, fish: Array) -> void:
 	g3.go_to_town()
 	_run(g3, c3, 40)
 	check(g3.journey.in_town() or g3.journey.activity() == Journey.Activity.WALK_TO_STALL, "能到小镇")
+
+func test_warehouse(balance: Dictionary, fish: Array) -> void:
+	print("warehouse: 家里仓库")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(41))
+	g.inventory.add(g.state, "pearl", 3)
+	g.inventory.add(g.state, "bait_worm", 50)
+	g.use_item("bait_worm")
+	check(g.state.equipped_bait == "bait_worm", "装上蚯蚓")
+	check(g.stash_item("pearl") == 1 and g.inventory.count(g.state, "pearl") == 2 and g.inventory.count_w(g.state, "pearl") == 1, "存 1 个珍珠")
+	check(g.stash_item("pearl", true) == 2 and g.inventory.count(g.state, "pearl") == 0 and g.inventory.owned(g.state).has("pearl") == false, "整堆存入后物品栏里没有")
+	check(g.fetch_item("pearl", true) == 3 and g.inventory.count(g.state, "pearl") == 3 and g.inventory.count_w(g.state, "pearl") == 0, "整堆取回")
+	check(g.stash_item("bait_worm", true) == 50 and g.state.equipped_bait == "", "鱼饵全存走后换回面团")
+	g.inventory.add(g.state, "bait_worm", 60)
+	check(g.fetch_item("bait_worm", true) == 39 and g.inventory.count(g.state, "bait_worm") == 99 and g.inventory.count_w(g.state, "bait_worm") == 11, "取回受 99 个上限限制，放不下的留在仓库")
+	check(g.stash_item("nope") == 0 and g.fetch_item("pearl") == 0, "不存在或没有的不动")
+	var st2 := GameState.new()
+	check(st2.from_dict(g.state.to_dict()) and st2.warehouse == g.state.warehouse and st2.inventory == g.state.inventory, "仓库随存档保存和读取")
+	var total_before: int = g.inventory.count(g.state, "bait_worm") + g.inventory.count_w(g.state, "bait_worm")
+	for i in 50:
+		g.stash_item("bait_worm", i % 2 == 0)
+		g.fetch_item("bait_worm", i % 3 == 0)
+	check(g.inventory.count(g.state, "bait_worm") + g.inventory.count_w(g.state, "bait_worm") == total_before, "来回搬不丢不多")
 
 func test_birds(balance: Dictionary, fish: Array) -> void:
 	print("birds: 鸟来访（送礼 / 偷鱼）")

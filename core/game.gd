@@ -667,6 +667,19 @@ func lucky_active() -> bool:
 func lucky_remaining_ms() -> int:
 	return maxi(0, int(state.effects["lucky_until_ms"]) - _clock.now_ms())
 
+## 在家里把物品存进仓库 / 从仓库取出。all 为真时整堆搬。返回实际搬了几个。
+func stash_item(id: String, all: bool = false) -> int:
+	var n := inventory.stash(state, id, inventory.count(state, id) if all else 1)
+	if n > 0:
+		dirty = true
+	return n
+
+func fetch_item(id: String, all: bool = false) -> int:
+	var n := inventory.fetch(state, id, inventory.count_w(state, id) if all else 1)
+	if n > 0:
+		dirty = true
+	return n
+
 ## 使用一个物品。返回 {"ok": 是否用成, "use": 效果类型, "gold": 得到的金币（没有则为 0）}。
 func use_item(id: String) -> Dictionary:
 	if not inventory.can_use(state, id):
