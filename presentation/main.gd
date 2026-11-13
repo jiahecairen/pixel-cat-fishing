@@ -99,6 +99,8 @@ var _debug_last: String = ""
 var _debug_act_frame: int = -1
 var _debug_dir_from: int = 0    # 调试：CATFISH_ROAM_AT=帧号，从这一帧才开始"按住方向键"
 var _debug_room: String = ""
+var _debug_click_frame: int = -1
+var _debug_click := Vector2.ZERO
 var _debug_dir: int = 0         # 调试：CATFISH_ROAM=1/-1 模拟一直按着右/左方向键
 var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  在这些帧截图后退出
 var _shot_frames: Array = []
@@ -185,6 +187,11 @@ func _apply_debug_env() -> void:
 		game.start_focus()
 	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
 		_debug_act_frame = OS.get_environment("CATFISH_ACT_AT").to_int()
+	if OS.has_environment("CATFISH_CLICK"):       # 调试：帧号:x,y  在该帧模拟点击界面坐标 (x,y)
+		var c := OS.get_environment("CATFISH_CLICK").split(":")
+		var xy := c[1].split(",")
+		_debug_click_frame = c[0].to_int()
+		_debug_click = Vector2(xy[0].to_float(), xy[1].to_float())
 	if OS.has_environment("CATFISH_ROOM"):        # 调试：到镇上后直接进这间屋子（tackle / tailor / home）
 		_debug_room = OS.get_environment("CATFISH_ROOM")
 	if OS.has_environment("CATFISH_ROAM_AT"):
@@ -450,6 +457,13 @@ func _process(dt: float) -> void:
 		game.begin_roam(World.STALL_CAT_X)
 		_enter_building(_debug_room)
 		_debug_room = ""
+	if _debug_click_frame >= 0 and Engine.get_frames_drawn() >= _debug_click_frame:
+		_debug_click_frame = -1
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = true
+		ev.position = (_debug_click + ui_off) * px_scale
+		_unhandled_input(ev)
 	_update_roam(dt)
 	if _debug_act_frame >= 0 and Engine.get_frames_drawn() >= _debug_act_frame:
 		_debug_act_frame = -1
@@ -633,6 +647,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			menu.tab = 3
 			menu.open = true
 		_update_polygon()
+	elif BTN_VIEW.has_point(p):
+		play("click")
+		toggle_view_mode()
 	elif BTN_CLOSE.has_point(p):
 		_quit()
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(p):

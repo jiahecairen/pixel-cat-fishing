@@ -157,6 +157,7 @@ tests/         无界面单元测试
 | `CATFISH_LOOK=2,2,3` | 指定形象（毛色,花纹,帽子 的下标）并跳过捏猫 |
 | `CATFISH_MENU=0..3` | 开局打开菜单的某个标签页 |
 | `CATFISH_ROAM=1` / `-1` | 模拟一直按着右 / 左方向键（`CATFISH_ROAM_AT=帧号` 指定从哪一帧开始按） |
+| `CATFISH_CLICK=10:116,8` | 在第 10 帧模拟点击界面坐标 (116,8) |
 | `CATFISH_ROOM=tackle` | 到镇上后直接进这间屋子（`tackle` / `tailor` / `home`） |
 | `CATFISH_ACT_AT=200` | 在第 200 帧模拟按一次互动键 |
 | `CATFISH_SHOT=/tmp/a:60,120` | 在第 60、120 帧截图到 `/tmp/a_60.png` 等，然后退出 |
