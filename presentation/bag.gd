@@ -172,10 +172,12 @@ func use_selected() -> void:
 		return
 	m.play("coin" if res["gold"] > 0 else "buy")
 	if res["gold"] > 0:
-		gain_text = "+%d" % int(res["gold"])
+		gain_text = "+%d" % int(Money.tier(int(res["gold"]))[1])
+		gain_icon = Money.icon(int(res["gold"]))
 		gain_t0 = Time.get_ticks_msec()
 	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
 
+var gain_icon: String = "coin"
 var gain_text: String = ""      # 刚用物品得到的金币，在面板里闪一下
 var gain_t0: int = -100000
 
@@ -272,5 +274,5 @@ func draw() -> void:
 	var t := Time.get_ticks_msec()
 	if t - gain_t0 < 1800 and gain_text != "":
 		var gp := Vector2(_use_rect().position.x - 4 - gain_text.length() * 4 - 10, _use_rect().position.y + 2 - (t - gain_t0) / 300)
-		m.draw_texture(m.tex["coin"], gp + Vector2(0, -2))
+		m.draw_texture(m.tex[gain_icon], gp + Vector2(0, -2))
 		m.text(gain_text, gp + Vector2(11, 0), Pal.L_Y)

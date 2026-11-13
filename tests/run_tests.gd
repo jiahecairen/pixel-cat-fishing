@@ -49,6 +49,7 @@ func _init() -> void:
 		test_water(balance, fish)
 		test_sail_turn(balance, fish)
 		test_dock_shoal(balance, fish)
+		test_money_waves(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -1179,3 +1180,26 @@ func test_dock_shoal(balance: Dictionary, fish: Array) -> void:
 	check(str(g.gear_stat("rod_3")[0]) == "挂机速度" and str(g.gear_stat("rod_3")[1]).begins_with("+"), "鱼竿有速度属性")
 	check(g.gear_stat("hook_1") == ["稀有鱼加成", "+25％"], "银钩稀有鱼 +25％")
 	check(g.gear_stat("bell").is_empty(), "非装备没有属性")
+
+
+func test_money_waves(balance: Dictionary, fish: Array) -> void:
+	print("money: 金银铜换算、去尾显示、钱包封顶与存钱罐；浪区推力")
+	check(Money.tier(0) == ["copper", 0] and Money.tier(8) == ["copper", 8], "8 铜显示铜")
+	check(Money.tier(19) == ["silver", 1], "19 铜去尾显示 1 银")
+	check(Money.tier(100) == ["gold", 1] and Money.tier(189) == ["gold", 1], "189 铜只显示 1 金")
+	check(Money.icon(9) == "coin_copper" and Money.icon(10) == "coin_silver" and Money.icon(100) == "coin", "图标按档位")
+	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(71))
+	g.state.wallet_gold = Money.WALLET_CAP + 250
+	g.tick()
+	check(g.state.wallet_gold == Money.WALLET_CAP and g.state.piggy == 250, "超过 999 金的部分进存钱罐")
+	check(g.take_wallet_full() and not g.take_wallet_full(), "钱包满了只提示一次")
+	check(g.wallet_is_full(), "钱包满")
+	check(g.piggy_use() == "deposit" and g.state.wallet_gold == 0 and g.state.piggy == Money.WALLET_CAP + 250, "钱包有钱：全存进去")
+	check(g.piggy_use() == "withdraw" and g.state.wallet_gold == Money.WALLET_CAP and g.state.piggy == 250, "钱包空了：取出到封顶")
+	var s2 := GameState.new()
+	s2.piggy = 77
+	var s3 := GameState.new()
+	s3.from_dict(s2.to_dict())
+	check(s3.piggy == 77, "存钱罐存档往返")
+	var w := g.wave_zone()
+	check(g.wave_push(w.x + 5.0) == 0.0 and g.wave_push(w.y) == 1.0 and g.wave_push((w.x + w.y) / 2.0) > 0.0, "浪区推力：入口 0，最深处 1")

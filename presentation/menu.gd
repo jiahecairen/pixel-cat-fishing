@@ -5,7 +5,8 @@ extends RefCounted
 const Pal := preload("res://presentation/palette.gd")
 
 const RECT := Rect2(15, 28, 98, 68)
-const TABS := ["商店", "图鉴", "统计", "设置", "状态"]
+const BOOK_NAMES := {"tackle": "渔具店", "tailor": "裁缝铺"}
+const TABS := ["商店", "图鉴", "统计", "设置", "状态", "任务"]
 const UPGRADES := [
 	["rod", "鱼竿", "自由挂机钓得更快"],
 	["bait", "鱼饵", "稀有鱼更容易上钩"],
@@ -34,7 +35,10 @@ func _init(main) -> void:
 func _tab_rect(i: int) -> Rect2:
 	return Rect2(17 + i * 23, 30, 23, 12)
 
-func _book_btn_rect() -> Rect2:
+func _book_btn_rect() -> Rect2:      # 状态页标题右边：任务、图鉴两个文字按钮（没有边框）
+	return Rect2(68, 31, 24, 10)
+
+func _quest_btn_rect() -> Rect2:
 	return Rect2(42, 31, 24, 10)
 
 func _shop_tab_rect(i: int) -> Rect2:
@@ -75,9 +79,18 @@ func click(p: Vector2) -> bool:
 				if _plus_rect(i).has_point(p):
 					m.play("buy" if m.game.buy_upgrade(UPGRADES[i][0]) else "deny")
 		4:
-			if not m.mini and _book_btn_rect().has_point(p):
+			if _book_btn_rect().has_point(p):
 				m.play("click")
-				m.open_book(0)
+				if m.mini:
+					tab = 1                  # 迷你窗用小面板里的图鉴
+				else:
+					m.open_book(0)
+			elif _quest_btn_rect().has_point(p):
+				m.play("click")
+				if m.mini:
+					tab = 5
+				else:
+					m.open_book(3)
 		3:
 			for i in SETTINGS.size():
 				var dir := 0
@@ -114,6 +127,7 @@ func draw() -> void:
 		2: _draw_stats()
 		3: _draw_settings()
 		4: _draw_status()
+		5: _draw_quests()
 
 func _draw_shop() -> void:
 	var g = m.game
@@ -140,7 +154,7 @@ func _draw_shop() -> void:
 			m.label("已满级", Vector2(72, y), Pal.L_Y)
 		else:
 			var ok: bool = g.upgrades.can_buy(g.state, id)
-			m.text_right(str(cost), 96, y + 3, Pal.L_Y if ok else Pal.L_A)
+			m.money_right(cost, 96, y + 3, Pal.L_Y if ok else Pal.L_A)
 			m.tex_frame("btn_plus", _plus_rect(i).position, 0, 2, Color.WHITE if ok else Color(1, 1, 1, 0.35))
 	m.label(desc, Vector2(19, 81), Pal.L_A)
 
@@ -161,7 +175,7 @@ func _draw_bait_shop() -> void:
 		if open:
 			m.text("x%d" % g.inventory.count(g.state, id), Vector2(44, y + 3), Pal.L_A)
 			var ok: bool = g.can_buy_bait(id)
-			m.text_right(str(int(d["price"])), 96, y + 3, Pal.L_Y if ok else Pal.L_A)
+			m.money_right(int(d["price"]), 96, y + 3, Pal.L_Y if ok else Pal.L_A)
 			m.tex_frame("btn_plus", _plus_rect(i).position, 0, 2, Color.WHITE if ok else Color(1, 1, 1, 0.35))
 		else:
 			m.draw_texture(m.tex["lock"], Vector2(99, y), Color(1, 1, 1, 0.8))
@@ -250,11 +264,10 @@ const EQUIP := [["鱼竿", "rod"], ["鱼线", "line"], ["鱼钩", "hook"]]
 
 func _draw_status() -> void:
 	var g = m.game
-	if not m.mini:                                # 图鉴册只有完整窗口里有
-		var br := _book_btn_rect()
-		m.draw_rect(br, Pal.L_Y)
-		m.draw_rect(br.grow(-1), Pal.U_K)
-		m.label_centered("图鉴", br.position.x + br.size.x / 2, br.position.y - 1, Pal.L_Y)
+	var qr := _quest_btn_rect()
+	m.label_centered("任务", qr.position.x + qr.size.x / 2, qr.position.y - 1, Pal.L_Y)
+	var br := _book_btn_rect()
+	m.label_centered("图鉴", br.position.x + br.size.x / 2, br.position.y - 1, Pal.L_Y)
 	m.draw_rect(Rect2(17, 42, 34, 34), Pal.U_A)
 	m.draw_rect(Rect2(18, 43, 32, 32), Pal.U_B)
 	m.draw_cat(Vector2(18, 44), 0)
@@ -268,7 +281,32 @@ func _draw_status() -> void:
 		m.label(nm, Vector2(56, 73), Pal.L_Y)
 		m.text("x%d" % g.inventory.count(g.state, bid), Vector2(56 + m.label_width(nm) + 3, 76), Pal.L_W)
 	m.draw_rect(Rect2(17, 84, 94, 1), Pal.U_A)
-	m.draw_texture(m.tex["coin"], Vector2(19, 85))
-	m.text(str(g.state.wallet_gold), Vector2(30, 88), Pal.L_Y)
+	m.draw_money(g.state.wallet_gold, Vector2(19, 85), Pal.L_Y)
 	m.label("钓到", Vector2(62, 85), Pal.L_A)
 	m.text(str(int(g.state.stats["total_fish"])), Vector2(83, 88), Pal.L_W)
+
+
+## 迷你窗里的任务页：进行中的任务和每项要求（有几个/要几个），最多 4 行。
+func _draw_quests() -> void:
+	var g = m.game
+	var y := 44
+	var rows := 0
+	for q in g._quest_cfg_list():
+		var id := str(q["id"])
+		if g.quest_state(id) != "active" or rows >= 4:
+			continue
+		m.label(BOOK_NAMES.get(str(q.get("npc", "")), ""), Vector2(19, y), Pal.L_Y)
+		m.label(str(q.get("reward_name", "")), Vector2(62, y), Pal.L_A)
+		y += 10
+		rows += 1
+		for n in g.quest_needs(id):
+			if rows >= 4:
+				break
+			var it: Dictionary = g.inventory.by_id.get(str(n[0]), {})
+			var enough: bool = int(n[1]) >= int(n[2])
+			m.label(str(it.get("name", "")), Vector2(25, y), Pal.L_W)
+			m.text_right("%d/%d" % [int(n[1]), int(n[2])], 100, y + 3, Pal.L_G if enough else Pal.L_R)
+			y += 10
+			rows += 1
+	if rows == 0:
+		m.label("暂无任务", Vector2(19, 46), Pal.L_A)

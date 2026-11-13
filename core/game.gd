@@ -100,6 +100,7 @@ func in_focus() -> bool:
 
 func tick() -> Array:
 	var events := _tick()
+	_clamp_wallet()
 	# 钓鱼状态一变就更新断点（状态切换不频繁，不会造成频繁写盘）
 	if fishing.state != _last_cp_state:
 		_last_cp_state = fishing.state
@@ -381,6 +382,16 @@ func zone_bounds(sea_end: float) -> Array:
 ## 船能划到的左右边界（船左端的世界坐标）。
 func boat_limits() -> Vector2:
 	return Vector2(float(_water.get("boat_min_x", 30)), float(_water.get("boat_max_x", 440)))
+
+## 水域最左侧的浪区：x 在 wave_x 以内浪越来越大把船往回推，最远只能划到 wave_stop 附近
+## （以后升级船只才能出得更远）。返回 Vector2(wave_x, wave_stop)。
+func wave_zone() -> Vector2:
+	return Vector2(float(_water.get("wave_x", 92)), float(_water.get("wave_stop", 56)))
+
+## 船在 x 处受到的向右推力占比：浪区入口 0，到 wave_stop 为 1。
+func wave_push(x: float) -> float:
+	var w := wave_zone()
+	return clampf((w.x - x) / maxf(1.0, w.x - w.y), 0.0, 1.0)
 
 func can_steer() -> bool:
 	if fishing.state in [FishingSystem.State.HOOKED, FishingSystem.State.REELING, FishingSystem.State.SETTLEMENT]:
@@ -783,6 +794,42 @@ func give(id: String, n: int = 1, events: Array = []) -> String:
 	return "warehouse"
 
 var _overflow_pending: bool = false
+
+## 钱包最多 999 金：超出的部分自动放进家里的存钱罐，并让界面提示"钱包满了"。
+func _clamp_wallet() -> void:
+	if state.wallet_gold > Money.WALLET_CAP:
+		state.piggy += state.wallet_gold - Money.WALLET_CAP
+		state.wallet_gold = Money.WALLET_CAP
+		_wallet_full_pending = true
+		state.revision += 1
+		dirty = true
+
+var _wallet_full_pending: bool = false
+
+func take_wallet_full() -> bool:
+	var r := _wallet_full_pending
+	_wallet_full_pending = false
+	return r
+
+func wallet_is_full() -> bool:
+	return state.wallet_gold >= Money.WALLET_CAP
+
+## 存钱罐：钱包里有钱就全存进去；钱包空了就取出（取到钱包封顶为止）。返回 "deposit" / "withdraw" / ""。
+func piggy_use() -> String:
+	if state.wallet_gold > 0:
+		state.piggy += state.wallet_gold
+		state.wallet_gold = 0
+		state.revision += 1
+		dirty = true
+		return "deposit"
+	if state.piggy > 0:
+		var n := mini(state.piggy, Money.WALLET_CAP)
+		state.piggy -= n
+		state.wallet_gold += n
+		state.revision += 1
+		dirty = true
+		return "withdraw"
+	return ""
 
 ## 界面每帧问一次：刚才有没有东西因为行李满了被送去仓库（问完清零，用来弹提示）。
 func take_overflow() -> bool:

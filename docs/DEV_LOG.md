@@ -290,3 +290,12 @@
 - 图鉴册第 4 页"任务"；`Game.gear_stat` + 物品栏属性文字。生成脚本的字符检查只对纯汉字标签做（ASCII 是变宽字形），新增 `+N％` 标签。
 - 新增调试变量：`CATFISH_BOATX`、`CATFISH_QSTATE`、`CATFISH_BAGSEL`。
 - 测试 ALL TESTS PASS、SIM PASS；启动检查无 SCRIPT ERROR；Linux 截图看过浅滩、上岸提示、任务页、物品栏属性。居民聊天转向和店内店主转向没有截图验证；全部待 Mac 实机。
+
+## v0.45 金银铜、聊天与店里、浪区、后台
+- 货币：`core/money.gd`；`wallet_gold` 现在是铜币数，显示用 `Main.draw_money / money_right`（金银铜三种图标）；`Game._clamp_wallet` 封顶 999 金、多的进 `state.piggy`，`piggy_use` 存取；家里新增存钱罐点位（x=106）。
+- 居民：聊天范围 46 像素、聊天时小猫退到 24 像素外；下雨只剩第 0 位并打伞（`umbrella` 精灵）；店里顾客 `_draw_room_customer`（30 秒一个周期，纯表现）；店主始终朝向小猫。
+- 界面：状态页文字按钮"任务/图鉴"；菜单新增第 6 页"任务"（迷你窗用）；钓鱼提示 `_draw_catch_pop`；`Admin` 后台（F9）。
+- 水域：沙滩重画（缓坡、泡沫线、湿沙干沙、桩脚接入沙里）；浪区 `_draw_waves` + `Game.wave_push` + `main._apply_waves`；"浅滩"→"浅水区"。
+- 生成脚本字符检查对含 ASCII 的标签跳过逐字检查。
+- 新增调试变量 `CATFISH_ADMIN`、`CATFISH_CATCH=鱼id`。
+- 测试 ALL TESTS PASS、SIM PASS；启动检查无 SCRIPT ERROR。居民聊天后的位置、后台按钮点击、存钱罐、浪区推回手感都没有实机验证，全部待 Mac。

@@ -26,6 +26,7 @@ const QuestPanel := preload("res://presentation/quest_panel.gd")
 const World := preload("res://presentation/world.gd")
 const Bag := preload("res://presentation/bag.gd")
 const Book := preload("res://presentation/book.gd")
+const Admin := preload("res://presentation/admin.gd")
 
 const MINI_VIEW := Vector2i(128, 96)
 const FULL_MIN_H := 180          # 全画面至少能看到这么高的世界
@@ -39,7 +40,7 @@ const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
-	"tomato", "coin", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
+	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish"]
@@ -80,9 +81,16 @@ var outfit_shop: OutfitShop
 var _toast_t0: int = -100000       # 屏幕左侧的两行小提示（行李满了、水太浅了……）
 var _toast_l1: String = ""
 var _toast_l2: String = ""
+var _catch_name: String = ""        # 刚钓到的鱼：右上角显示"名称 (尺寸cm)"，几秒后淡出
+var _catch_size: int = 0
+var _catch_rare: bool = false
+var _catch_t0: int = -100000
+const CATCH_SHOW_MS := 4000
+const CATCH_FADE_MS := 1200
 var quest_panel: QuestPanel
 var bag: Bag
 var book: Book
+var admin: Admin
 var world: World
 var cat_cfg: Dictionary = {}
 var tex: Dictionary = {}
@@ -121,9 +129,10 @@ const KEYS_RIGHT := [KEY_RIGHT, KEY_D]
 const KEYS_ACT := [KEY_SPACE, KEY_ENTER, KEY_E, KEY_UP, KEY_W]
 var _cam_snap: bool = true
 var _cam_fx: float = 0.0        # 完整窗口镜头的精确横坐标（画面上取整）
-const ZONE_LABEL := {"shallow": "浅滩", "normal": "普通水域", "deep": "深水区"}
+const ZONE_LABEL := {"shallow": "浅水区", "normal": "普通水域", "deep": "深水区"}
 const BOAT_SPEED := 44.0         # 划船最高速度（像素/秒）
 const BOAT_ACCEL := 98.0         # 起桨加速度：约 0.45 秒加到最高速
+const WAVE_PUSH := 150.0         # 浪区里把船往回推的加速度（像素/秒²，最大值）
 const BOAT_DECEL := 55.0         # 停桨后的滑行减速度：约 0.8 秒滑停
 const CAM_PULL := 1.4            # 镜头把小猫拉回正中的速度（每秒，越大越紧）
 var _debug_speed: float = 1.0   # 调试：环境变量 CATFISH_SPEED=60 让时间快 60 倍（仅调试版生效）
@@ -174,6 +183,7 @@ func _ready() -> void:
 	game.set_cat_cfg(cat_cfg)
 	bag = Bag.new(self)
 	book = Book.new(self)
+	admin = Admin.new(self)
 	world = World.new(self)
 	wardrobe.open = not state.cat.get("created", false)   # 第一次启动先捏猫
 	_apply_debug_env()
@@ -277,6 +287,16 @@ func _apply_debug_env() -> void:
 		game.inventory.add(st, "boot", 1)
 	if OS.has_environment("CATFISH_BAGSEL"):      # 调试：物品栏选中第 N 个
 		bag.sel = OS.get_environment("CATFISH_BAGSEL").to_int()
+	if OS.has_environment("CATFISH_ADMIN"):       # 调试：直接打开后台，钱包给点钱
+		st.wallet_gold = 23456
+		st.piggy = 12345
+		admin.open = true
+	if OS.has_environment("CATFISH_CATCH"):       # 调试：显示钓到鱼的提示（鱼 id）
+		var cf: Dictionary = game.fish_by_id.get(OS.get_environment("CATFISH_CATCH"), {})
+		_catch_name = str(cf.get("name", ""))
+		_catch_size = 37
+		_catch_rare = int(cf.get("rarity", 0)) >= 2
+		_catch_t0 = Time.get_ticks_msec() + 100000
 	if OS.has_environment("CATFISH_BOOK"):        # 调试：造一些统计数据并打开图鉴册的第 N 页
 		var rngd := RandomNumberGenerator.new()
 		rngd.seed = 7
@@ -340,6 +360,7 @@ func _apply_view_mode() -> void:
 	_mini_hide_at = Time.get_ticks_msec() + 2000   # 刚切到迷你窗时先显示 2 秒，方便找到它
 	if mini:
 		book.open = false                 # 图鉴册只有完整窗口里有
+		admin.open = false
 		px_scale = adapter.pixel_scale(int(game.state.settings.get("pixel_scale", 3)))
 		view = Vector2(MINI_VIEW)
 		ui_off = Vector2.ZERO
@@ -440,11 +461,12 @@ func _update_roam(dt: float) -> void:
 			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * game.move_speed() * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
 			world.room_flip = dir < 0
 		return
-	if dir == 0 and absf(_boat_v) > 0.5 and game.can_steer() and interior == "":
+	if dir == 0 and (absf(_boat_v) > 0.5 or (game.wave_push(_boat_fx) > 0.0 and not game.line_out())) and game.can_steer() and interior == "":
 		# 松开方向键后船不会立刻停：按减速度滑行到 0，滑行时桨还在划（速度慢到一定程度再收桨）
 		_boat_v = move_toward(_boat_v, 0.0, BOAT_DECEL * game.move_speed() * dt)
 		if absf(_boat_fx - float(j.boat_x())) > 1.5:
 			_boat_fx = float(j.boat_x())
+		_apply_waves(dt, false)
 		_boat_fx = clampf(_boat_fx + _boat_v * game.move_speed() * dt, 0.0, 9999.0)
 		game.steer_to(_boat_fx)
 		var glim := game.boat_limits()
@@ -469,6 +491,7 @@ func _update_roam(dt: float) -> void:
 		_last_walk_input = t
 		if t >= _row_ready_at:
 			_boat_v = move_toward(_boat_v, float(dir) * BOAT_SPEED, BOAT_ACCEL * game.move_speed() * dt)
+			_apply_waves(dt, dir < 0)
 			_boat_fx = clampf(_boat_fx + _boat_v * game.move_speed() * dt, 0.0, 9999.0)
 			game.steer_to(_boat_fx)
 			var lim := game.boat_limits()
@@ -501,6 +524,20 @@ func _end_roam_auto(x: float) -> void:
 
 
 ## ` 键（中文输入法下是"·"）：开发者模式，随便换形象，不花钱。
+## 浪区：推力把船往右推，划得越深推得越狠；第一次被推时提示一下。
+func _apply_waves(dt: float, rowing_left: bool) -> void:
+	var push: float = game.wave_push(_boat_fx)
+	if push <= 0.0:
+		return
+	_boat_v += WAVE_PUSH * lerpf(0.4, 1.0, push) * game.move_speed() * dt
+	var stop: float = game.wave_zone().y
+	if _boat_fx <= stop and _boat_v < 0.0:
+		_boat_v = 0.0
+	if rowing_left and push > 0.35 and Time.get_ticks_msec() - _toast_t0 > 3500:
+		_toast("浪太大了", "小船过不去")
+		play("deny")
+
+
 func _toast(l1: String, l2: String = "") -> void:
 	_toast_l1 = l1
 	_toast_l2 = l2
@@ -553,7 +590,13 @@ func _interact() -> void:
 			_enter_building(world.door_near(x)[2])
 		elif world.stroller_near(x, Time.get_ticks_msec()) >= 0:
 			var t := Time.get_ticks_msec()
-			world.chat_with(world.stroller_near(x, t), t)
+			var si: int = world.stroller_near(x, t)
+			world.chat_with(si, t)
+			var nx: float = world.chat_stand_x(x, world.chat_x)      # 太近就退开一点，免得和居民叠在一起
+			if absf(nx - x) > 0.5 and game.state.journey.get("activity", -1) == Journey.Activity.ROAM:
+				_roam_fx = clampf(nx, World.ROAM_MIN_X, World.ROAM_MAX_X)
+				game.journey.set_roam_x(_roam_fx)
+			world.roam_flip = world.chat_x + 8.0 < nx + 16.0           # 站定后面向居民
 			_last_walk_input = t
 			play("click")
 		else:
@@ -590,6 +633,14 @@ func _interact_inside() -> void:
 				return
 			menu.tab = 1
 			menu.open = true
+		"piggy":
+			var what: String = game.piggy_use()
+			if what == "":
+				play("deny")
+				_toast("存钱罐是空的", "")
+			else:
+				play("coin")
+				_toast("存进存钱罐" if what == "deposit" else "从存钱罐取出", "")
 		"stats":
 			play("click")
 			if not mini:
@@ -707,6 +758,9 @@ func _process(dt: float) -> void:
 		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
 	_update_power()
 	game.fast_forward(dt * 1000.0)        # [ ] 全局加速：把所有截止时刻前移
+	if game.take_wallet_full():
+		_toast("钱包满了", "多的放进存钱罐")
+		play("deny")
 	if game.take_overflow():
 		_toast("行李满了", "送去了仓库")
 		play("deny")
@@ -853,6 +907,10 @@ func _on_event(e: Dictionary) -> void:
 		"catch":
 			world.hop_t0 = t
 			var f: Dictionary = game.fish_by_id.get(e["fish_id"], {})
+			_catch_name = str(f.get("name", ""))
+			_catch_size = int(e.get("size", 0))
+			_catch_rare = int(f.get("rarity", 0)) >= 2
+			_catch_t0 = t
 			if int(f.get("rarity", 0)) >= 2:
 				play("rare")
 				_sparkles(_world_to_view(world.cat_pos + Vector2(17, -10)), 12, 8.0)
@@ -863,7 +921,7 @@ func _on_event(e: Dictionary) -> void:
 			world.chest_open_t0 = t
 			play("rare")
 			_sparkles(_world_to_view(world.cat_pos + Vector2(17, -12)), 16 if e["tier"] == "big" else 9, 9.0)
-			_float("+%d" % e["gold"], "coin", world.cat_pos + Vector2(30, -4))
+			_float_money(e["gold"], world.cat_pos + Vector2(30, -4))
 			if e.get("item", "") != "":
 				var it: Dictionary = game.inventory.by_id.get(e["item"], {})
 				if tex.has(it.get("sprite", "")):
@@ -888,7 +946,7 @@ func _on_event(e: Dictionary) -> void:
 			play("coin")
 			world.hop_t0 = t
 			world.on_sale(e["fish_id"])
-			_float("+%d" % e["gold"], "coin", Vector2(World.STALL_X + 8, World.GROUND_Y - 52))
+			_float_money(e["gold"], Vector2(World.STALL_X + 8, World.GROUND_Y - 52))
 		"bird_visit":
 			world.bird_start(e["kind"], e["item"], t)
 		"bird_gift":
@@ -905,11 +963,15 @@ func _on_event(e: Dictionary) -> void:
 			world.hop_t0 = t
 			_sparkles(Vector2(view.x / 2, 30), 26, minf(view.x * 0.4, 90.0), true)
 			if e["gold"] > 0:
-				_float("+%d" % e["gold"], "coin", world.cat_pos + Vector2(-6, -14))
+				_float_money(e["gold"], world.cat_pos + Vector2(-6, -14))
 			adapter.notify("番茄完成！", "木箱里的 %d 条鱼卖了 %d 金币。休息一下吧。" % [e["fish_count"], e["gold"]])
 		"break_done":
 			play("break_end")
 			adapter.notify("休息结束", "小猫睡醒了，准备开始下一个番茄吧。")
+
+
+func _float_money(copper: int, world_pos: Vector2) -> void:
+	_float("+%d" % int(Money.tier(copper)[1]), Money.icon(copper), world_pos)
 
 
 func _float(text: String, icon: String, world_pos: Vector2) -> void:
@@ -954,6 +1016,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif event.keycode == KEY_BRACKETRIGHT or event.keycode == KEY_BRACKETLEFT:
 				game.change_move_speed(1 if event.keycode == KEY_BRACKETRIGHT else -1)   # ] 加快 [ 减慢（测试用）
 				play("click")
+			elif event.keycode == KEY_F9:
+				play("click")
+				if not admin.open:
+					menu.open = false
+					bag.open = false
+					book.open = false
+				admin.toggle()             # F9 后台
+			elif admin.open:
+				if event.keycode == KEY_ESCAPE:
+					admin.open = false
+					_update_polygon()
 			elif event.keycode == KEY_C and not wardrobe.open:
 				toggle_status()            # C 开关小猫状态
 			elif book.open:
@@ -1045,7 +1118,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
-	elif book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or quest_panel.click(p):
+	elif admin.click(p) or book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or quest_panel.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_town_button()
@@ -1063,7 +1136,7 @@ func _quit_button_visible() -> bool:
 
 ## 有任何面板（菜单、换形象、物品栏）开着。
 func panel_open() -> bool:
-	return menu.open or wardrobe.open or outfit_shop.open or quest_panel.open or bag.open or book.open
+	return menu.open or wardrobe.open or outfit_shop.open or quest_panel.open or bag.open or book.open or admin.open
 
 
 ## 小猫状态页（菜单的第 5 页）：已经开着就关，否则打开。
@@ -1199,7 +1272,7 @@ func _press_main() -> void:
 			var gold := game.abandon_focus()
 			if gold > 0:
 				play("coin")
-				_float("+%d" % gold, "coin", world.cat_pos + Vector2(-6, -14))
+				_float_money(gold, world.cat_pos + Vector2(-6, -14))
 		_:
 			game.skip_break()
 
@@ -1230,8 +1303,10 @@ func _draw() -> void:
 	if Time.get_ticks_msec() - _toast_t0 < 3000:
 		label(_toast_l1, Vector2(17, 63), Pal.L_R)
 		label(_toast_l2, Vector2(17, 74), Pal.L_R)
+	_draw_catch_pop()
 	bag.draw()
 	book.draw()
+	admin.draw()
 	if _confirm_quit:
 		_draw_quit_confirm()
 	draw_set_transform(Vector2.ZERO)
@@ -1299,8 +1374,7 @@ func _draw_hud(now: int) -> void:
 	if _quit_button_visible():
 		_tex_frame("btn_close", BTN_CLOSE.position, 1 if _confirm_quit else 0, 2)
 
-	draw_texture(tex["coin"], Vector2(20, 15))
-	_text(str(game.state.wallet_gold), Vector2(31, 17), Pal.L_Y)
+	draw_money(game.state.wallet_gold, Vector2(20, 15), Pal.L_R if game.wallet_is_full() else Pal.L_Y)
 	# 专注且在海上：显示不限量的木箱（番茄渔获）；其余时候显示鱼篓
 	if ph == Pomodoro.Phase.FOCUS and game.journey.on_boat():
 		draw_texture(tex["hold"], Vector2(56, 14))
@@ -1346,7 +1420,31 @@ func _draw_hud(now: int) -> void:
 			label("空格键开始钓鱼", Vector2(17, 30), hint_col)
 		if game.can_steer():
 			label("方向键划船", Vector2(17, 41), hint_col)
-			label(ZONE_LABEL.get(game.zone_id(float(game.journey.boat_x())), "普通水域"), Vector2(17, 52), hint_col)
+			label("浅滩" if game.fishing_blocked() else ZONE_LABEL.get(game.zone_id(float(game.journey.boat_x())), "普通水域"), Vector2(17, 52), hint_col)
+
+
+## 右上角：钓到的鱼名 + 括号里的尺寸，停几秒后淡出。
+func _draw_catch_pop() -> void:
+	var age := Time.get_ticks_msec() - _catch_t0
+	if age >= CATCH_SHOW_MS or _catch_name == "" or not Labels.RECTS.has(_catch_name):
+		return
+	var a := 1.0 if age < CATCH_SHOW_MS - CATCH_FADE_MS else float(CATCH_SHOW_MS - age) / float(CATCH_FADE_MS)
+	var col := Color(Pal.L_Y if _catch_rare else Pal.L_W, a)
+	var sz := "%dcm" % _catch_size
+	var total := label_width(_catch_name) + 4 + 3 + sz.length() * 4 + 3
+	var x := view.x - 5.0 - total
+	var y := 31.0 if mini else 5.0
+	label(_catch_name, Vector2(x, y), col)
+	var px := x + label_width(_catch_name) + 4.0
+	var cp := Color(Pal.L_A, a)
+	draw_rect(Rect2(px + 1, y + 3, 1, 1), cp)         # "("
+	draw_rect(Rect2(px, y + 4, 1, 3), cp)
+	draw_rect(Rect2(px + 1, y + 7, 1, 1), cp)
+	_text(sz, Vector2(px + 3, y + 4), col)
+	var qx := px + 3.0 + sz.length() * 4
+	draw_rect(Rect2(qx, y + 3, 1, 1), cp)             # ")"
+	draw_rect(Rect2(qx + 1, y + 4, 1, 3), cp)
+	draw_rect(Rect2(qx, y + 7, 1, 1), cp)
 
 
 func _draw_floats(t: int) -> void:
@@ -1414,6 +1512,17 @@ func tex_frame_flipped(name: String, pos: Vector2, frame: int, count: int) -> vo
 
 func text(s: String, pos: Vector2, color: Color) -> void:
 	_text(s, pos, color)
+
+## 画钱：只写最高一档（去尾），前面是金/银/铜币图标。pos 是图标左上角。
+func draw_money(copper: int, pos: Vector2, color: Color) -> void:
+	draw_texture(tex[Money.icon(copper)], pos)
+	_text(str(Money.tier(copper)[1]), pos + Vector2(11, 2), color)
+
+## 同上，靠右对齐：right_x 是数字右边，y 是数字的纵坐标（图标自动对齐）。
+func money_right(copper: int, right_x: float, y: float, color: Color) -> void:
+	var n := str(Money.tier(copper)[1])
+	draw_texture(tex[Money.icon(copper)], Vector2(right_x - n.length() * 4 - 10, y - 2))
+	_text(n, Vector2(right_x - n.length() * 4 + 1, y), color)
 
 func text_right(s: String, right_x: float, y: float, color: Color) -> void:
 	_text(s, Vector2(right_x - s.length() * 4 + 1, y), color)

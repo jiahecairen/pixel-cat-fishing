@@ -211,11 +211,32 @@ func stroller_at(i: int, t: int) -> Array:
 	var k := ph * 2.0 if going_right else (1.0 - ph) * 2.0
 	return [roundf(lerpf(float(s[1]), float(s[2]), k)), not going_right]
 
+## 下雨时外面的居民少一大半（只留第 0 位，打着伞）；市场买鱼的顾客不受影响。
+func stroller_active(i: int) -> bool:
+	return i == 0 or not m.game.is_raining()
+
+const CHAT_RANGE := 46.0        # 离居民这么近就能按键聊天
+const CHAT_GAP := 24.0          # 聊天时小猫和居民中心点至少隔这么远，免得叠在一起
+
 func stroller_near(x: float, t: int) -> int:
+	var best := -1
+	var best_d := CHAT_RANGE + 1.0
 	for i in STROLLERS.size():
-		if absf(float(stroller_at(i, t)[0]) + 8.0 - (x + 16.0)) <= 18.0:
-			return i
-	return -1
+		if not stroller_active(i):
+			continue
+		var d := absf(float(stroller_at(i, t)[0]) + 8.0 - (x + 16.0))
+		if d <= CHAT_RANGE and d < best_d:
+			best = i
+			best_d = d
+	return best
+
+## 聊天时小猫该站的位置（贴图左边缘 x）：离居民太近就退到 CHAT_GAP 远，已经够远就不动。
+func chat_stand_x(cat_x: float, npc_x: float) -> float:
+	var d := (cat_x + 16.0) - (npc_x + 8.0)
+	if absf(d) >= CHAT_GAP:
+		return cat_x
+	var side := -1.0 if d < 0.0 else 1.0
+	return npc_x + 8.0 + side * CHAT_GAP - 16.0
 
 func chat_with(i: int, t: int) -> void:
 	chat_x = float(stroller_at(i, t)[0])
@@ -226,6 +247,8 @@ func chat_with(i: int, t: int) -> void:
 
 func _draw_strollers(t: int) -> void:
 	for i in STROLLERS.size():
+		if not stroller_active(i):
+			continue
 		var at := stroller_at(i, t)
 		var talking := i == chat_who and t - chat_t0 < 3500
 		var name := "villager_%d" % int(STROLLERS[i][0])
@@ -235,6 +258,8 @@ func _draw_strollers(t: int) -> void:
 			m.tex_frame(name, pos, 0 if talking else (t / 220) % 2, 2)
 		else:
 			m.tex_frame_flipped(name, pos, 0 if talking else (t / 220) % 2, 2)
+		if m.game.is_raining():
+			m.draw_texture(m.tex["umbrella"], pos + Vector2(0, -7))
 
 ## 居民说的话：最后画，保证不被摊位和房子挡住。
 func _draw_chat(t: int) -> void:
@@ -341,37 +366,58 @@ func _draw_shoppers(t: int) -> void:
 			m.draw_texture(m.tex["ico_" + s["carry"]], hand.round())
 
 ## 码头边的浅滩：水变清变浅，能看见沙质的水底；入口处有一对红白禁钓浮标。
+func _sand_depth(u: float) -> float:
+	var e: float = u * u * (3.0 - 2.0 * u)
+	return lerpf(64.0, 8.0, pow(e, 0.8))        # 水深：入口很深（沙在画面外），慢慢抬到岸边 8 像素
+
 func _draw_shoal(left: float, right: float, bottom: float, t: int) -> void:
-	var x0: float = float(m.game.journey.cfg_dock_x()) - float(m.game._cfg.get("town", {}).get("dock_no_fish", 70))
+	var x0: float = float(m.game.journey.cfg_dock_x()) - float(m.game._cfg.get("town", {}).get("dock_no_fish", 70)) - 30.0
 	if right <= x0 or left >= SHORE_X:
 		return
 	var span: float = SHORE_X - x0
-	var floor_bottom: float = maxf(bottom, WATER_Y + 40)
+	var floor_bottom: float = maxf(bottom, WATER_Y + 80)
 	var xx: float = floorf(maxf(left, x0) / 2.0) * 2.0
 	while xx < minf(right, SHORE_X):
 		var u: float = clampf((xx - x0) / span, 0.0, 1.0)
-		var depth: float = lerpf(34.0, 9.0, u * u * (3.0 - 2.0 * u))      # 水深：入口 34 像素，岸边 9 像素
-		var top: float = WATER_Y + 6.0 + depth
-		# 清澈的浅水：越靠岸越亮
-		m.draw_rect(Rect2(xx, WATER_Y + 6, 2, depth), Color(Pal.L_C, 0.28 + 0.3 * u))
-		# 沙底
-		m.draw_rect(Rect2(xx, top, 2, floor_bottom - top), Pal.L_H)
+		var top: float = WATER_Y + 6.0 + _sand_depth(u)
+		# 清澈的浅水：从入口一点点变亮，没有硬边
+		var wash: float = 0.05 + 0.5 * u * u
+		m.draw_rect(Rect2(xx, WATER_Y + 6, 2, top - WATER_Y - 6), Color(Pal.L_C, wash))
+		# 沙底：水线一圈泡沫 → 湿沙 → 干沙，越深颜色越暗，加一点颗粒
+		var col_i: int = int(xx / 2.0)
 		m.draw_rect(Rect2(xx, top, 2, 1), Pal.L_W)
-		m.draw_rect(Rect2(xx, top + 3, 2, 1), Pal.U_H if int(xx / 2.0) % 3 == 0 else Pal.L_H)
+		m.draw_rect(Rect2(xx, top + 1, 2, 2), Pal.L_N)
+		m.draw_rect(Rect2(xx, top + 3, 2, floor_bottom - top - 3), Pal.L_H)
+		if col_i % 3 == 0:
+			m.draw_rect(Rect2(xx, top + 5 + (col_i * 7) % 6, 1, 1), Pal.L_N)
+		if col_i % 4 == 1:
+			m.draw_rect(Rect2(xx, top + 9 + (col_i * 5) % 9, 1, 1), Pal.U_H)
+		if top < bottom - 20:                          # 下面一层阴影，沙看起来有厚度
+			m.draw_rect(Rect2(xx, top + 20, 2, floor_bottom - top - 20), Pal.L_N)
+			if col_i % 3 == 2:
+				m.draw_rect(Rect2(xx, top + 24 + (col_i * 11) % 12, 1, 1), Pal.U_H)
 		xx += 2.0
+	# 沙面上的细波纹线
+	for i in 6:
+		var rx: float = x0 + 40.0 + float(i) * (span - 60.0) / 5.0
+		var ru: float = clampf((rx - x0) / span, 0.0, 1.0)
+		var ry: float = WATER_Y + 6.0 + _sand_depth(ru) + 6.0
+		if rx > left - 12 and rx < right + 12:
+			m.draw_rect(Rect2(rx, ry, 6, 1), Pal.L_N)
+			m.draw_rect(Rect2(rx + 2, ry + 1, 4, 1), Pal.U_H)
 	# 水面下晃动的光纹
 	for i in 9:
-		var cx: float = x0 + 16.0 + i * (span - 24.0) / 8.0
+		var cx: float = x0 + 44.0 + i * (span - 70.0) / 8.0
 		var u2: float = clampf((cx - x0) / span, 0.0, 1.0)
-		var cy: float = WATER_Y + 6.0 + lerpf(34.0, 9.0, u2 * u2 * (3.0 - 2.0 * u2)) - 5.0
+		var cy: float = WATER_Y + 6.0 + _sand_depth(u2) - 5.0
 		var sway: float = roundf(sin(float(t) / 700.0 + i * 1.7) * 2.0)
 		if cx > left - 8 and cx < right + 8:
-			m.draw_rect(Rect2(cx + sway, cy, 5, 1), Color(Pal.L_W, 0.55))
+			m.draw_rect(Rect2(cx + sway, cy, 5, 1), Color(Pal.L_W, 0.45 + 0.2 * u2))
 	# 水底的小石子和海草
-	for i in 7:
-		var px: float = x0 + 10.0 + float(i * 29 % int(span - 12.0))
+	for i in 8:
+		var px: float = x0 + 36.0 + float(i * 29 % int(span - 50.0))
 		var u3: float = clampf((px - x0) / span, 0.0, 1.0)
-		var py: float = WATER_Y + 6.0 + lerpf(34.0, 9.0, u3 * u3 * (3.0 - 2.0 * u3))
+		var py: float = WATER_Y + 6.0 + _sand_depth(u3)
 		if px > left - 8 and px < right + 8:
 			if i % 2 == 0:
 				m.draw_rect(Rect2(px, py - 1, 3, 2), Pal.U_H)
@@ -381,13 +427,72 @@ func _draw_shoal(left: float, right: float, bottom: float, t: int) -> void:
 				m.draw_rect(Rect2(px, py - 6, 1, 6), Pal.L_G)
 				m.draw_rect(Rect2(px + 1 + wave, py - 8, 1, 4), Pal.U_G)
 	# 禁钓浮标
-	if x0 > left - 6 and x0 < right + 6:
+	var bx: float = float(m.game.journey.cfg_dock_x()) - float(m.game._cfg.get("town", {}).get("dock_no_fish", 70))
+	if bx > left - 6 and bx < right + 6:
 		var bob: int = 1 if (t / 650) % 2 == 0 else 0
-		m.draw_rect(Rect2(x0, WATER_Y - 9 + bob, 1, 6), Pal.U_K)
-		m.draw_rect(Rect2(x0 + 1, WATER_Y - 9 + bob, 3, 2), Pal.L_R)
-		m.draw_rect(Rect2(x0 - 2, WATER_Y - 3 + bob, 5, 3), Pal.L_W)
-		m.draw_rect(Rect2(x0 - 2, WATER_Y - 3 + bob, 5, 1), Pal.L_R)
-		m.draw_rect(Rect2(x0 - 2, WATER_Y - 1 + bob, 5, 1), Pal.U_K)
+		m.draw_rect(Rect2(bx, WATER_Y - 9 + bob, 1, 6), Pal.U_K)
+		m.draw_rect(Rect2(bx + 1, WATER_Y - 9 + bob, 3, 2), Pal.L_R)
+		m.draw_rect(Rect2(bx - 2, WATER_Y - 3 + bob, 5, 3), Pal.L_W)
+		m.draw_rect(Rect2(bx - 2, WATER_Y - 3 + bob, 5, 1), Pal.L_R)
+		m.draw_rect(Rect2(bx - 2, WATER_Y - 1 + bob, 5, 1), Pal.U_K)
+
+
+## 码头桩脚：木桩一直插进沙里，水下的部分偏暗蓝，入水处有一圈涟漪，沙面上有小沙堆。
+func _draw_pier_feet(left: float, right: float, t: int) -> void:
+	var x0: float = float(m.game.journey.cfg_dock_x()) - float(m.game._cfg.get("town", {}).get("dock_no_fish", 70)) - 30.0
+	var span: float = SHORE_X - x0
+	for off in [5, 30, 55]:
+		var px: float = float(PIER_X + off)
+		if px + 3 < left or px > right:
+			continue
+		var u: float = clampf((px - x0) / span, 0.0, 1.0)
+		var top: float = WATER_Y + 6.0 + _sand_depth(u)
+		var pier_bottom: float = GROUND_Y + 28.0
+		if top + 3.0 > pier_bottom:                       # 沙面比桩脚还低：接一段木桩下去
+			m.draw_rect(Rect2(px, pier_bottom, 3, top + 3.0 - pier_bottom), Pal.U_O)
+			m.draw_rect(Rect2(px, pier_bottom, 1, top + 3.0 - pier_bottom), Pal.L_O)
+		# 水下的那一段染成偏暗的蓝色
+		m.draw_rect(Rect2(px, WATER_Y + 6, 3, minf(top + 3.0, maxf(pier_bottom, top + 3.0)) - WATER_Y - 6), Color(Pal.U_B, 0.45))
+		# 沙堆
+		m.draw_rect(Rect2(px - 2, top - 1, 7, 2), Pal.L_H)
+		m.draw_rect(Rect2(px - 1, top - 2, 5, 1), Pal.L_W)
+		# 入水涟漪
+		var rp: int = (t / 450 + off) % 3
+		m.draw_rect(Rect2(px - 1 - rp, WATER_Y + 6, 5 + rp * 2, 1), Color(Pal.L_W, 0.7 - 0.2 * rp))
+
+
+## 水域最左侧的浪区：浪头高出海面，越往左越高，白色的浪尖不停翻滚；小船划进去会被推回来。
+func _draw_waves(left: float, right: float, bottom: float, t: int) -> void:
+	var wz: Vector2 = m.game.wave_zone()
+	var wend: float = wz.x + 18.0
+	if left >= wend:
+		return
+	var x: float = floorf(maxf(left, 0.0) / 2.0) * 2.0
+	while x < minf(right, wend):
+		var k: float = clampf((wend - x) / (wend - wz.y + 20.0), 0.0, 1.0)      # 越靠左 k 越大
+		var ph: float = float(t) / 380.0 + x * 0.11
+		var h: float = roundf(k * (8.0 + 5.0 * sin(ph) + 2.0 * sin(ph * 2.3 + 1.0)))
+		if h > 0.0:
+			m.draw_rect(Rect2(x, WATER_Y + 4 - h, 2, h + 2), Pal.L_B)           # 浪体
+			if h > 6.0:
+				m.draw_rect(Rect2(x, WATER_Y + 4 - h + 3, 2, 1), Pal.L_C)
+			m.draw_rect(Rect2(x, WATER_Y + 4 - h, 2, 1), Pal.L_W)               # 浪尖
+			if h > 4.0:
+				m.draw_rect(Rect2(x, WATER_Y + 5 - h, 2, 1), Pal.L_C)
+		x += 2.0
+	# 水面以下一排排白色的浪纹，会向右滚
+	for row in 4:
+		var wy: float = WATER_Y + 9.0 + float(row) * 8.0
+		var off: float = fposmod(float(t) / (90.0 + row * 25.0) + row * 7.0, 14.0)
+		var cx: float = -off
+		while cx < wend:
+			var kk: float = clampf((wend - cx) / (wend - wz.y + 20.0), 0.0, 1.0)
+			if cx + 8 > left and cx < right and kk > 0.05:
+				m.draw_rect(Rect2(cx, wy, 6, 1), Color(Pal.L_W, 0.35 + 0.45 * kk))
+				m.draw_rect(Rect2(cx + 1, wy - 1, 3, 1), Color(Pal.L_W, 0.25 + 0.35 * kk))
+			cx += 14.0
+	# 浪区深处整体压暗一点，看着更凶
+	m.draw_rect(Rect2(maxf(left, 0.0), WATER_Y + 6, minf(right, wz.y + 20.0) - maxf(left, 0.0), maxf(0.0, bottom - WATER_Y - 6)), Color(Pal.U_B, 0.28))
 
 
 ## 市场入口：拱门、招牌、彩旗。
@@ -475,12 +580,14 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 				m.draw_rect(Rect2(bx - 2, WATER_Y - 3 + bob, 5, 3), Pal.L_Y)
 				m.draw_rect(Rect2(bx - 2, WATER_Y - 2 + bob, 5, 1), Pal.U_K)
 	_draw_shoal(left, sea_right, bottom, t)
+	_draw_waves(left, sea_right, bottom, t)
 	# 地面
 	var land_left := maxf(left, SHORE_X)
 	if land_left < right:
 		_tile_row("ground", 0, 1, GROUND_Y, land_left, right)
 		m.draw_rect(Rect2(land_left, GROUND_Y + 16, right - land_left, maxf(0, bottom - GROUND_Y - 16)), Pal.L_N)
 	m.draw_texture(m.tex["pier"], Vector2(PIER_X, GROUND_Y))
+	_draw_pier_feet(left, right, t)
 
 	for d in DOORS:      # 门楣上的木招牌
 		var w: float = m.label_width(d[1]) + 5
@@ -1234,9 +1341,9 @@ const ROOM_DOOR_X := 14          # 门的中心
 const ROOMS := {
 	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"], [118, "quest"]]},
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[128, "hats"], [172, "quest"]]},
-	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [128, "stats"], [172, "bed"]]},
+	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [106, "piggy"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库"}
+const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false
@@ -1313,7 +1420,10 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 			m.draw_texture(m.tex["bookshelf"], Vector2(ox + 70, fy - 39))
 			m.draw_texture(m.tex["calendar"], Vector2(ox + 120, fy - 50))
 			m.draw_texture(m.tex["bed"], Vector2(ox + 160, fy - 19))
+			m.draw_texture(m.tex["piggy"], Vector2(ox + 99, fy - 11))      # 存钱罐
 			m.draw_texture(m.tex["rug"], Vector2(ox + 96, fy + 3))
+	if kind == "tackle" or kind == "tailor":
+		_draw_room_customer(kind, ox, fy, keeper_pos, t)
 	# 小猫
 	var pos := Vector2(ox + roundf(room_x), fy - 30)
 	if napping and kind == "home":
@@ -1339,10 +1449,48 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 	m.draw_rect(Rect2(ox + ROOM_W, fy - ROOM_H, 2, ROOM_H + 16), Pal.U_O)
 
 
-## 店主：小猫在身边（60 像素内）时转身面对小猫，小猫走远后恢复默认朝向（朝左）。
+## 店主：始终朝着小猫（小猫在店主右边就转向右，否则朝左）。
 func _draw_keeper(kind: int, pos: Vector2, ox: float) -> void:
-	var near := absf(ox + room_x + 16.0 - (pos.x + 8.0)) <= 60.0
-	if near and ox + room_x + 16.0 > pos.x + 8.0:
+	if ox + room_x + 16.0 > pos.x + 8.0:
 		m.tex_frame_flipped("villager_%d" % kind, pos, 0, 2)
 	else:
 		m.tex_frame("villager_%d" % kind, pos, 0, 2)
+
+
+## 店里偶尔进来一位顾客：从门口走到柜台前买东西（硬币飞给店主、商品飞回来），再走出去。
+## 一个周期 30 秒，只有前 11 秒有人；谁来（兔子/小熊/狐狸）按周期序号轮换。
+const CUSTOMER_CYCLE := 30000
+func _draw_room_customer(kind: String, ox: float, fy: float, keeper_pos: Vector2, t: int) -> void:
+	var cyc := t / CUSTOMER_CYCLE
+	var ph := t % CUSTOMER_CYCLE
+	if ph > 11000 or (cyc + (0 if kind == "tackle" else 1)) % 2 == 1:
+		return                                  # 两间店错开，隔一个周期才来一位
+	var door_x := ox + ROOM_DOOR_X - 8.0
+	var stand_x := ox + (118.0 if kind == "tackle" else 150.0)
+	var x := stand_x
+	var moving := false
+	if ph < 3000:
+		x = lerpf(door_x, stand_x, float(ph) / 3000.0)
+		moving = true
+	elif ph > 8000:
+		x = lerpf(stand_x, door_x, float(ph - 8000) / 3000.0)
+		moving = true
+	var name := "villager_%d" % ((cyc / 2) % 3)
+	var pos := Vector2(roundf(x), fy - 21)
+	var frame := (t / 200) % 2 if moving else 0
+	var facing_right := ph < 8000                # 进来和买东西时朝店主，出门时朝门
+	if facing_right:
+		m.tex_frame_flipped(name, pos, frame, 2)
+	else:
+		m.tex_frame(name, pos, frame, 2)
+	if ph >= 3000 and ph < 8000:                 # 买东西：硬币飞去柜台，商品飞回来
+		var k := float(ph - 3000) / 5000.0
+		var hand := Vector2(pos.x + 14, pos.y + 10)
+		var counter := Vector2(keeper_pos.x - 4, fy - 20)
+		if k < 0.45:
+			m.draw_texture(m.tex["coin"], hand.lerp(counter, k / 0.45).round())
+		elif k < 0.55:
+			m.tex_frame("sparkle", counter + Vector2(0, -6), (t / 120) % 2, 2)
+		else:
+			var item := "bobber" if kind == "tackle" else "ico_fruit"
+			m.draw_texture(m.tex[item], counter.lerp(hand, (k - 0.55) / 0.45).round())

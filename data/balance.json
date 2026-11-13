@@ -386,6 +386,8 @@
   ],
   "water": {
     "boat_min_x": 30,
+    "wave_x": 92,
+    "wave_stop": 56,
     "boat_max_x": 512,
     "zones": [
       {
