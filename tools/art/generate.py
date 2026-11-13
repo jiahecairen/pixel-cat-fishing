@@ -399,8 +399,8 @@ def tree():
 
 def stall_back(c1="r", c2="w", edge="R"):
     """摊位后半：立柱 + 条纹雨棚（默认红白）。猫坐在它和柜台之间。"""
-    c = Canvas(46, 40)
-    c.rect(3, 8, 4, 39, "o"); c.rect(41, 8, 42, 39, "o")
+    c = Canvas(46, 42)       # 比摊位高 2 像素，脚踩进草地里，不留缝
+    c.rect(3, 8, 4, 41, "o"); c.rect(41, 8, 42, 41, "o")
     for x in range(1, 45):
         k = c1 if ((x - 1) // 4) % 2 == 0 else c2
         c.rect(x, 1, x, 8, k)
@@ -476,12 +476,12 @@ def market_gate():
 
 def stall_front():
     """摊位前半：柜台。"""
-    c = Canvas(46, 15)
+    c = Canvas(46, 13)       # 低柜台：猫和摊主的脸露在上面；最下 2 行踩进草地
     c.rect(1, 1, 44, 2, "n")
-    c.rect(2, 3, 43, 14, "o")
+    c.rect(2, 3, 43, 12, "o")
     c.rect(2, 3, 43, 3, "O")
     for x in (12, 23, 34):
-        c.rect(x, 4, x, 14, "O")
+        c.rect(x, 4, x, 12, "O")
     c.outline()
     return c
 

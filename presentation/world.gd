@@ -233,8 +233,8 @@ func _draw_market_stalls(t: int) -> void:
 		m.draw_texture(m.tex["stall_back_" + s[1]], Vector2(x, GROUND_Y - 40))
 		var hop := -1.0 if _stall_hopping(i, t) else 0.0
 		m.tex_frame("villager_%d" % int(s[3]), Vector2(x + 15, GROUND_Y - 27 + hop), (t / 900 + i) % 2, 2)
-		m.draw_texture(m.tex["stall_front"], Vector2(x, GROUND_Y - 15))
-		m.draw_texture(m.tex["goods_" + s[1]], Vector2(x + 5, GROUND_Y - 22))
+		m.draw_texture(m.tex["stall_front"], Vector2(x, GROUND_Y - 11))
+		m.draw_texture(m.tex["goods_" + s[1]], Vector2(x + 5, GROUND_Y - 18))
 		_plate(x + 23, GROUND_Y - 53, s[2])
 
 ## 逛市场的顾客：走一圈，在摊位前停下，付钱，拿到货拎着走。
@@ -252,7 +252,7 @@ func _draw_shoppers(t: int) -> void:
 		if s["dwell"]:
 			var d: float = s["d"]
 			var si: int = s["stall"]
-			var stall_pt := Vector2(float(MARKET[si][0]) + 20.0, GROUND_Y - 24)
+			var stall_pt := Vector2(float(MARKET[si][0]) + 20.0, GROUND_Y - 20)
 			if d >= BUY_AT_MS and d < BUY_AT_MS + 900.0:       # 货飞到手里，硬币飞向摊主
 				var p := (d - BUY_AT_MS) / 900.0
 				m.draw_texture(m.tex["ico_" + MARKET[si][1]], stall_pt.lerp(hand, p).round())
@@ -352,7 +352,7 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	var behind_counter: bool = act == Journey.Activity.VENDING or act == Journey.Activity.SOLD_OUT
 	if in_town and behind_counter:
 		_draw_town_cat(act, on_break, now, t)
-	m.draw_texture(m.tex["stall_front"], Vector2(STALL_X, GROUND_Y - 15))
+	m.draw_texture(m.tex["stall_front"], Vector2(STALL_X, GROUND_Y - 11))
 	if act == Journey.Activity.VENDING:
 		_draw_stall_goods()
 	if act == Journey.Activity.SOLD_OUT:
@@ -508,7 +508,7 @@ func _draw_stall_goods() -> void:
 	for i in n:
 		var f: Dictionary = g.fish_by_id.get(g.state.basket[n - 1 - i], {})
 		if m.tex.has(f.get("sprite", "")):
-			m.draw_texture(m.tex[f["sprite"]], Vector2(STALL_X + 29 - (n - 1 - i) * 3, GROUND_Y - 24 - (n - 1 - i) * 3))
+			m.draw_texture(m.tex[f["sprite"]], Vector2(STALL_X + 29 - (n - 1 - i) * 3, GROUND_Y - 20 - (n - 1 - i) * 3))
 
 ## 正走向摊位的顾客（位置在 update 里算好）。
 func _draw_customer(t: int) -> void:

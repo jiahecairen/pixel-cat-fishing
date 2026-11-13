@@ -267,6 +267,21 @@ func go_to_town() -> bool:
 	dirty = true
 	return true
 
+const MOVE_SPEEDS := [1.0, 2.0, 4.0, 8.0, 16.0]
+
+## 测试用：把航行和走路调快（不存档，重开恢复 1 倍）。direction 为 +1 / -1，到头不循环。
+func move_speed() -> float:
+	return journey.speed
+
+func change_move_speed(direction: int) -> float:
+	var i := MOVE_SPEEDS.find(journey.speed)
+	if i < 0:
+		i = 0
+	i = clampi(i + direction, 0, MOVE_SPEEDS.size() - 1)
+	journey.set_speed(MOVE_SPEEDS[i], _clock.now_ms())
+	dirty = true
+	return journey.speed
+
 func can_go_fishing() -> bool:
 	return journey.in_town() and journey.activity() != Journey.Activity.WALK_TO_BOAT and not pomodoro.is_break()
 

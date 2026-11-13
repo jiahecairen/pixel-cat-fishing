@@ -240,6 +240,8 @@ func _apply_debug_env() -> void:
 		game.hour_override = OS.get_environment("CATFISH_HOUR").to_float()
 	if OS.has_environment("CATFISH_ROOM"):        # 调试：到镇上后直接进这间屋子（tackle / tailor / home）
 		_debug_room = OS.get_environment("CATFISH_ROOM")
+	if OS.has_environment("CATFISH_MOVE"):
+		game.journey.set_speed(OS.get_environment("CATFISH_MOVE").to_float(), 0)
 	if OS.has_environment("CATFISH_ROAM_AT"):
 		_debug_dir_from = OS.get_environment("CATFISH_ROAM_AT").to_int()
 	if OS.has_environment("CATFISH_ROAM"):
@@ -356,7 +358,7 @@ func _update_roam(dt: float) -> void:
 			world.napping = false
 		world.room_moving = dir != 0 and not world.napping
 		if dir != 0 and not world.napping:
-			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
+			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * game.move_speed() * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
 			world.room_flip = dir < 0
 		return
 	if dir != 0 and j.in_town():
@@ -365,7 +367,7 @@ func _update_roam(dt: float) -> void:
 		if j.activity() == Journey.Activity.ROAM:
 			if absf(_roam_fx - j.roam_x()) > 1.5:
 				_roam_fx = j.roam_x()      # 读档后或从屋里出来：以存档里的位置为准，避免第一步瞬移到码头
-			_roam_fx = clampf(_roam_fx + dir * World.ROAM_SPEED * dt, World.ROAM_MIN_X, World.ROAM_MAX_X)
+			_roam_fx = clampf(_roam_fx + dir * World.ROAM_SPEED * game.move_speed() * dt, World.ROAM_MIN_X, World.ROAM_MAX_X)
 			j.set_roam_x(_roam_fx)
 			world.roam_moving = true
 			world.roam_flip = dir < 0
@@ -740,6 +742,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _confirm_quit:
 				if event.keycode == KEY_ESCAPE:
 					_confirm_quit = false
+			elif event.keycode == KEY_BRACKETRIGHT or event.keycode == KEY_BRACKETLEFT:
+				game.change_move_speed(1 if event.keycode == KEY_BRACKETRIGHT else -1)   # ] 加快 [ 减慢（测试用）
+				play("click")
 			elif event.keycode == KEY_TAB or event.keycode == KEY_I:
 				toggle_bag()               # Tab / I 开关物品栏
 			elif bag.open:
@@ -978,6 +983,8 @@ func _draw_hud(now: int) -> void:
 		var full: bool = game.economy.basket_full(game.state)
 		_text("%d/%d" % [game.state.basket.size(), game.state.basket_capacity], Vector2(69, 17),
 				Pal.L_R if full else Pal.L_W)
+	if game.move_speed() != 1.0 and not mini:
+		_text("x%d" % int(game.move_speed()), Vector2(17, 62), Pal.L_Y)      # 移动倍速（] 加快 / [ 减慢）
 	# 完整窗口里的操作提示（夜里天空是深色，换成浅色字）
 	var hint_col: Color = Pal.L_W if float(game.sky()["dark"]) > 0.35 else Pal.U_K
 	if not mini and not panel_open():

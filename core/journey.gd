@@ -10,6 +10,19 @@ enum Activity { FISHING, IDLE_FULL, SAIL_OUT, WALK_TO_STALL, VENDING, WALK_TO_BO
 var _j: Dictionary     # 指向 GameState.journey
 var _cfg: Dictionary
 var _rng: RandomNumberGenerator
+var speed: float = 1.0      # 移动倍速（航行、走路的用时除以它）。只在测试时调快，不存档
+
+## 改倍速：正在进行的航行/走路也按新速度继续（进度保持连续）。
+func set_speed(new_speed: float, now_ms: int) -> void:
+	new_speed = maxf(0.25, new_speed)
+	if activity() in [Activity.SAIL_OUT, Activity.SAIL_BACK, Activity.WALK_TO_STALL, Activity.WALK_TO_BOAT]:
+		var k := speed / new_speed
+		_j["phase_start_ms"] = now_ms - int(float(now_ms - int(_j["phase_start_ms"])) * k)
+		_j["phase_end_ms"] = now_ms + int(float(maxi(0, int(_j["phase_end_ms"]) - now_ms)) * k)
+	speed = new_speed
+
+func _dur(key: String, scale: float = 1.0) -> int:
+	return int(float(_cfg[key]) * scale / speed)
 
 func _init(journey_state: Dictionary, cfg: Dictionary, rng: RandomNumberGenerator) -> void:
 	_j = journey_state
@@ -60,7 +73,7 @@ func end_roam(to_stall: bool, fraction: float, now_ms: int) -> bool:
 		return false
 	var from := roam_x()
 	_enter(Activity.WALK_TO_STALL if to_stall else Activity.WALK_TO_BOAT, now_ms,
-			int(float(_cfg["walk_ms"]) * clampf(fraction, 0.0, 1.5)))
+			_dur("walk_ms", clampf(fraction, 0.0, 1.5)))
 	_j["walk_from"] = from
 	return true
 
@@ -78,7 +91,7 @@ func resume_fishing(now_ms: int) -> void:
 func depart(now_ms: int) -> bool:
 	if not can_depart():
 		return false
-	_enter(Activity.SAIL_OUT, now_ms, int(_cfg["sail_ms"]))
+	_enter(Activity.SAIL_OUT, now_ms, _dur("sail_ms"))
 	return true
 
 ## 鱼卖完了：停在摊位前，等玩家点"鱼卖光了"气泡。
@@ -89,7 +102,7 @@ func sold_out(now_ms: int) -> void:
 ## 收摊回船（摆摊中或卖光后）。
 func leave_stall(now_ms: int) -> bool:
 	if activity() == Activity.VENDING or activity() == Activity.SOLD_OUT:
-		_enter(Activity.WALK_TO_BOAT, now_ms, int(_cfg["walk_ms"]))
+		_enter(Activity.WALK_TO_BOAT, now_ms, _dur("walk_ms"))
 		return true
 	return false
 
@@ -123,7 +136,7 @@ func advance(now_ms: int) -> String:
 				return "eat"
 		Activity.SAIL_OUT:
 			if now_ms >= int(_j["phase_end_ms"]):
-				_enter(Activity.WALK_TO_STALL, now_ms, int(_cfg["walk_ms"]))
+				_enter(Activity.WALK_TO_STALL, now_ms, _dur("walk_ms"))
 				return "docked"
 		Activity.WALK_TO_STALL:
 			if now_ms >= int(_j["phase_end_ms"]):
@@ -137,7 +150,7 @@ func advance(now_ms: int) -> String:
 				return "sale"
 		Activity.WALK_TO_BOAT:
 			if now_ms >= int(_j["phase_end_ms"]):
-				_enter(Activity.SAIL_BACK, now_ms, int(_cfg["sail_ms"]))
+				_enter(Activity.SAIL_BACK, now_ms, _dur("sail_ms"))
 				return "boarded"
 		Activity.SAIL_BACK:
 			if now_ms >= int(_j["phase_end_ms"]):
