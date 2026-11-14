@@ -1346,6 +1346,9 @@ func _draw() -> void:
 		_draw_quit_confirm()
 	draw_set_transform(Vector2.ZERO)
 	_draw_particles(t)
+	if not mini or _mini_shown:       # 右下角的版本号
+		var ver: String = str(ProjectSettings.get_setting("application/config/version", ""))
+		_text(ver, Vector2(view.x - ver.length() * 4 - 1, view.y - 6), Color(Pal.L_W, 0.7), true)
 
 
 ## 夜里的暗色 + 下雨（雨丝、水面涟漪）。黄昏的日落在 world 的天空里画。

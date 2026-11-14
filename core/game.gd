@@ -57,7 +57,7 @@ var weather_override: int = -1    # 调试/测试：-1 按真实时间，0 强�
 var day_shift: int = 0              # 调试：日期往后挪几天
 var hour_override: float = -1.0   # 调试：>=0 时把"现在"当成这个钟点（0..24）
 var _raining: bool = false
-var _base_rarity: float = 0.0    # 鱼饵升级带来的稀有度加成（幸运鱼饵生效时再加）
+var _base_rarity: float = 0.0    # 装备升级不再提高稀有度，恒为 0（幸运鱼饵生效时才加）
 
 func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock, rng: RandomNumberGenerator) -> void:
 	_cfg = balance
@@ -387,10 +387,11 @@ func boat_limits() -> Vector2:
 ## 水域最左侧的浪区：x 在 wave_x 以内浪越来越大把船往回推，最远只能划到 wave_stop 附近
 ## （以后升级船只才能出得更远）。返回 Vector2(wave_x, wave_stop)。
 func wave_zone() -> Vector2:
-	var lv := boat_info(state.boat_level)
-	if not lv.is_empty():
-		return Vector2(float(lv.get("wave_x", 92)), float(lv.get("wave_stop", 56)))
 	return Vector2(float(_water.get("wave_x", 92)), float(_water.get("wave_stop", 56)))
+
+## 当前的船能不能穿过浪区（升级后浪还在，只是船不再被推回来；以后更大的浪要更高级的船）。
+func boat_passes_waves() -> bool:
+	return state.boat_level >= int(_water.get("wave_need", 1))
 
 ## ---- 船坞：船的等级 ----
 func boat_levels() -> Array:
@@ -417,6 +418,8 @@ func buy_boat_upgrade(level: int) -> bool:
 
 ## 船在 x 处受到的向右推力占比：浪区入口 0，到 wave_stop 为 1。
 func wave_push(x: float) -> float:
+	if boat_passes_waves():
+		return 0.0
 	var w := wave_zone()
 	return clampf((w.x - x) / maxf(1.0, w.x - w.y), 0.0, 1.0)
 
@@ -947,9 +950,9 @@ func gear_stat(id: String) -> Array:
 			if lv >= 0 and lv < table.size():
 				return ["挂机速度", "+%d％" % int(round((float(table[0]) / float(table[lv]) - 1.0) * 100.0))]      # 比最差的鱼竿快多少
 		"hook":
-			var hb: Array = _cfg.get("hook_rarity_bonus", [])
+			var hb: Array = _cfg.get("hook_wait_mult", [])
 			if lv >= 0 and lv < hb.size():
-				return ["稀有鱼加成", "+%d％" % int(round(float(hb[lv]) * 100.0))]
+				return ["咬钩速度", "+%d％" % int(round((1.0 / float(hb[lv]) - 1.0) * 100.0))]
 		"line":
 			return ["暂无加成", ""]
 	return []
@@ -1041,7 +1044,9 @@ func _refresh_modifiers(now: int) -> void:
 	var d: Dictionary = inventory.by_id.get("lucky_bait", {})
 	fishing.rarity_bonus = _base_rarity + (float(d.get("rarity_bonus", 0.0)) if lucky else 0.0)
 	var rain_chest := _rain_cfg("rain_chest_mult", 1.0) if _raining else 1.0
-	fishing.chest_chance = minf(1.0, _base_chest * (float(d.get("chest_mult", 1.0)) if lucky else 1.0) * rain_chest)
+	var focus_luck := float(_cfg["fishing"].get("focus_luck_mult", 1.0)) if in_focus() else 1.0
+	fishing.luck_mult = focus_luck
+	fishing.chest_chance = minf(1.0, _base_chest * (float(d.get("chest_mult", 1.0)) if lucky else 1.0) * rain_chest * focus_luck)
 
 func _finish_focus(is_long: bool) -> Dictionary:
 	var pc: Dictionary = _pomo_cfg
@@ -1192,10 +1197,11 @@ func _clamp_setting(key: String, v: int) -> int:
 
 func _apply_upgrades() -> void:
 	state.basket_capacity = _base_capacity + float(upgrades.level(state, "basket")) * float(upgrades.param("basket", "capacity_per_level", 0))
-	var hook_bonus: Array = _cfg.get("hook_rarity_bonus", [])
+	var hook_mult: Array = _cfg.get("hook_wait_mult", [])
 	var hook_lv := int(state.gear.get("hook", 0))
-	_base_rarity = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0) + (float(hook_bonus[hook_lv]) if hook_lv >= 0 and hook_lv < hook_bonus.size() else 0.0)
+	_base_rarity = 0.0
 	fishing.rarity_bonus = _base_rarity
+	fishing.gear_wait_mult = maxf(0.3, 1.0 - float(upgrades.level(state, "bait")) * float(upgrades.param("bait", "wait_mult_per_level", 0.0))) * (float(hook_mult[hook_lv]) if hook_lv >= 0 and hook_lv < hook_mult.size() else 1.0)
 	_free_multiplier = float(_cfg["fishing"]["free_wait_multiplier"])
 	if upgrades.has("rod"):
 		var table: Array = _cfg["upgrades"]["rod"].get("free_wait_multipliers", [])

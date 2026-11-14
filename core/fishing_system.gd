@@ -23,6 +23,8 @@ var tangled_flag: bool = false      # 刚空军：Game 读到后记一笔并清�
 var bait_bonus: float = 0.0         # 本竿所用鱼饵带来的稀有鱼加成（Game 在上饵时设置）
 var chest_chance: float = 0.0     # 每一竿钓到宝箱的概率（来自 balance.json 的 chest.chance）
 var zone: String = ""               # 当前水域 id；鱼表里有 zone_weights 的鱼按它取权重
+var luck_mult: float = 1.0        # 专注时稀有鱼权重的倍数（Game 按番茄钟阶段设置；装备升级不影响稀有度）
+var gear_wait_mult: float = 1.0   # 鱼饵升级 / 鱼钩带来的咬钩等待倍率（只影响快慢，不影响稀有度和宝箱）
 var rarity_bonus: float = 0.0     # 鱼饵升级：稀有鱼权重 ×(1 + rarity_bonus × rarity)
 
 var _cfg: Dictionary
@@ -163,7 +165,7 @@ func _bite_scale() -> float:
 		if f["id"] == id:
 			u = float(f.get("units", 1.0))
 	var max_u: float = float(_cfg.get("bite_units_max", 1.8))
-	return lerpf(float(_cfg.get("bite_small_scale", 0.4)), 1.0, clampf(u / max_u, 0.0, 1.0))
+	return lerpf(float(_cfg.get("bite_small_scale", 0.4)), 1.0, clampf(u / max_u, 0.0, 1.0)) * gear_wait_mult
 
 func _enter(s: int, now_ms: int, duration_ms: int) -> void:
 	state = s
@@ -177,7 +179,7 @@ func _weight(f: Dictionary) -> float:
 	var w := base * (1.0 + (rarity_bonus + bait_bonus) * float(f.get("rarity", 0)))
 	if int(f.get("rarity", 0)) > 0:      # 第几次动漂咬的钩：一次就中多是普通鱼，第三次更可能是稀有的
 		var mults: Array = _cfg.get("stage_rare_mult", [1.0, 1.0, 1.0])
-		w *= float(mults[clampi(stage, 0, mults.size() - 1)])
+		w *= float(mults[clampi(stage, 0, mults.size() - 1)]) * luck_mult
 	return w
 
 func _roll_fish() -> String:

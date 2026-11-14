@@ -58,7 +58,7 @@ func act(i: int) -> void:
 	elif g.buy_boat_upgrade(i):
 		m.play("buy")
 		m.log.write("boat_upgrade", {"level": i})
-		_say("浪区变小了", true)
+		_say("能过浪区了", true)
 	else:
 		_say("金币不够", false)
 		m.play("deny")

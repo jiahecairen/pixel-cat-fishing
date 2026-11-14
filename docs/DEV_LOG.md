@@ -316,3 +316,11 @@
 - 造船厂：`house_3`、门帘/蓝图/铁锚/帆船模型素材，`ROOMS.shipyard`，`presentation/shipyard_panel.gd`；`GameState.boat_level`；`Game.boat_levels/boat_price/buy_boat_upgrade`（只能买当前级+1，重复提交不扣钱），`wave_zone()` 取当前船级；调试变量 `CATFISH_SHIPYARD=铜币数`。
 - 测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR；新增 `test_v047`。Linux 截图看过造船厂外观/室内/面板；Mac 实机全部待验，升级后浪区的画面没截图。
 - 咬钩最短等待从 20 秒降到约 8 秒（见 D95）。
+
+## v0.48：浪与船、概率规则、换位、版本号、木箱
+- 浪：高度缩小，波形相位和白色浪纹都改成从左往右；`wave_need`：船等级达到就不再被推回（`Game.boat_passes_waves`），浪区本身不再变化。
+- 概率：`_base_rarity` 恒为 0；鱼饵升级/鱼钩改成 `FishingSystem.gear_wait_mult`；专注时 `luck_mult`、宝箱概率 ×`focus_luck_mult`。
+- 位置：造船厂换到 x≈652，家到 x≈1388（`WORLD_END` 1470、`ROAM_MAX_X` 1430）。
+- 版本号画在右下角；`project.godot` / `export_presets.cfg` 版本改成 0.48。
+- 家里的箱子（`storage` 素材）重画成圆顶木箱 + 铁箍 + 金锁；仓库界面的箱子外框没动。
+- 测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR；新增 `test_v048`，改了宝箱占比和船相关测试。没验证：Mac 实机、浪的画面。

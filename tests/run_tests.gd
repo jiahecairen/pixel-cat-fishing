@@ -52,6 +52,7 @@ func _init() -> void:
 		test_money_waves(balance, fish)
 		test_v046(balance, fish)
 		test_v047(balance, fish)
+		test_v048(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -531,7 +532,7 @@ func test_chest(balance: Dictionary, fish: Array) -> void:
 	var ev3 := _run(g3, g3._clock, 20 * 3600, 1000)
 	var c3 := _count(ev3, "chest"); var f3 := _count(ev3, "catch")
 	var rate := float(c3) / float(c3 + f3)
-	check(c3 > 0 and rate > 0.015 and rate < 0.08, "默认概率下宝箱占比约 4%% (%d/%d = %.3f)" % [c3, c3 + f3, rate])
+	check(c3 > 0 and rate > 0.05 and rate < 0.15, "专注中宝箱占比约 8%% (基础 4%% 翻倍) (%d/%d = %.3f)" % [c3, c3 + f3, rate])
 	# 没配置宝箱时完全不会出现
 	var b2: Dictionary = balance.duplicate(true); b2.erase("chest")
 	var g4 := Game.new(b2, fish, GameState.new(), FakeClock.new(), _rng(24))
@@ -839,7 +840,7 @@ func test_quest(balance: Dictionary, fish: Array) -> void:
 	var rb0: float = g.fishing.rarity_bonus
 	check(g.can_turn_in("keeper") and g.turn_in("keeper"), "凑齐就能交付")
 	check(g.quest_state("keeper") == "done" and g.inventory.count(g.state, "pearl") == 0 and g.inventory.count(g.state, "boot") == 0, "交付后扣掉物品，任务完成")
-	check(g.equipment_name("hook") == "银钩" and g.fishing.rarity_bonus > rb0, "奖励银钩，稀有鱼更容易上钩")
+	check(g.equipment_name("hook") == "银钩" and is_equal_approx(g.fishing.rarity_bonus, rb0) and g.fishing.gear_wait_mult < 1.0, "奖励银钩：咬钩更快，稀有度不变")
 	g.inventory.add(g.state, "pearl"); g.inventory.add(g.state, "boot")
 	check(not g.turn_in("keeper") and g.inventory.count(g.state, "pearl") == 1, "不能重复交付")
 	var st2 := GameState.new()
@@ -1183,7 +1184,7 @@ func test_dock_shoal(balance: Dictionary, fish: Array) -> void:
 	# 装备属性文字
 	check(g.gear_stat("rod_0") == ["挂机速度", "+0％"], "树枝竿属性 +0％")
 	check(str(g.gear_stat("rod_3")[0]) == "挂机速度" and str(g.gear_stat("rod_3")[1]).begins_with("+"), "鱼竿有速度属性")
-	check(g.gear_stat("hook_1") == ["稀有鱼加成", "+25％"], "银钩稀有鱼 +25％")
+	check(g.gear_stat("hook_1") == ["咬钩速度", "+5％"], "银钩咬钩速度 +5％")
 	check(g.gear_stat("bell").is_empty(), "非装备没有属性")
 
 
@@ -1216,7 +1217,7 @@ func test_v047(balance: Dictionary, fish: Array) -> void:
 	var levels: Array = g.boat_levels()
 	check(levels.size() >= 3, "至少有三级以上的船 (%d)" % levels.size())
 	var z0 := g.wave_zone()
-	check(g.state.boat_level == 0 and z0.x == float(levels[0]["wave_x"]), "初始是 0 级船，浪区取 0 级的数值")
+	check(g.state.boat_level == 0 and not g.boat_passes_waves() and g.wave_push(z0.y) == 1.0, "初始是 0 级船，过不了浪区")
 	# 钱不够不能买；不能跳级；不能买已有的
 	check(not g.buy_boat_upgrade(1), "没钱买不了")
 	g.state.wallet_gold = 90000
@@ -1226,20 +1227,34 @@ func test_v047(balance: Dictionary, fish: Array) -> void:
 	check(g.buy_boat_upgrade(1), "买 1 级成功")
 	check(g.state.wallet_gold == before - g.boat_price(1), "只扣一次 1 级的价钱")
 	check(not g.buy_boat_upgrade(1) and g.state.wallet_gold == before - g.boat_price(1), "重复提交 1 级不会再扣钱")
-	var z1 := g.wave_zone()
-	check(z1.x < z0.x and z1.y <= z0.y, "升级后浪区向左缩小 (%s -> %s)" % [z0, z1])
-	# 船出得更远：同样位置浪的推力更小
+	check(g.wave_zone() == z0 and g.boat_passes_waves() and g.wave_push(z0.y) == 0.0, "升级后浪区还在，但船能过去")
 	check(g.wave_push(70.0) < GameState.new().boat_level + 1.0 and g.wave_push(70.0) < Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(92)).wave_push(70.0), "升级后同一位置受到的浪推力更小")
 	# 逐级买到顶，最高级没有浪
 	while g.state.boat_level < levels.size() - 1:
 		g.state.wallet_gold = 90000
 		check(g.buy_boat_upgrade(g.state.boat_level + 1), "逐级购买")
-	check(g.wave_zone().x <= 0.0 and g.wave_push(31.0) == 0.0, "最高级的船没有浪区")
+	check(g.boat_passes_waves() and g.wave_push(31.0) == 0.0, "最高级的船也能过浪区")
 	check(not g.buy_boat_upgrade(levels.size()), "超过最高级不能买")
 	# 存档往返
 	var st2 := GameState.new()
 	check(st2.from_dict(g.state.to_dict()) and st2.boat_level == g.state.boat_level, "船的等级存进存档再读回来")
 	check(GameState.new().from_dict({"save_version": GameState.new().save_version}) , "旧存档没有 boat_level 也能读") 
+
+func test_v048(balance: Dictionary, fish: Array) -> void:
+	print("v048: 装备升级不影响稀有度/宝箱，专注时翻倍")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(95))
+	var base_chest: float = g.fishing.chest_chance
+	g.state.wallet_gold = 90000
+	for k in ["bait", "rod", "basket"]:
+		for n in 5:
+			g.buy_upgrade(k)
+	check(is_equal_approx(g.fishing.rarity_bonus, 0.0), "升满装备，稀有度加成仍为 0")
+	check(g.fishing.gear_wait_mult < 1.0, "鱼饵升级只缩短咬钩等待 (%.2f)" % g.fishing.gear_wait_mult)
+	var c: FakeClock = g._clock
+	_run(g, c, 5.0)
+	var focus: bool = g.in_focus()
+	var expect: float = base_chest * (2.0 if focus else 1.0)
+	check(is_equal_approx(g.fishing.chest_chance, expect) and is_equal_approx(g.fishing.luck_mult, 2.0 if focus else 1.0), "宝箱概率只随专注翻倍，不随装备变化 (focus=%s)" % str(focus))
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

@@ -2,6 +2,7 @@
   "version": 1,
   "fishing": {
     "cast_ms": 1200,
+    "focus_luck_mult": 2.0,
     "bite_min_ms": 20000,
     "bite_max_ms": 60000,
     "hooked_ms": 900,
@@ -82,7 +83,7 @@
         1200,
         2400
       ],
-      "rarity_bonus_per_level": 0.15
+      "wait_mult_per_level": 0.04
     },
     "basket": {
       "costs": [
@@ -388,11 +389,12 @@
     "boat_min_x": 30,
     "wave_x": 92,
     "wave_stop": 56,
+    "wave_need": 1,
     "boat_levels": [
-      {"name": "小木船", "price": 0, "wave_x": 92, "wave_stop": 56},
-      {"name": "加固船", "price": 1200, "wave_x": 76, "wave_stop": 46},
-      {"name": "快桨船", "price": 4000, "wave_x": 58, "wave_stop": 38},
-      {"name": "远洋船", "price": 12000, "wave_x": 0, "wave_stop": 0}
+      {"name": "小木船", "price": 0},
+      {"name": "加固船", "price": 1200},
+      {"name": "快桨船", "price": 4000},
+      {"name": "远洋船", "price": 12000}
     ],
     "boat_max_x": 512,
     "zones": [
@@ -461,10 +463,10 @@
       ]
     ]
   },
-  "hook_rarity_bonus": [
-    0.0,
-    0.25,
-    0.5
+  "hook_wait_mult": [
+    1.0,
+    0.95,
+    0.9
   ],
   "quests": [
     {

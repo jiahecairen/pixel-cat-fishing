@@ -18,8 +18,8 @@ const STALL_X := 1186                 # 你的鱼摊，在市场中间
 const WALK_FROM_X := 552
 const STALL_CAT_X := STALL_X + 1      # 小猫坐在摊位左半边，右半边摆鱼
 const ROAM_MIN_X := 552               # 自由走动的范围（小猫贴图左边缘）
-const ROAM_MAX_X := 1340
-const WORLD_END := 1388               # 世界右边界，镜头不会越过
+const ROAM_MAX_X := 1430
+const WORLD_END := 1470               # 世界右边界，镜头不会越过
 const ROAM_SPEED := 70.0              # 自由走动速度（像素/秒）
 const CORNER_L := STALL_X - 29        # 绕过柜台的两个拐点：到这里小猫的身体不再和柜台重叠
 const CORNER_R := STALL_X + 43
@@ -27,7 +27,7 @@ const LIFT := 3
 const ZONE_BLEND := 28.0              # 水域分界处颜色过渡的半宽（像素）                       # 绕到柜台后面时抬高几像素（更靠里）
 const NEAR := 16                      # 离摊位/码头多近算"到了"
 ## 可以进去的房子：[门的中心 x, 名字, 用途]
-const DOORS := [[674, "小猫的家", "home"], [828, "服装店", "tailor"], [898, "渔具店", "tackle"], [779, "造船厂", "shipyard"]]
+const DOORS := [[674, "造船厂", "shipyard"], [828, "服装店", "tailor"], [898, "渔具店", "tackle"], [1410, "小猫的家", "home"]]
 ## 街上散步的居民：[样子, 散步范围左端, 右端, 走一个来回的毫秒数]
 const STROLLERS := [[1, 690, 800, 26000], [2, 850, 980, 34000], [0, 930, 1010, 22000]]
 ## 市场里 NPC 的摊位：[摊位左端 x, 货物, 招牌, 摊主样子]
@@ -38,7 +38,7 @@ const SHOP_SPEED := 26.0       # 顾客走路速度（像素/秒）
 const DWELL_MS := 4200         # 在一个摊位前停留多久
 const BUY_AT_MS := 1500        # 停下后多久付钱拿货
 const CHAT := ["今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看"]
-const HOUSES := [["house_0", 652], ["house_1", 818], ["house_2", 872], ["house_3", 752]]
+const HOUSES := [["house_3", 652], ["house_1", 818], ["house_2", 872], ["house_0", 1388]]
 const TREES := [716, 940]
 
 # 相对小猫贴图左上角的偏移
@@ -464,29 +464,27 @@ func _draw_pier_feet(left: float, right: float, t: int) -> void:
 ## 水域最左侧的浪区：浪头高出海面，越往左越高，白色的浪尖不停翻滚；小船划进去会被推回来。
 func _draw_waves(left: float, right: float, bottom: float, t: int) -> void:
 	var wz: Vector2 = m.game.wave_zone()
-	if wz.x <= 0.0:
-		return                                  # 远洋船：没有浪区
 	var wend: float = wz.x + 18.0
 	if left >= wend:
 		return
 	var x: float = floorf(maxf(left, 0.0) / 2.0) * 2.0
 	while x < minf(right, wend):
 		var k: float = clampf((wend - x) / (wend - wz.y + 20.0), 0.0, 1.0)      # 越靠左 k 越大
-		var ph: float = float(t) / 380.0 + x * 0.11
-		var h: float = roundf(k * (8.0 + 5.0 * sin(ph) + 2.0 * sin(ph * 2.3 + 1.0)))
+		var ph: float = x * 0.11 - float(t) / 380.0          # 相位随时间减小：波形从左往右传
+		var h: float = roundf(k * (3.0 + 2.0 * sin(ph) + 1.0 * sin(ph * 2.3 + 1.0)))
 		if h > 0.0:
 			m.draw_rect(Rect2(x, WATER_Y + 4 - h, 2, h + 2), Pal.L_B)           # 浪体
-			if h > 6.0:
+			if h > 3.0:
 				m.draw_rect(Rect2(x, WATER_Y + 4 - h + 3, 2, 1), Pal.L_C)
 			m.draw_rect(Rect2(x, WATER_Y + 4 - h, 2, 1), Pal.L_W)               # 浪尖
-			if h > 4.0:
+			if h > 2.0:
 				m.draw_rect(Rect2(x, WATER_Y + 5 - h, 2, 1), Pal.L_C)
 		x += 2.0
 	# 水面以下一排排白色的浪纹，会向右滚
 	for row in 4:
 		var wy: float = WATER_Y + 9.0 + float(row) * 8.0
 		var off: float = fposmod(float(t) / (90.0 + row * 25.0) + row * 7.0, 14.0)
-		var cx: float = -off
+		var cx: float = off - 14.0
 		while cx < wend:
 			var kk: float = clampf((wend - cx) / (wend - wz.y + 20.0), 0.0, 1.0)
 			if cx + 8 > left and cx < right and kk > 0.05:
@@ -494,7 +492,7 @@ func _draw_waves(left: float, right: float, bottom: float, t: int) -> void:
 				m.draw_rect(Rect2(cx + 1, wy - 1, 3, 1), Color(Pal.L_W, 0.25 + 0.35 * kk))
 			cx += 14.0
 	# 浪区深处整体压暗一点，看着更凶
-	m.draw_rect(Rect2(maxf(left, 0.0), WATER_Y + 6, minf(right, wz.y + 20.0) - maxf(left, 0.0), maxf(0.0, bottom - WATER_Y - 6)), Color(Pal.U_B, 0.28))
+	m.draw_rect(Rect2(maxf(left, 0.0), WATER_Y + 6, minf(right, wz.y + 20.0) - maxf(left, 0.0), maxf(0.0, bottom - WATER_Y - 6)), Color(Pal.U_B, 0.12))
 
 
 ## 市场入口：拱门、招牌、彩旗。
@@ -1435,7 +1433,7 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 			_draw_keeper(int(room["keeper"]), keeper_pos, ox)
 			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
 		"home":
-			m.draw_texture(m.tex["storage"], Vector2(ox + 34, fy - 20))
+			m.draw_texture(m.tex["storage"], Vector2(ox + 35, fy - 18))
 			m.draw_texture(m.tex["bookshelf"], Vector2(ox + 70, fy - 39))
 			m.draw_texture(m.tex["calendar"], Vector2(ox + 120, fy - 50))
 			m.draw_texture(m.tex["bed"], Vector2(ox + 160, fy - 19))

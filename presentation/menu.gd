@@ -9,7 +9,7 @@ const BOOK_NAMES := {"tackle": "渔具店", "tailor": "裁缝铺"}
 const TABS := ["商店", "图鉴", "统计", "设置", "状态", "任务"]
 const UPGRADES := [
 	["rod", "鱼竿", "自由挂机钓得更快"],
-	["bait", "鱼饵", "稀有鱼更容易上钩"],
+	["bait", "鱼饵", "咬钩等待更短"],
 	["basket", "鱼篓", "鱼篓容量加二"],
 ]
 const SETTINGS := [["focus_min", "专注"], ["short_break_min", "短休"], ["long_break_min", "长休"]]
