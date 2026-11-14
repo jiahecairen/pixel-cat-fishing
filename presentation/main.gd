@@ -470,6 +470,8 @@ func _update_camera(dt: float) -> void:
 
 
 ## 完整窗口里用方向键带着小猫在镇上走；松手一会儿后交还给自动流程。
+var _stand_to: float = INF         # 和居民聊天时慢慢退到的位置
+
 func _update_roam(dt: float) -> void:
 	var j: Journey = game.journey
 	var t := Time.get_ticks_msec()
@@ -503,6 +505,18 @@ func _update_roam(dt: float) -> void:
 			world.room_x = clampf(world.room_x + dir * World.ROAM_SPEED * game.move_speed() * dt, World.ROOM_MIN_X, World.ROOM_MAX_X)
 			world.room_flip = dir < 0
 		return
+	if _stand_to != INF:
+		if dir != 0 or j.activity() != Journey.Activity.ROAM:
+			_stand_to = INF
+		else:
+			if absf(_roam_fx - j.roam_x()) > 1.5:
+				_roam_fx = j.roam_x()
+			_roam_fx = move_toward(_roam_fx, _stand_to, World.ROAM_SPEED * game.move_speed() * dt)
+			j.set_roam_x(_roam_fx)
+			world.roam_moving = true
+			_last_walk_input = t
+			if absf(_roam_fx - _stand_to) < 0.5:
+				_stand_to = INF
 	if _auto_x != INF:
 		if dir != 0 or not game.can_steer() or interior != "":
 			_auto_x = INF                      # 按方向键 / 进入休息：取消自动航行，交还给手动
@@ -716,10 +730,9 @@ func _interact() -> void:
 			var t := Time.get_ticks_msec()
 			var si: int = world.stroller_near(x, t)
 			world.chat_with(si, t)
-			var nx: float = world.chat_stand_x(x, world.chat_x)      # 太近就退开一点，免得和居民叠在一起
+			var nx: float = world.chat_stand_x(x, world.chat_x)      # 太近就退开一点（走过去，不是瞬移），免得和居民叠在一起
 			if absf(nx - x) > 0.5 and game.state.journey.get("activity", -1) == Journey.Activity.ROAM:
-				_roam_fx = clampf(nx, World.ROAM_MIN_X, World.ROAM_MAX_X)
-				game.journey.set_roam_x(_roam_fx)
+				_stand_to = clampf(nx, World.ROAM_MIN_X, World.ROAM_MAX_X)
 			world.roam_flip = world.chat_x + 8.0 < nx + 16.0           # 站定后面向居民
 			_last_walk_input = t
 			play("click")
@@ -1092,6 +1105,8 @@ func _on_event(e: Dictionary) -> void:
 				adapter.notify("鱼篓满了", "点小猫头上的气泡，让它去小镇摆摊卖鱼。")
 		"depart":
 			_full_notified = false
+		"docked":
+			world.roam_flip = false      # 靠岸上岸：面朝小镇
 		"open":
 			play("buy")
 		"sale":
@@ -1246,7 +1261,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_interact()
 		return
 	if event is InputEventMouseMotion:
-		menu.hover = _pz(menu, event.position / float(px_scale) - ui_off)
+		menu.hover = event.position / float(px_scale) - ui_off
 		return
 	if not event is InputEventMouseButton or event.button_index != MOUSE_BUTTON_LEFT:
 		return
@@ -1308,7 +1323,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
-	elif admin.click(p) or book.click(p) or bag.click(p) or menu.click(_pz(menu, p)) or wardrobe.click(p) or outfit_shop.click(_pz(outfit_shop, p)) or shipyard_panel.click(_pz(shipyard_panel, p)) or dest_panel.click(p) or quest_panel.click(_pz(quest_panel, p)):
+	elif admin.click(p) or book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or shipyard_panel.click(p) or dest_panel.click(p) or quest_panel.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_town_button()
@@ -1439,6 +1454,8 @@ func _go_to_town(stop_at_dock: bool = false) -> void:
 		if had_line:
 			world.retract_t0 = Time.get_ticks_msec()      # 先收杆再开船
 		log.write("go_to_town", {"basket": game.state.basket.size()})
+		world.face_left = false          # 往东开：小猫朝前（不是倒着开），上岸后面朝小镇
+		world.roam_flip = false
 		_full_notified = false
 		play("cast")
 	else:
@@ -1480,34 +1497,10 @@ func _press_main() -> void:
 			game.skip_break()
 
 
-# ------------------------------------------------------------------ 商店面板放大
-## 完整窗口里进得了商店，面板放大两倍（整数倍，像素不糊）并居中；迷你窗进不了商店，不放大。
-const PANEL_ZOOM := 2.0
-
-func _is_zoomed(panel) -> bool:
-	if mini or not panel.open:
-		return false
-	if panel == menu:
-		return interior != "" and menu.tab == 0
-	return true
-
-func _zoom_t(panel) -> Vector2:
-	var x0 := (view.x - float(panel.RECT.size.x) * PANEL_ZOOM) / 2.0 - ui_off.x
-	return Vector2(x0, 28.0) - PANEL_ZOOM * Vector2(15, 28)
-
-## 把界面坐标换成该面板自己的坐标（放大的面板要缩回去）。
-func _pz(panel, p: Vector2) -> Vector2:
-	if not _is_zoomed(panel):
-		return p
-	return (p - _zoom_t(panel)) / PANEL_ZOOM
-
-func _draw_zoomed(panel) -> void:
-	if _is_zoomed(panel):
-		draw_set_transform(ui_off + _zoom_t(panel), 0.0, Vector2(PANEL_ZOOM, PANEL_ZOOM))
-		panel.draw()
-		draw_set_transform(ui_off)
-	else:
-		panel.draw()
+# ------------------------------------------------------------------ 大面板
+## 完整窗口里的商店、造船厂、店主任务：和物品栏一样占满窗口（分辨率更大，不是把小面板放大）。
+func big_rect() -> Rect2:
+	return Rect2(Vector2(4, 33) - ui_off, Vector2(view.x - 8, view.y - 39))
 
 
 # ------------------------------------------------------------------ 绘制
@@ -1532,12 +1525,12 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO)
 	_draw_particles(t)               # 闪光在顶栏之上、所有面板（物品栏、菜单……）之下
 	draw_set_transform(ui_off)
-	_draw_zoomed(menu)
+	menu.draw()
 	wardrobe.draw()
-	_draw_zoomed(outfit_shop)
-	_draw_zoomed(shipyard_panel)
+	outfit_shop.draw()
+	shipyard_panel.draw()
 	dest_panel.draw()
-	_draw_zoomed(quest_panel)
+	quest_panel.draw()
 	if Time.get_ticks_msec() - _toast_t0 < 3000:
 		label(_toast_l1, Vector2(17, 63), Pal.L_R)
 		label(_toast_l2, Vector2(17, 74), Pal.L_R)

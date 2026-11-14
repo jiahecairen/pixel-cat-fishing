@@ -353,3 +353,10 @@
 - `core/journey.gd`：`ISLAND` 活动；`game.gd`：`land_on_island / leave_island / begin_talk_quest / reward_give`；`zone_bounds` 加岛侧浅水区。
 - `balance.json`：`island.shallow_to/walk_west/keeper_off`、lighthouse 任务、crab_recipe 物品。素材：`ico_bag`、villager_3、item_crab_recipe。
 - 测试 450 项 ALL TESTS PASS、SIM PASS；新增 `test_v052`。版本号 0.52。
+
+## v0.53：商店面板改成占满窗口排版、朝向与聊天瞬移
+- 去掉 `PANEL_ZOOM`，`main.big_rect()`；outfit_shop / shipyard_panel / quest_panel / menu(商店页) 各自重排。
+- `_draw_boat_cat`：SAIL_OUT 不翻转；`_go_to_town` 清 `face_left/roam_flip`；"docked" 事件设 `roam_flip=false`。
+- `world._stroll_pause`：聊天时间从路人的走路时间里扣掉；`main._stand_to`：小猫退开改为走过去。
+- `dest_panel`：高亮跟随 `menu.hover`。
+- 测试 450 项 ALL TESTS PASS、SIM PASS。版本号 0.53。

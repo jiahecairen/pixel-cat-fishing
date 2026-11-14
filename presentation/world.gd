@@ -222,7 +222,11 @@ func stroller_at(i: int, t: int) -> Array:
 	if i == chat_who and t - chat_t0 < 3500:
 		return [chat_x, chat_x > cat_pos.x]
 	var s: Array = STROLLERS[i]
-	var ph := fposmod(float(t + i * 7000) / float(s[3]), 1.0)
+	# 聊天停下的那段时间不算：聊完从停下的地方接着走，不会"瞬移"到别处
+	var te: int = t - int(_stroll_pause.get(i, 0))
+	if i == chat_who:
+		te -= clampi(t - chat_t0, 0, 3500)
+	var ph := fposmod(float(te + i * 7000) / float(s[3]), 1.0)
 	var going_right := ph < 0.5
 	var k := ph * 2.0 if going_right else (1.0 - ph) * 2.0
 	return [roundf(lerpf(float(s[1]), float(s[2]), k)), not going_right]
@@ -254,8 +258,12 @@ func chat_stand_x(cat_x: float, npc_x: float) -> float:
 	var side := -1.0 if d < 0.0 else 1.0
 	return npc_x + 8.0 + side * CHAT_GAP - 16.0
 
+var _stroll_pause: Dictionary = {}     # 每位居民累计停下聊天的毫秒数
+
 func chat_with(i: int, t: int) -> void:
 	chat_x = float(stroller_at(i, t)[0])
+	if chat_who >= 0:
+		_stroll_pause[chat_who] = int(_stroll_pause.get(chat_who, 0)) + clampi(t - chat_t0, 0, 3500)
 	chat_who = i
 	roam_flip = chat_x + 8.0 < cat_pos.x + 16.0      # 小猫转身面对居民（居民在 stroller_at 里已经转向小猫）
 	chat_line = CHAT[(t / 1000 + i) % CHAT.size()]
@@ -1232,7 +1240,7 @@ func _draw_leaving(t: int) -> void:
 func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:
 	var frame := (t / 700) % 2
 	var pos := cat_pos
-	var flip := act == Journey.Activity.SAIL_BACK or (boat_moving and boat_dir < 0) or face_left
+	var flip := act == Journey.Activity.SAIL_BACK or (act != Journey.Activity.SAIL_OUT and ((boat_moving and boat_dir < 0) or face_left))
 	if t - turn_t0 < TURN_MS:                   # 转身：先朝着原来的方向顿一下，抬一下身子，再转向右边
 		flip = t - turn_t0 < TURN_MS / 2
 		if abs(t - turn_t0 - TURN_MS / 2) < 90:

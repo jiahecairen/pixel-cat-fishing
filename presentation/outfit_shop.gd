@@ -4,11 +4,8 @@ extends RefCounted
 
 const Pal := preload("res://presentation/palette.gd")
 
-const RECT := Rect2(15, 28, 130, 66)   # 宽一点，几金几银几铜写得下
-const ROW_X := 58
-const ROW_Y := 44
-const ROW_H := 11
-const CLOSE_RECT := Rect2(132, 30, 11, 11)
+const ROW_H := 17
+const PREVIEW := 76
 
 var open: bool = false
 var kind: String = "hat"
@@ -28,8 +25,24 @@ func open_kind(k: String) -> void:
 func close() -> void:
 	open = false
 
+## 面板占满窗口（和物品栏一样大）：左边试穿预览，右边一排货。
+func rect() -> Rect2:
+	return m.big_rect()
+
+func _close_rect() -> Rect2:
+	var r := rect()
+	return Rect2(r.end.x - 13, r.position.y + 2, 11, 11)
+
 func _tab_rect(i: int) -> Rect2:
-	return Rect2(52 + i * 24, 30, 22, 11)
+	var r := rect()
+	return Rect2(r.position.x + 62 + i * 34, r.position.y + 3, 32, 12)
+
+func _list_x() -> float:
+	return rect().position.x + 14.0 + PREVIEW + 10.0
+
+func _row_rect(i: int) -> Rect2:
+	var r := rect()
+	return Rect2(_list_x(), r.position.y + 24 + i * ROW_H, r.end.x - 8 - _list_x(), ROW_H - 1)
 
 func _switch(k: String) -> void:
 	if kind != k:
@@ -39,9 +52,6 @@ func _switch(k: String) -> void:
 
 func _items() -> Array:
 	return m.game.cat_items(kind)
-
-func _row_rect(i: int) -> Rect2:
-	return Rect2(ROW_X, ROW_Y + i * ROW_H - 1, 84, ROW_H)
 
 ## 对第 i 件货做"买下 / 穿上"。
 func act(i: int) -> void:
@@ -61,9 +71,9 @@ func act(i: int) -> void:
 		m.play("deny")
 
 func click(p: Vector2) -> bool:
-	if not open or not RECT.has_point(p):
+	if not open or not rect().has_point(p):
 		return false
-	if CLOSE_RECT.has_point(p):
+	if _close_rect().has_point(p):
 		close()
 		m.play("click")
 		m.on_panel_toggled()
@@ -95,40 +105,44 @@ func draw() -> void:
 	if not open:
 		return
 	var g = m.game
-	m.draw_rect(RECT, Pal.U_A)
-	m.draw_rect(RECT.grow(-1), Pal.U_K)
-	m.label("服装店", Vector2(19, 31), Pal.L_W)
+	var R := rect()
+	m.draw_rect(R, Pal.U_A)
+	m.draw_rect(R.grow(-1), Pal.U_K)
+	m.label("服装店", R.position + Vector2(6, 4), Pal.L_W)
 	for ti in 2:
 		var tr := _tab_rect(ti)
 		var on: bool = (kind == "hat") == (ti == 0)
 		m.draw_rect(tr, Pal.L_Y if on else Pal.U_A)
 		m.draw_rect(tr.grow(-1), Pal.L_A if on else Pal.U_K)
-		m.label_centered("帽子" if ti == 0 else "衣服", tr.position.x + 11, tr.position.y, Pal.U_K if on else Pal.L_A)
-	m.tex_frame("btn_close", CLOSE_RECT.position, 0, 2)
+		m.label_centered("帽子" if ti == 0 else "衣服", tr.position.x + 16, tr.position.y, Pal.U_K if on else Pal.L_A)
+	m.tex_frame("btn_close", _close_rect().position, 0, 2)
 	# 预览：试穿的那一件（光标指着的）
 	var prev: int = int(g.state.cat.get(kind, 0))
-	m.draw_rect(Rect2(19, 44, 36, 36), Pal.L_C)
-	m.draw_rect(Rect2(19, 72, 36, 8), Pal.L_B)
-	m.draw_rect(Rect2(19, 72, 36, 1), Pal.U_W)
+	var box := Rect2(R.position.x + 10, R.position.y + 24, PREVIEW, PREVIEW)
+	m.draw_rect(box, Pal.L_C)
+	m.draw_rect(Rect2(box.position.x, box.end.y - 22, PREVIEW, 22), Pal.L_B)
+	m.draw_rect(Rect2(box.position.x, box.end.y - 22, PREVIEW, 1), Pal.U_W)
 	g.state.cat[kind] = sel          # 只在画这一帧时借用，画完立刻还原
-	m.draw_cat(Vector2(21, 44), (Time.get_ticks_msec() / 700) % 2)
+	m.draw_cat(box.position + Vector2((PREVIEW - 32) / 2.0, PREVIEW - 54), (Time.get_ticks_msec() / 700) % 2)
 	g.state.cat[kind] = prev
 	var items := _items()
+	var rx := R.end.x - 14.0
 	for i in items.size():
-		var y: int = ROW_Y + i * ROW_H
 		var r := _row_rect(i)
 		if i == sel:
 			m.draw_rect(r, Pal.U_A)
 			m.draw_rect(r.grow(-1), Pal.U_B)
 		var owned: bool = g.cat_owns(kind, i)
-		m.label(str(items[i]["name"]), Vector2(ROW_X + 3, y), Pal.L_W if owned else Pal.L_A)
+		var ty := r.position.y + 3
+		m.label(str(items[i]["name"]), Vector2(r.position.x + 5, ty), Pal.L_W if owned else Pal.L_A)
 		if g.cat_wearing(kind, i):
-			m.label("穿着", Vector2(ROW_X + 58, y), Pal.L_G)
+			m.label("穿着", Vector2(rx - m.label_width("穿着"), ty), Pal.L_G)
 		elif owned:
-			m.label("已有", Vector2(ROW_X + 58, y), Pal.L_A)
+			m.label("已有", Vector2(rx - m.label_width("已有"), ty), Pal.L_A)
 		else:
-			m.money_full_right(g.cat_price(kind, i), ROW_X + 81, y + 3, Pal.L_Y if g.state.wallet_gold >= g.cat_price(kind, i) else Pal.L_R)
+			m.money_full_right(g.cat_price(kind, i), rx, ty + 3, Pal.L_Y if g.state.wallet_gold >= g.cat_price(kind, i) else Pal.L_R)
+	var by := R.end.y - 15.0
 	if Time.get_ticks_msec() - note_t0 < 1500:
-		m.label(note, Vector2(19, 82), Pal.L_R)
+		m.label(note, Vector2(R.position.x + 10, by), Pal.L_R)
 	else:
-		m.draw_money_full(int(g.state.wallet_gold), Vector2(19, 83), Pal.L_Y)
+		m.draw_money_full(int(g.state.wallet_gold), Vector2(R.position.x + 10, by + 1), Pal.L_Y)

@@ -32,11 +32,33 @@ var m   # 主节点 (presentation/main.gd)
 func _init(main) -> void:
 	m = main
 
+## 完整窗口里的渔具店商店页：占满窗口（和物品栏一样大），不是把小面板放大。
+func _full_shop() -> bool:
+	return open and tab == 0 and not m.mini
+
+func _fclose() -> Rect2:
+	var r := _panel_rect()
+	return Rect2(r.end.x - 13, r.position.y + 2, 11, 11)
+
+func _ftab(i: int) -> Rect2:
+	var r := _panel_rect()
+	return Rect2(r.position.x + 62 + i * 34, r.position.y + 3, 32, 12)
+
+func _frow(i: int) -> Rect2:
+	var r := _panel_rect()
+	return Rect2(r.position.x + 8, r.position.y + 26 + i * 27, r.size.x - 16, 25)
+
+func _fplus(i: int) -> Rect2:
+	var row := _frow(i)
+	return Rect2(row.end.x - 17, row.position.y + 7, 11, 11)
+
 func _tab_rect(i: int) -> Rect2:
 	return Rect2(17 + i * 23, 30, 23, 12)
 
 ## 面板范围：完整窗口里状态页高一点（钱写全了要占位置，"钓到"另起一行）。
 func _panel_rect() -> Rect2:
+	if _full_shop():
+		return m.big_rect()
 	if tab == 4 and not m.mini:
 		return Rect2(RECT.position, RECT.size + Vector2(0, 11))
 	return RECT
@@ -61,6 +83,8 @@ func _set_rect(row: int, x: float = 99) -> Rect2:
 func click(p: Vector2) -> bool:
 	if not open or not _panel_rect().has_point(p):
 		return false
+	if _full_shop():
+		return _click_shop_full(p)
 	if CLOSE_RECT.has_point(p):
 		open = false
 		m.play("click")
@@ -117,9 +141,90 @@ func click(p: Vector2) -> bool:
 					m.play("click")
 	return true
 
+func _click_shop_full(p: Vector2) -> bool:
+	if _fclose().has_point(p):
+		open = false
+		m.play("click")
+		m.on_panel_toggled()
+		return true
+	for i in 2:
+		if _ftab(i).has_point(p):
+			if shop_page != i:
+				shop_page = i
+				m.play("click")
+			return true
+	if shop_page == 1:
+		var baits: Array = m.game.shop_baits()
+		for i in baits.size():
+			if _fplus(i).has_point(p):
+				m.play("buy" if m.game.buy_bait(baits[i]) else "deny")
+		return true
+	for i in UPGRADES.size():
+		if _fplus(i).has_point(p):
+			m.play("buy" if m.game.buy_upgrade(UPGRADES[i][0]) else "deny")
+	return true
+
+func _draw_shop_full() -> void:
+	var g = m.game
+	var R := _panel_rect()
+	m.draw_rect(R, Pal.U_A)
+	m.draw_rect(R.grow(-1), Pal.U_K)
+	m.label("商店", R.position + Vector2(6, 4), Pal.L_W)
+	m.draw_rect(Rect2(R.position.x + 6, R.position.y + 16, 19, 1), Pal.L_R)
+	m.tex_frame("btn_close", _fclose().position, 0, 2)
+	for i in 2:
+		var tr := _ftab(i)
+		m.draw_rect(tr, Pal.L_Y if shop_page == i else Pal.U_A)
+		m.draw_rect(tr.grow(-1), Pal.L_A if shop_page == i else Pal.U_K)
+		m.label_centered("装备" if i == 0 else "鱼饵", tr.position.x + 16, tr.position.y, Pal.U_K if shop_page == i else Pal.L_A)
+	var desc := "金币可以升级装备" if shop_page == 0 else "买来的鱼饵每竿用 1 个"
+	if shop_page == 1:
+		var baits: Array = g.shop_baits()
+		for i in baits.size():
+			var id: String = baits[i]
+			var d: Dictionary = g.inventory.by_id[id]
+			var row := _frow(i)
+			var open_b: bool = g.bait_unlocked(id)
+			if row.has_point(hover):
+				m.draw_rect(row, Pal.U_B)
+				desc = String(d.get("desc", "")) if open_b else "未解锁"
+			if m.tex.has(str(d.get("sprite", ""))):
+				m.draw_texture(m.tex[d["sprite"]], row.position + Vector2(4, 4), Color.WHITE if open_b else Color(1, 1, 1, 0.4))
+			m.label(String(d["name"]), row.position + Vector2(26, 7), Pal.L_W if open_b else Pal.U_A)
+			if open_b:
+				m.text("x%d" % g.inventory.count(g.state, id), row.position + Vector2(86, 10), Pal.L_A)
+				var ok: bool = g.can_buy_bait(id)
+				m.money_full_right(int(d["price"]), row.end.x - 24, row.position.y + 10, Pal.L_Y if ok else Pal.L_A)
+				m.tex_frame("btn_plus", _fplus(i).position, 0, 2, Color.WHITE if ok else Color(1, 1, 1, 0.35))
+			else:
+				m.draw_texture(m.tex["lock"], _fplus(i).position, Color(1, 1, 1, 0.8))
+	else:
+		for i in UPGRADES.size():
+			var id2: String = UPGRADES[i][0]
+			var row2 := _frow(i)
+			if row2.has_point(hover):
+				m.draw_rect(row2, Pal.U_B)
+				desc = UPGRADES[i][2]
+			m.label(UPGRADES[i][1], row2.position + Vector2(8, 7), Pal.L_W)
+			var lv: int = g.upgrades.level(g.state, id2)
+			var cost: int = g.upgrades.next_cost(g.state, id2)
+			for k in g.upgrades.max_level(id2):
+				m.tex_frame("pips", row2.position + Vector2(52 + k * 6, 10), 1 if k < lv else 0, 2)
+			if cost < 0:
+				m.label("已满级", Vector2(row2.end.x - 24 - m.label_width("已满级"), row2.position.y + 7), Pal.L_Y)
+			else:
+				var ok2: bool = g.upgrades.can_buy(g.state, id2)
+				m.money_full_right(cost, row2.end.x - 24, row2.position.y + 10, Pal.L_Y if ok2 else Pal.L_A)
+				m.tex_frame("btn_plus", _fplus(i).position, 0, 2, Color.WHITE if ok2 else Color(1, 1, 1, 0.35))
+	m.label(desc, Vector2(R.position.x + 10, R.end.y - 15), Pal.L_A)
+	m.draw_money_full(int(g.state.wallet_gold), Vector2(R.end.x - 8 - m.money_full_width(int(g.state.wallet_gold)), R.end.y - 14), Pal.L_Y)
+
 # ------------------------------------------------------------------ 绘制
 func draw() -> void:
 	if not open:
+		return
+	if _full_shop():
+		_draw_shop_full()
 		return
 	m.draw_rect(_panel_rect(), Pal.U_A)
 	m.draw_rect(_panel_rect().grow(-1), Pal.U_K)

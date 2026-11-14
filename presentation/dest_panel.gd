@@ -19,7 +19,7 @@ func _init(main) -> void:
 
 func open_panel() -> void:
 	open = true
-	sel = 1
+	sel = 0 if m.game.at_island_dock() else 1      # 默认选"另一边"
 
 func close() -> void:
 	open = false
@@ -77,6 +77,9 @@ func draw() -> void:
 	m.label("目的地", Vector2(19, 31), Pal.L_W)
 	m.tex_frame("btn_close", CLOSE_RECT.position, 0, 2)
 	var names := [m.game.town_name(), _island_name()]
+	for i in 2:
+		if _row_rect(i).has_point(m.menu.hover):
+			sel = i                          # 蓝色高亮跟着鼠标走
 	for i in 2:
 		var r := _row_rect(i)
 		if i == sel:
