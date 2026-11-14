@@ -666,6 +666,27 @@ func _draw_island_extras(left: float, right: float, t: int) -> void:
 			if bx > left - 10 and bx < right + 10:
 				m.draw_rect(Rect2(bx, GROUND_Y - 52 - hh / 2.0, 4, hh), Color(Pal.L_Y, 0.22 * dark * (1.0 - float(k) / 48.0)))
 
+## 雾灯岛西码头：木栈桥伸进海里，桥头立着去矿山岛的牌子，海面浪更大。
+func _draw_west_dock(wx: float, left: float, right: float, t: int) -> void:
+	if wx + 20 < left or wx - 120 > right:
+		return
+	var sea_x := wx - 30.0
+	m.draw_rect(Rect2(sea_x - 300, GROUND_Y + 2, 300, 40), Pal.U_B)
+	m.draw_rect(Rect2(sea_x - 300, GROUND_Y + 2, 300, 2), Pal.L_B)
+	for x in range(int(sea_x - 300), int(sea_x), 5):
+		var h := 2.0 + 2.0 * (0.5 + 0.5 * sin(float(x) / 11.0 + float(t) / 300.0))
+		m.draw_rect(Rect2(x, GROUND_Y + 2 - h, 4, h), Pal.L_B)
+		if h > 3.4:
+			m.draw_rect(Rect2(x, GROUND_Y + 2 - h, 4, 1), Pal.U_W)
+	m.draw_rect(Rect2(sea_x - 70, GROUND_Y - 2, 100, 4), Pal.L_O)
+	m.draw_rect(Rect2(sea_x - 70, GROUND_Y + 2, 100, 1), Pal.U_O)
+	for px in [sea_x - 66, sea_x - 36, sea_x - 6]:
+		m.draw_rect(Rect2(px, GROUND_Y + 2, 3, 14), Pal.U_O)
+	m.draw_rect(Rect2(wx + 2, GROUND_Y - 16, 2, 16), Pal.U_O)
+	m.draw_rect(Rect2(wx - 12, GROUND_Y - 24, 30, 10), Pal.U_K)
+	m.draw_rect(Rect2(wx - 11, GROUND_Y - 23, 28, 8), Pal.L_N)
+	m.dyn_text("矿山岛", Vector2(wx - 9, GROUND_Y - 25), Pal.U_K)
+
 ## 西边的小岛：一条左右镜像的码头、草地、岛心湖、树和一座雾灯塔。位置跟着 balance.json 的 water.island.x。
 func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 	var ix: float = float(m.game.island_info().get("x", -3900))
@@ -716,9 +737,11 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 			m.draw_rect(Rect2(lhx + 5, GROUND_Y - 53, 8, 3), Color(Pal.L_Y, 0.9))
 			m.draw_rect(Rect2(lhx - 4, GROUND_Y - 53, 5, 1), Color(Pal.L_Y, 0.45))
 			m.draw_rect(Rect2(lhx + 17, GROUND_Y - 53, 5, 1), Color(Pal.L_Y, 0.45))
-	# 岛的西岸：一排树挡着路，走不过去
+	# 岛的西岸：修桥前一排树挡着路；修好桥后那里是西码头（去矿山岛）
 	var wx: float = m.game.island_walk_min()
-	for k in 4:
+	if m.game.bridge_built():
+		_draw_west_dock(wx, left, right, t)
+	for k in (0 if m.game.bridge_built() else 4):
 		var px2: float = wx - 4.0 + float(k) * 22.0 - 30.0
 		if px2 > left - 30 and px2 < right + 4:
 			m.draw_texture(m.tex["tree"], Vector2(px2, GROUND_Y - 36 + (k % 2) * 2))
@@ -1724,10 +1747,10 @@ const ROOMS := {
 	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"], [118, "quest"]]},
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[172, "quest"]]},       # 主角形象固定后不卖衣帽（D152）
 	"shipyard": {"keeper": 2, "wall": "w", "spots": [[150, "boats"]]},
-	"workshop": {"keeper": 1, "wall": "w", "spots": [[150, "talk"]]},
+	"workshop": {"keeper": 1, "wall": "w", "spots": [[150, "talk"], [106, "craft"]]},
 	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [106, "piggy"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船", "talk": "空格键和师傅聊聊"}
+const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船", "talk": "空格键和师傅聊聊", "craft": "空格键做梯子"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false

@@ -48,7 +48,8 @@ const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier",
 	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
-	"btn_dest", "lighthouse", "btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "noren_ship", "ship_model", "blueprint", "anchor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish"]
+	"btn_dest", "lighthouse", "btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "noren_ship", "ship_model", "blueprint", "anchor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish",
+	"mine_tiles", "mole_0", "mole_1", "mole_2", "mole_miner", "mine_shop", "mine_rest", "mine_gate", "mine_mtn", "item_rope", "item_ladder"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 9
 
@@ -134,6 +135,8 @@ var _missing_labels: Dictionary = {}
 var _full_notified: bool = false
 var _roam_fx: float = 0.0        # 自由走动的亚像素位置
 var _confirm_quit: bool = false   # 正在显示"确定要退出吗"
+const MineView := preload("res://presentation/mine_view.gd")
+var mine_view                     # 矿山岛（过海、岛上、矿井），见 presentation/mine_view.gd
 var interior: String = ""        # 小猫所在的屋子（"" = 在室外）；不存档，重启后回到门口
 var _last_walk_input: int = -100000
 var _pix_font: FontFile            # 像素字体：只用来画玩家输入的名字（其余文字都是图集里的）
@@ -220,6 +223,15 @@ func _ready() -> void:
 	book = Book.new(self)
 	admin = Admin.new(self)
 	world = World.new(self)
+	mine_view = MineView.new(self)
+	var mat := str(state.mine.get("at", ""))
+	if mat != "" and game.journey.on_island():
+		mine_view.go(mat)              # 重启前在矿山岛：回到原处（矿里离线的进度由 update 补算）
+		mine_view.isle_x = MineView.SPOT["gate"] - 16.0
+	if OS.has_environment("CATFISH_REGION"):      # 调试：直接进矿山岛的某个区域
+		mine_view.go(OS.get_environment("CATFISH_REGION"))
+	if OS.has_environment("CATFISH_ISLEX"):
+		mine_view.isle_x = OS.get_environment("CATFISH_ISLEX").to_float()
 	state.cat["created"] = true      # v0.66 起主角形象固定（D152），不再捏猫，直接进入起名
 	_apply_debug_env()
 
@@ -522,6 +534,18 @@ func _update_roam(dt: float) -> void:
 			if Input.is_key_pressed(k):
 				dir += 1
 				break
+	if mine_view.active():
+		if mini or not j.on_island():
+			mine_view.leave()
+			return
+		var dy := 0
+		if not panel_open() and not mini and get_window().has_focus():
+			if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
+				dy += 1
+			if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W):
+				dy -= 1
+		mine_view.process(dt, dir, dy)
+		return
 	if interior != "":
 		# 在屋里：只在屋内左右走。切到迷你悬浮窗或旅程状态变了就回到室外
 		if mini or j.activity() != Journey.Activity.ROAM:
@@ -764,6 +788,9 @@ func _toggle_dev_mode() -> void:
 ## 互动键：在海上 = 收着竿时重新甩竿；自由走动时在摊位旁 = 开张，在码头 = 上船。
 func _interact() -> void:
 	var j: Journey = game.journey
+	if mine_view.active():
+		mine_view.key(KEY_SPACE)
+		return
 	if interior != "":
 		_interact_inside()
 	elif j.on_boat():
@@ -849,7 +876,14 @@ func _after_dialog() -> void:
 
 ## 小岛上的互动：码头尽头 = 回船；灯塔看守旁 = 聊天（接任务 / 交付）；湖边 = 看一眼。
 func _interact_island(x: float) -> void:
-	if world.island_near_pier(x):
+	if game.bridge_built() and x <= game.island_walk_min() + 4.0:
+		if game.state.boat_level >= int(game.mine.cfg().get("boat_need", 2)):
+			play("click")
+			mine_view.go("cross_out")
+		else:
+			_toast("浪太大了", "船要升级两次")
+			play("deny")
+	elif world.island_near_pier(x):
 		if game.leave_island():
 			play("click")
 	elif world.island_near_keeper(x):
@@ -932,6 +966,15 @@ func _interact_inside() -> void:
 			play("click")
 			menu.tab = 0
 			menu.open = true
+		"craft":
+			var why: String = game.mine.craft_ladder()
+			if why == "":
+				play("buy")
+				game.dirty = true
+				_toast("梯子做好了", "")
+			else:
+				play("deny")
+				_toast("材料不够" if why == "mat" else "物品栏满了", "要绳子和木板" if why == "mat" else "")
 		"storage":
 			play("click")
 			bag.open_warehouse()
@@ -1369,6 +1412,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				admin.toggle()             # F9 后台
 			elif dialog.open:
 				dialog.key(event.keycode)
+			elif mine_view.active() and not panel_open() and mine_view.key(event.keycode):
+				pass
 			elif works_panel.open:
 				if event.keycode == KEY_ESCAPE:
 					works_panel.close()
@@ -1713,7 +1758,10 @@ func _draw() -> void:
 		return
 	var now := game.now_ms()
 	var t := Time.get_ticks_msec()
-	if interior != "":
+	if mine_view.active():
+		draw_set_transform(Vector2.ZERO)
+		mine_view.draw(view, t)
+	elif interior != "":
 		draw_set_transform(Vector2.ZERO)
 		world.draw_interior(interior, view, t)
 	else:
@@ -1831,7 +1879,7 @@ func _draw_hud(now: int) -> void:
 		_text("x%d" % int(game.move_speed()), Vector2(17, 66), Pal.L_Y)      # 移动倍速（] 加快 / [ 减慢）
 	# 完整窗口里的操作提示（夜里天空是深色，换成浅色字）
 	var hint_col: Color = Pal.L_W if float(game.sky()["dark"]) > 0.35 else Pal.U_K
-	if not mini and not panel_open():
+	if not mini and not panel_open() and not mine_view.active():
 		if interior != "":
 			label("方向键走动", Vector2(17, 30), Pal.L_W)
 			var spot: String = world.room_spot(interior)
@@ -2226,6 +2274,8 @@ func _island_hint(ix: float) -> String:
 		if game.at_lake_spot():
 			return "空格键收竿" if game.line_out() else "空格键钓鱼"
 		return "空格键钓鱼"
-	if ix <= game.island_walk_min() + 2.0:
-		return "岛的最西边" if game.bridge_built() else "岛的西边还没开发"
+	if ix <= game.island_walk_min() + 4.0:
+		if not game.bridge_built():
+			return "岛的西边还没开发"
+		return "空格键去矿山岛" if game.state.boat_level >= int(game.mine.cfg().get("boat_need", 2)) else "船要升级两次"
 	return ""

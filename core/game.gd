@@ -16,6 +16,7 @@ const Upgrades := preload("res://core/upgrades.gd")
 const Journey := preload("res://core/journey.gd")
 const Inventory := preload("res://core/inventory.gd")
 const IslandWorks := preload("res://core/island_works.gd")
+const Mine := preload("res://core/mine.gd")
 
 const DURATION_KEYS := ["focus_min", "short_break_min", "long_break_min"]
 
@@ -27,6 +28,7 @@ var upgrades: Upgrades
 var journey: Journey
 var inventory: Inventory
 var works: IslandWorks
+var mine: Mine
 var fish_list: Array = []
 var fish_by_id: Dictionary = {}
 var _water: Dictionary = {}
@@ -79,6 +81,7 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	fishing.gate = Callable(self, "_fish_gate")
 	inventory = Inventory.new(balance.get("items", []))
 	works = IslandWorks.new(state, balance.get("works", {}), inventory)
+	mine = Mine.new(state, inventory, balance.get("mine", {}))
 	inventory.stack_default = int(balance.get("bag", {}).get("stack", 10))
 	_init_gear()
 	journey = Journey.new(state.journey, balance["town"], rng)

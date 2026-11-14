@@ -462,6 +462,26 @@
       "level": 2,
       "drop": "",
       "need": 1
+    },
+    {
+      "id": "rope",
+      "important": true,
+      "name": "绳子",
+      "desc": "矿山岛工具店的绳子，能做梯子",
+      "sprite": "item_rope",
+      "weight": 0,
+      "use": "",
+      "drop": "quest"
+    },
+    {
+      "id": "ladder",
+      "important": true,
+      "name": "梯子",
+      "desc": "下矿用，每架让梯子长 3 格",
+      "sprite": "item_ladder",
+      "weight": 0,
+      "use": "",
+      "drop": "quest"
     }
   ],
   "water": {
@@ -471,13 +491,34 @@
     "wave_need": 1,
     "current_amount": 0.2,
     "boat_levels": [
-      {"name": "小木船", "price": 0},
-      {"name": "加固船", "price": 1200},
-      {"name": "快桨船", "price": 4000},
-      {"name": "远洋船", "price": 12000}
+      {
+        "name": "小木船",
+        "price": 0
+      },
+      {
+        "name": "加固船",
+        "price": 1200
+      },
+      {
+        "name": "快桨船",
+        "price": 4000
+      },
+      {
+        "name": "远洋船",
+        "price": 12000
+      }
     ],
     "boat_max_x": 512,
-    "island": {"id": "mist", "name": "雾灯岛", "x": -3900, "no_fish": 70, "current_end": 330, "shallow_to": 386, "walk_west": 760, "keeper_off": 196},
+    "island": {
+      "id": "mist",
+      "name": "雾灯岛",
+      "x": -3900,
+      "no_fish": 70,
+      "current_end": 330,
+      "shallow_to": 386,
+      "walk_west": 760,
+      "keeper_off": 196
+    },
     "zones": [
       {
         "id": "deep",
@@ -520,10 +561,26 @@
     "name": "面团"
   },
   "shop_chat": {
-    "tackle": ["欢迎常来", "今天鱼口怎么样"],
-    "tailor": ["衣服随便挑", "穿上一定好看"],
-    "workshop": ["齿轮转得正欢", "叮叮当当真热闹", "坏了的东西拿来", "炉子今天特别旺", "螺丝都拧紧了"],
-    "lighthouse": ["雾灯岛欢迎你", "灯塔夜夜亮着", "信号台去试试吧"]
+    "tackle": [
+      "欢迎常来",
+      "今天鱼口怎么样"
+    ],
+    "tailor": [
+      "衣服随便挑",
+      "穿上一定好看"
+    ],
+    "workshop": [
+      "齿轮转得正欢",
+      "叮叮当当真热闹",
+      "坏了的东西拿来",
+      "炉子今天特别旺",
+      "螺丝都拧紧了"
+    ],
+    "lighthouse": [
+      "雾灯岛欢迎你",
+      "灯塔夜夜亮着",
+      "信号台去试试吧"
+    ]
   },
   "junk": {
     "chance": 0.1,
@@ -544,16 +601,63 @@
   },
   "drift": {
     "refill_min": 8,
-    "offsets": [-318, -110, -76, -430, -520, -610],
+    "offsets": [
+      -318,
+      -110,
+      -76,
+      -430,
+      -520,
+      -610
+    ],
     "west_from": 3,
     "reach": 20,
-    "gold": [12, 60],
-    "pool": [["lamp_shell", 30], ["diary_page", 8], ["plank", 16], ["bottle", 14], ["pearl", 8], ["gold", 34]]
+    "gold": [
+      12,
+      60
+    ],
+    "pool": [
+      [
+        "lamp_shell",
+        30
+      ],
+      [
+        "diary_page",
+        8
+      ],
+      [
+        "plank",
+        16
+      ],
+      [
+        "bottle",
+        14
+      ],
+      [
+        "pearl",
+        8
+      ],
+      [
+        "gold",
+        34
+      ]
+    ]
   },
   "signal": {
     "rounds": 5,
-    "period_ms": [1900, 1700, 1500, 1300, 1100],
-    "target_w": [0.26, 0.23, 0.2, 0.17, 0.14],
+    "period_ms": [
+      1900,
+      1700,
+      1500,
+      1300,
+      1100
+    ],
+    "target_w": [
+      0.26,
+      0.23,
+      0.2,
+      0.17,
+      0.14
+    ],
     "perfect_w": 0.06,
     "gold_good": 6,
     "gold_perfect": 14,
@@ -561,25 +665,171 @@
     "cooldown_min": 20,
     "console_off": 36
   },
-  "gift": {"id": "g064", "copper": 80000, "items": {"lamp_scale": 1}},
-  "auto": {"sell_pct": 30, "fish_pct": 80, "island_fish_pct": 80, "reach_s": 10, "walk_px_s": 70, "idle_ms": 4000},
+  "gift": {
+    "id": "g064",
+    "copper": 80000,
+    "items": {
+      "lamp_scale": 1
+    }
+  },
+  "auto": {
+    "sell_pct": 30,
+    "fish_pct": 80,
+    "island_fish_pct": 80,
+    "reach_s": 10,
+    "walk_px_s": 70,
+    "idle_ms": 4000
+  },
   "works": {
     "projects": [
-      {"id": "bridge", "name": "修湖上的桥", "desc": "拱桥通了，岛的西边和桥顶都能去", "cost": [["plank", 12]], "minutes": 20, "workers": 1, "flag": "bridge"},
-      {"id": "pier", "name": "整修栈桥", "desc": "岛上的亮点补得更快", "cost": [["plank", 6], ["stone", 4]], "minutes": 15, "workers": 1},
-      {"id": "lamp", "name": "加固灯室", "desc": "灯塔更亮，信号台的奖励多一半", "cost": [["stone", 8], ["metal", 6]], "minutes": 30, "workers": 2, "requires": "bridge"}
+      {
+        "id": "bridge",
+        "name": "修湖上的桥",
+        "desc": "拱桥通了，岛的西边和桥顶都能去",
+        "cost": [
+          [
+            "plank",
+            12
+          ]
+        ],
+        "minutes": 20,
+        "workers": 1,
+        "flag": "bridge"
+      },
+      {
+        "id": "pier",
+        "name": "整修栈桥",
+        "desc": "岛上的亮点补得更快",
+        "cost": [
+          [
+            "plank",
+            6
+          ],
+          [
+            "stone",
+            4
+          ]
+        ],
+        "minutes": 15,
+        "workers": 1
+      },
+      {
+        "id": "lamp",
+        "name": "加固灯室",
+        "desc": "灯塔更亮，信号台的奖励多一半",
+        "cost": [
+          [
+            "stone",
+            8
+          ],
+          [
+            "metal",
+            6
+          ]
+        ],
+        "minutes": 30,
+        "workers": 2,
+        "requires": "bridge"
+      }
     ],
     "workers": [
-      {"name": "阿木", "job": "木匠", "copper": 300, "items": []},
-      {"name": "铁锤", "job": "铁匠", "copper": 800, "items": [["stone", 3]]},
-      {"name": "小满", "job": "帮工", "copper": 1500, "items": [["stone", 6], ["metal", 3]]}
+      {
+        "name": "阿木",
+        "job": "木匠",
+        "copper": 300,
+        "items": []
+      },
+      {
+        "name": "铁锤",
+        "job": "铁匠",
+        "copper": 800,
+        "items": [
+          [
+            "stone",
+            3
+          ]
+        ]
+      },
+      {
+        "name": "小满",
+        "job": "帮工",
+        "copper": 1500,
+        "items": [
+          [
+            "stone",
+            6
+          ],
+          [
+            "metal",
+            3
+          ]
+        ]
+      }
     ]
   },
-  "wreck": {"sea_range": 700, "pool": [["plank", 60], ["boot", 20], ["bottle", 10], ["pearl", 4]]},
-  "west_chest": {"off": -690, "gold": 600, "give": [["pearl", 2], ["plank", 2]]},
+  "wreck": {
+    "sea_range": 700,
+    "pool": [
+      [
+        "plank",
+        60
+      ],
+      [
+        "boot",
+        20
+      ],
+      [
+        "bottle",
+        10
+      ],
+      [
+        "pearl",
+        4
+      ]
+    ]
+  },
+  "west_chest": {
+    "off": -690,
+    "gold": 600,
+    "give": [
+      [
+        "pearl",
+        2
+      ],
+      [
+        "plank",
+        2
+      ]
+    ]
+  },
   "lake_junk": {
     "chance": 0.22,
-    "pool": [["lamp_shell", 45], ["diary_page", 12], ["plank", 14], ["bottle", 22], ["boot", 16], ["pearl", 10]]
+    "pool": [
+      [
+        "lamp_shell",
+        45
+      ],
+      [
+        "diary_page",
+        12
+      ],
+      [
+        "plank",
+        14
+      ],
+      [
+        "bottle",
+        22
+      ],
+      [
+        "boot",
+        16
+      ],
+      [
+        "pearl",
+        10
+      ]
+    ]
   },
   "hook_wait_mult": [
     1.0,
@@ -594,13 +844,31 @@
       "reward_gold": 100,
       "reward_name": "一点酬劳",
       "wants": [
-        {"item": "bottle", "n": 2},
-        {"item": "pearl", "n": 1}
+        {
+          "item": "bottle",
+          "n": 2
+        },
+        {
+          "item": "pearl",
+          "n": 1
+        }
       ],
-      "letter_lines": ["灯塔看守的信"],
-      "talk_lines": ["灯塔的灯坏了", "帮我找这些吧"],
-      "idle_lines": ["欢迎来到雾灯岛", "能帮个忙吗"],
-      "done_lines": ["灯又亮了", "蟹笼配方给你", "以后去工作台看看"]
+      "letter_lines": [
+        "灯塔看守的信"
+      ],
+      "talk_lines": [
+        "灯塔的灯坏了",
+        "帮我找这些吧"
+      ],
+      "idle_lines": [
+        "欢迎来到雾灯岛",
+        "能帮个忙吗"
+      ],
+      "done_lines": [
+        "灯又亮了",
+        "蟹笼配方给你",
+        "以后去工作台看看"
+      ]
     },
     {
       "id": "lighthouse2",
@@ -610,12 +878,27 @@
       "reward_slots": 2,
       "reward_name": "小背包",
       "wants": [
-        {"item": "lamp_shell", "n": 3}
+        {
+          "item": "lamp_shell",
+          "n": 3
+        }
       ],
-      "letter_lines": ["灯塔看守的信"],
-      "talk_lines": ["灯芯要用雾灯贝", "湖里能钓到它"],
-      "idle_lines": ["灯修好了", "谢谢你"],
-      "done_lines": ["灯更亮了", "小背包送你", "多装两样东西"]
+      "letter_lines": [
+        "灯塔看守的信"
+      ],
+      "talk_lines": [
+        "灯芯要用雾灯贝",
+        "湖里能钓到它"
+      ],
+      "idle_lines": [
+        "灯修好了",
+        "谢谢你"
+      ],
+      "done_lines": [
+        "灯更亮了",
+        "小背包送你",
+        "多装两样东西"
+      ]
     },
     {
       "id": "lighthouse3",
@@ -625,12 +908,27 @@
       "reward_gold": 300,
       "reward_name": "三枚银币",
       "wants": [
-        {"item": "diary_page", "n": 3}
+        {
+          "item": "diary_page",
+          "n": 3
+        }
       ],
-      "letter_lines": ["灯塔看守的信"],
-      "talk_lines": ["我的旧日记散了", "风吹进湖里了"],
-      "idle_lines": ["灯修好后", "我想起了件事"],
-      "done_lines": ["原来灯是为她亮的", "谢谢你找回来", "这点钱收下吧"]
+      "letter_lines": [
+        "灯塔看守的信"
+      ],
+      "talk_lines": [
+        "我的旧日记散了",
+        "风吹进湖里了"
+      ],
+      "idle_lines": [
+        "灯修好后",
+        "我想起了件事"
+      ],
+      "done_lines": [
+        "原来灯是为她亮的",
+        "谢谢你找回来",
+        "这点钱收下吧"
+      ]
     },
     {
       "id": "lighthouse4",
@@ -641,12 +939,27 @@
       "reward_gold": 1000,
       "reward_name": "大背包",
       "wants": [
-        {"item": "lamp_scale", "n": 1}
+        {
+          "item": "lamp_scale",
+          "n": 1
+        }
       ],
-      "letter_lines": ["灯塔看守的信"],
-      "talk_lines": ["夜里湖会发光", "雾灯鱼会来看灯"],
-      "idle_lines": ["夜里再来看看", "灯亮着它才来"],
-      "done_lines": ["它真的来了", "背包和钱都给你", "雾灯岛永远欢迎你"]
+      "letter_lines": [
+        "灯塔看守的信"
+      ],
+      "talk_lines": [
+        "夜里湖会发光",
+        "雾灯鱼会来看灯"
+      ],
+      "idle_lines": [
+        "夜里再来看看",
+        "灯亮着它才来"
+      ],
+      "done_lines": [
+        "它真的来了",
+        "背包和钱都给你",
+        "雾灯岛永远欢迎你"
+      ]
     },
     {
       "id": "keeper",
@@ -759,5 +1072,139 @@
   ],
   "bag": {
     "stack": 10
+  },
+  "mine": {
+    "width": 13,
+    "ladder_rows": 3,
+    "start_ladder": 1,
+    "layers": [
+      {
+        "to": 4,
+        "block": "dirt",
+        "name": "泥土",
+        "hard_s": 45,
+        "tool": 1
+      },
+      {
+        "to": 9,
+        "block": "stone",
+        "name": "石层",
+        "hard_s": 70,
+        "tool": 2
+      },
+      {
+        "to": 15,
+        "block": "rock",
+        "name": "硬岩",
+        "hard_s": 110,
+        "tool": 3
+      },
+      {
+        "to": 9999,
+        "block": "deep",
+        "name": "深岩",
+        "hard_s": 170,
+        "tool": 4
+      }
+    ],
+    "ores": [
+      {
+        "id": "gem",
+        "min_y": 2,
+        "chance": 0.07,
+        "deep_bonus": 0.004,
+        "gems": [
+          1,
+          3
+        ],
+        "hard_mul": 1.4
+      },
+      {
+        "id": "metal",
+        "min_y": 3,
+        "chance": 0.12,
+        "deep_bonus": 0.004,
+        "item": "metal",
+        "hard_mul": 1.3
+      },
+      {
+        "id": "chest",
+        "min_y": 4,
+        "chance": 0.015,
+        "gems": [
+          4,
+          10
+        ],
+        "hard_mul": 0.6
+      },
+      {
+        "id": "stone",
+        "min_y": 1,
+        "chance": 0.25,
+        "item": "stone",
+        "hard_mul": 1.0
+      }
+    ],
+    "picks": [
+      {
+        "name": "空手",
+        "power": 0.0,
+        "price": 0
+      },
+      {
+        "name": "鹤嘴锄",
+        "power": 1.0,
+        "price": 5
+      },
+      {
+        "name": "铁镐",
+        "power": 1.8,
+        "price": 40
+      },
+      {
+        "name": "钢镐",
+        "power": 3.0,
+        "price": 150
+      },
+      {
+        "name": "钻石镐",
+        "power": 5.0,
+        "price": 500
+      }
+    ],
+    "lamps": [
+      {
+        "name": "火柴",
+        "radius": 1.6,
+        "price": 0
+      },
+      {
+        "name": "油灯",
+        "radius": 2.6,
+        "price": 12
+      },
+      {
+        "name": "矿灯",
+        "radius": 3.6,
+        "price": 60
+      },
+      {
+        "name": "大矿灯",
+        "radius": 5.0,
+        "price": 220
+      }
+    ],
+    "rope": {
+      "price": 3,
+      "per_hour": 2,
+      "cap": 6,
+      "start": 2
+    },
+    "ladder_recipe": {
+      "rope": 1,
+      "plank": 2
+    },
+    "fish_gem_div": 10,
+    "boat_need": 2
   }
 }

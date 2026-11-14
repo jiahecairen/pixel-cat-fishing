@@ -63,6 +63,7 @@ func _init() -> void:
 		test_v061(balance, fish)
 		test_v062(balance, fish)
 		test_v064(balance, fish)
+		test_v067(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -964,7 +965,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 15 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "15 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 17 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "15 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -1687,3 +1688,75 @@ func test_v046(balance: Dictionary, fish: Array) -> void:
 	var ms: float = float(sums["small"]) / maxf(1.0, float(ns["small"]))
 	var mb: float = float(sums["big"]) / maxf(1.0, float(ns["big"]))
 	check(ns["small"] >= 100 and ns["big"] >= 100 and ms < mb * 0.8, "小鱼上钩更快：平均等待 小 %d ms / 大 %d ms" % [int(ms), int(mb)])
+
+
+func test_v067(balance: Dictionary, fish: Array) -> void:
+	print("v0.67: 矿井")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(67))
+	var mn = g.mine
+	mn.ensure(clock.t)
+	var sh: int = mn.shaft()
+	check(mn.pos() == Vector2i(sh, 0) and mn.ladder() == 1 and int(g.state.mine["seed"]) > 0, "第一次进矿：站在洞口竖井上，梯子 1 格")
+	check(mn.block(0, 3) == "granite" and mn.block(mn.width() - 1, 3) == "granite", "两边是花岗岩")
+	check(mn.dig_block_reason(0, 1) == "notool", "没有镐子挖不动")
+	check(mn.buy_level("pick") == "gems", "没有宝石买不了鹤嘴锄（不能用金币）")
+	# 饭店收鱼换宝石
+	g.state.basket = ["crucian", "loach"]
+	var got: int = mn.sell_fish(g.economy._prices, "rest1")
+	check(got == 2 and g.state.gems == 2 and g.state.basket.is_empty(), "饭店收鱼：每条至少 1 颗宝石")
+	g.state.basket = ["crucian"]
+	check(mn.sell_fish(g.economy._prices, "rest1") == 0 and g.state.gems == 2, "同一笔出售重复提交不重复给宝石")
+	g.state.gems = 5
+	check(mn.buy_level("pick") == "" and mn.pick() == 1 and g.state.gems == 0, "5 颗宝石买鹤嘴锄")
+	# 往下挖：梯子 1 格只能挖到第 1 行
+	check(mn.start_dig(0, 1, clock.t) == "", "竖井往下挖")
+	var need: int = mn.dig_ms(sh, 1)
+	check(need >= 40000, "一开始挖得很慢（一格 %d 秒）" % (need / 1000))
+	clock.t += need - 1
+	check(mn.update(clock.t).is_empty() and mn.dig_progress(clock.t) > 0.99, "没到时间不会挖开")
+	clock.t += 1
+	var ev: Array = mn.update(clock.t)
+	check(mn.pos() == Vector2i(sh, 1) and mn.is_dug(sh, 1), "挖开后小猫进到那一格")
+	check(ev.size() >= 2 and str(ev[-1].get("why", "")) == "ladder" and not mn.digging(), "梯子不够长：自动停下")
+	check(mn.dig_block_reason(0, 1) == "ladder", "梯子不够不能再往下")
+	# 横挖到边上
+	check(mn.start_dig(1, 0, clock.t) == "", "横着挖")
+	clock.t += 3600000
+	mn.update(clock.t)
+	check(mn.pos() == Vector2i(mn.width() - 2, 1) and mn.dig_block_reason(1, 0) == "granite", "离线一小时：一路挖到花岗岩为止")
+	var dug_before: int = g.state.mine["dug"].size()
+	var gems_before: int = g.state.gems
+	mn._finish(sh + 1, 1)
+	check(g.state.mine["dug"].size() == dug_before and g.state.gems == gems_before, "同一格不会重复发奖励")
+	# 梯子：工坊合成，延长
+	check(mn.craft_ladder() == "mat", "没有材料不能做梯子")
+	g.inventory.add(g.state, "rope", 1)
+	g.inventory.add(g.state, "plank", 2)
+	check(mn.craft_ladder() == "" and g.inventory.count(g.state, "ladder") == 1 and g.inventory.count(g.state, "plank") == 0, "绳子 1 + 木板 2 = 梯子")
+	check(mn.move(-1, 0), "往回走")
+	while mn.pos().x > sh:
+		mn.move(-1, 0)
+	check(mn.pos() == Vector2i(sh, 1) and mn.at_ladder_end() and mn.can_extend(), "走到梯子底：可以延长")
+	check(mn.extend_ladder() and mn.ladder() == 4, "延长后梯子 4 格")
+	check(mn.start_dig(0, 1, clock.t) == "", "梯子够长了又能往下挖")
+	# 工具等级：第 5 行起要铁镐
+	g.state.mine["ladder"] = 20
+	g.state.mine["dig"] = {}
+	for y in range(2, 5):
+		g.state.mine["dug"]["%d,%d" % [sh, y]] = 1
+	g.state.mine["y"] = 4
+	check(mn.dig_block_reason(0, 1) == "tool", "第 5 行是石层，鹤嘴锄挖不动")
+	# 绳子限量
+	var stock: int = mn.rope_stock(clock.t)
+	g.state.gems = 100
+	var bought := 0
+	while mn.buy_rope(clock.t) == "":
+		bought += 1
+	check(bought == stock and mn.buy_rope(clock.t) == "soldout", "绳子卖完了")
+	check(mn.rope_stock(clock.t + 3600000) == 2 and mn.rope_stock(clock.t + 36000000) == 6, "每小时上新 2 根，最多囤 6 根")
+	# 存档
+	var s2 := GameState.new()
+	check(s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict()))) and s2.gems == g.state.gems and int(s2.mine["ladder"]) == 20, "宝石和矿井进度随存档保存")
+	var g2 := Game.new(balance, fish, s2, clock, _rng(68))
+	check(g2.mine.pos() == Vector2i(sh, 4) and g2.mine.is_dug(sh, 3), "读档后位置和挖过的格子都在")
