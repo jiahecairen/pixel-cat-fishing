@@ -402,6 +402,8 @@ func _apply_debug_env() -> void:
 		game.start_focus()
 	if OS.has_environment("CATFISH_TALK"):        # 调试：启动后直接打开某段对话
 		call_deferred("_talk", OS.get_environment("CATFISH_TALK"))
+	if OS.has_environment("CATFISH_CHOOSE"):      # 调试：对话打开后自动选第 N 个选项（从 0 数）
+		call_deferred("_debug_choose", OS.get_environment("CATFISH_CHOOSE").to_int())
 	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
 		_debug_act_frame = OS.get_environment("CATFISH_ACT_AT").to_int()
 	if OS.has_environment("CATFISH_CLICK"):       # 调试：帧号:x,y  在该帧模拟点击界面坐标 (x,y)
@@ -855,6 +857,10 @@ func _interact() -> void:
 
 
 ## 打开一段对话（只在完整窗口里；迷你窗里提示放大）。
+func _debug_choose(i: int) -> void:
+	await get_tree().create_timer(0.8).timeout
+	dialog.choose(i)
+
 func _talk(id: String) -> void:
 	if mini:
 		_toast("放大窗口", "再来聊天")

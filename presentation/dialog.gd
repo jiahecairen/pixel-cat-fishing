@@ -147,6 +147,8 @@ func choose(i: int) -> void:
 		m.game.state.story[str(k)] = int(sets[k])
 	if bool(c.get("once", false)):
 		m.game.state.story["said_%s_%d" % [_node, i]] = 1
+	if str(c.get("action", "")) != "":          # 选项自带的动作：对话结束后交给主界面
+		_pending_action = str(c["action"])
 	_goto(str(c.get("next", "")))
 
 # ------------------------------------------------------------------ 输入
