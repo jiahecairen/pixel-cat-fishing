@@ -277,10 +277,15 @@ func auto_fish_x() -> float:
 		return x0 + float(_rng.randi_range(0, 340))
 	return float(pick_water_x())
 
-## 回镇后自动安排：鱼篓够 30% 去摊位卖鱼，不够就随机挑近处水域去钓鱼。
+## 雾灯岛上：从 x 走到最近的钓位，要不要超过 reach_s 秒（默认 10 秒）。
+func island_spot_reachable(cat_x: float) -> bool:
+	var secs := absf(nearest_spot_x(cat_x) - cat_x) / (float(auto_cfg().get("walk_px_s", 70)) * move_speed())
+	return secs <= float(auto_cfg().get("reach_s", 10))
+
+## 回镇后自动安排：鱼篓超过 30% 去摊位卖鱼，不超过（含 30%）就随机挑近处水域去钓鱼。
 func end_roam(fraction_to_stall: float, fraction_to_boat: float, by_policy: bool = false) -> void:
 	var to_stall := not state.basket.is_empty()
-	if by_policy and to_stall and economy.basket_percent(state) < int(auto_cfg().get("sell_pct", 30)):
+	if by_policy and to_stall and economy.basket_percent(state) <= int(auto_cfg().get("sell_pct", 30)):
 		to_stall = false
 	if by_policy and not to_stall:
 		journey.set_fish_spot(pick_water_x())
@@ -481,9 +486,23 @@ func island_walk_min() -> float:
 		return island_x() - float(island_info().get("walk_west", 760))
 	return lake_spot_x()
 
-## 小猫是不是站在湖边的钓位上。
+## 修好的拱桥正中间的钓位（小猫站在桥顶，正对着画面钓鱼）。
+func bridge_spot_x() -> float:
+	var lk := island_lake()
+	return (lk.x + lk.y) / 2.0 - 16.0
+
+func at_bridge_spot() -> bool:
+	return bridge_built() and journey.on_island() and absf(float(journey.roam_x()) - bridge_spot_x()) <= 3.0
+
+## 离小猫（左端 x）最近的钓位：在桥上就是桥顶，否则是湖东岸。
+func nearest_spot_x(cat_x: float) -> float:
+	if bridge_built() and absf(cat_x - bridge_spot_x()) < absf(cat_x - lake_spot_x()):
+		return bridge_spot_x()
+	return lake_spot_x()
+
+## 小猫是不是站在能钓鱼的位置（湖东岸或桥顶）。
 func at_lake_spot() -> bool:
-	return journey.on_island() and absf(float(journey.roam_x()) - lake_spot_x()) <= 3.0
+	return journey.on_island() and (absf(float(journey.roam_x()) - lake_spot_x()) <= 3.0 or at_bridge_spot())
 
 func island_keeper_x() -> float:
 	return island_x() - float(island_info().get("keeper_off", 196))

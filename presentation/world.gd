@@ -42,6 +42,11 @@ const HOUSES := [["house_3", 652], ["house_1", 818], ["house_2", 872], ["house_0
 const TREES := [716, 940]
 
 # 相对小猫贴图左上角的偏移
+const BRIDGE_H := 9.0                 # 拱桥中间比地面高几像素
+const FRONT_HAND := {6: Vector2(25, 11), 7: Vector2(21, 25), 8: Vector2(22, 19)}   # 正面小猫（桥顶）手握竿的位置，按帧
+const FRONT_TIP_IDLE := Vector2(31, 0)
+const FRONT_TIP_WAIT := Vector2(37, 8)
+const FRONT_TIP_REEL := Vector2(33, -10)
 const HAND := Vector2(21, 22)
 const TIP_IDLE := Vector2(33, 6)
 const TIP_WAIT := Vector2(38, 12)
@@ -89,7 +94,21 @@ func _ease(p: float) -> float:
 func boat_y(t: int) -> float:
 	return WATER_Y - 9 + (1 if (t / 900) % 2 == 0 else 0)
 
+## 拱桥在 x（世界坐标）处比地面高多少像素；桥外是 0。
+func bridge_lift(x: float) -> float:
+	var g = m.game
+	if not g.bridge_built():
+		return 0.0
+	var lk: Vector2 = g.island_lake()
+	var half := (lk.y - lk.x) / 2.0 + 6.0
+	var u := (x - (lk.x + lk.y) / 2.0) / half
+	if absf(u) >= 1.0:
+		return 0.0
+	return roundf(BRIDGE_H * (1.0 - u * u))
+
 func bobber_rest() -> Vector2:
+	if m.game.at_bridge_spot():
+		return Vector2(cat_pos.x + FRONT_TIP_WAIT.x - 2.0, GROUND_Y + 4.0)    # 桥顶：浮漂落在桥下的水面
 	if m.game.journey.on_island():
 		return Vector2(cat_pos.x + 64, GROUND_Y + (3 if m.game.bridge_built() else 1))   # 湖边：画在镜像里，实际落在小猫左边的湖面
 	return Vector2(boat_x + 74, WATER_Y - 3)
@@ -136,7 +155,7 @@ func update(now: int, t: int) -> void:
 			walk_behind = roam_behind
 			cat_pos = Vector2(rx, roundf(ry))
 		Journey.Activity.ISLAND:
-			cat_pos = Vector2(float(j.roam_x()), float(GROUND_Y - 28))
+			cat_pos = Vector2(float(j.roam_x()), float(GROUND_Y - 28) - bridge_lift(float(j.roam_x()) + 16.0))
 		Journey.Activity.VENDING, Journey.Activity.SOLD_OUT:
 			cat_pos = Vector2(STALL_CAT_X, GROUND_Y - 29)      # 脚踩在地面上
 		_:
@@ -538,13 +557,27 @@ func _draw_island_extras(left: float, right: float, t: int) -> void:
 				m.draw_rect(Rect2(px0 + 4, py0 - 3, 1, 3), Pal.U_K)
 				if g.pot_ready(i):
 					m.tex_frame("sparkle", Vector2(px0 + 1, py0 - 9), (t / 250 + i) % 2, 2)
-	# 修好的桥横在湖上
+	# 修好的拱桥：桥面中间高、两头落到岸上，下面立着几根桥墩，桥下的水是通的
 	if g.bridge_built() and lk0.y > left - 20 and lk0.x < right + 20:
-		m.draw_rect(Rect2(lk0.x - 6, GROUND_Y - 1, lk0.y - lk0.x + 12, 3), Pal.L_N)
-		m.draw_rect(Rect2(lk0.x - 6, GROUND_Y + 2, lk0.y - lk0.x + 12, 1), Pal.U_O)
-		for k in range(0, int(lk0.y - lk0.x) + 8, 14):
-			m.draw_rect(Rect2(lk0.x - 6 + k, GROUND_Y - 1, 1, 3), Pal.L_O)
-			m.draw_rect(Rect2(lk0.x - 6 + k, GROUND_Y - 6, 2, 5), Pal.U_O)
+		var bx0 := int(lk0.x) - 6
+		var bx1 := int(lk0.y) + 6
+		var mid := (lk0.x + lk0.y) / 2.0
+		for pier in [-48, 0, 48]:
+			var px1 := mid + float(pier) - 2.0
+			var top := GROUND_Y + 3 - bridge_lift(px1)
+			m.draw_rect(Rect2(px1, top, 4, GROUND_Y + 10 - top), Pal.L_O)
+			m.draw_rect(Rect2(px1 + 3, top, 1, GROUND_Y + 10 - top), Pal.U_O)
+			m.draw_rect(Rect2(px1 - 1, top, 6, 1), Pal.U_O)
+		for bx in range(bx0, bx1):
+			var lf := bridge_lift(float(bx) + 0.5)
+			var dy := GROUND_Y - 1 - lf
+			m.draw_rect(Rect2(bx, dy, 1, 3), Pal.L_N)
+			m.draw_rect(Rect2(bx, dy + 3, 1, 1), Pal.U_O)
+			if (bx - bx0) % 10 == 0:
+				m.draw_rect(Rect2(bx, dy, 1, 3), Pal.L_O)
+			if (bx - bx0) % 14 == 0:
+				m.draw_rect(Rect2(bx, dy - 6, 2, 6), Pal.U_O)
+			m.draw_rect(Rect2(bx, dy - 6, 1, 1), Pal.L_O)
 	# 西岸旧营地的木箱
 	var cx0: float = g.west_chest_x()
 	if g.bridge_built() and cx0 > left - 30 and cx0 < right + 10:
@@ -983,6 +1016,8 @@ var _fx_retract_t: int = -1
 
 ## 浮漂处的水面高度；岛上是湖面，而且画面是镜像的（小猫朝西），x 要翻回来。
 func _fx_y() -> float:
+	if m.game.at_bridge_spot():
+		return float(GROUND_Y + 4)
 	if m.game.journey.on_island():
 		return float(GROUND_Y + (2 if m.game.bridge_built() else 0))
 	return float(WATER_Y)
@@ -1375,7 +1410,26 @@ func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:
 ## 湖边钓鱼：把船上那套坐姿钓鱼左右镜像过来（小猫朝西对着湖）。
 var _mirror := false
 
+## 正面小猫的帧：6 抛竿 / 7 钓鱼 / 8 收杆。
+func front_frame() -> int:
+	match m.game.fishing.state:
+		Fishing.State.CASTING, Fishing.State.BAITING, Fishing.State.TANGLED:
+			return 6
+		Fishing.State.HOOKED, Fishing.State.REELING, Fishing.State.SETTLEMENT:
+			return 8
+	return 7
+
+func _hand() -> Vector2:
+	if m.game.at_bridge_spot():
+		return FRONT_HAND[front_frame()]
+	return HAND
+
 func _draw_lake_fishing(t: int, now: int) -> void:
+	if m.game.at_bridge_spot():
+		m.draw_cat(cat_pos, front_frame(), false)
+		_mirror = false
+		_draw_fishing(t, now)
+		return
 	var cx := cat_pos.x + 16.0
 	m.draw_set_transform_matrix(Transform2D(Vector2(-1, 0), Vector2(0, 1), Vector2(2.0 * cx - m.cam.x, -m.cam.y)))
 	var frame := (t / 700) % 2
@@ -1470,24 +1524,28 @@ func _draw_fishing(t: int, now: int) -> void:
 	var prog: float = m.game.fishing.progress(now)
 	var rest := bobber_rest()
 	_bobber_fx(fs, rest, t)
-	var tip := TIP_IDLE
+	var front: bool = m.game.at_bridge_spot()
+	var T_IDLE := FRONT_TIP_IDLE if front else TIP_IDLE
+	var T_WAIT := FRONT_TIP_WAIT if front else TIP_WAIT
+	var T_REEL := FRONT_TIP_REEL if front else TIP_REEL
+	var tip := T_IDLE
 	var bobber := Vector2.INF     # INF = 不画浮漂
 	var fish_tex: Texture2D = null
 	var fish_pos := Vector2.ZERO
 	match fs:
 		Fishing.State.CASTING:
-			tip = TIP_IDLE.lerp(TIP_WAIT, prog)
+			tip = T_IDLE.lerp(T_WAIT, prog)
 			if prog > 0.4:
 				var k := (prog - 0.4) / 0.6
 				bobber = ((cat_pos + tip).lerp(rest, k) + Vector2(0, -10.0 * sin(k * PI))).round()
 		Fishing.State.BAITING:
-			tip = TIP_IDLE
+			tip = T_IDLE
 		Fishing.State.WAITING:
-			tip = TIP_WAIT
+			tip = T_WAIT
 			bobber = rest + Vector2(0, (t / 800) % 2)
 		Fishing.State.TWITCH:
 			# 浮漂动一下：往下点两次，每次点下去溅起一圈小水纹——可能是鱼，也可能只是虚惊一场
-			tip = TIP_WAIT + Vector2(0, 1 if sin(prog * TAU * 2.0) > 0.4 else 0)
+			tip = T_WAIT + Vector2(0, 1 if sin(prog * TAU * 2.0) > 0.4 else 0)
 			var dip := maxf(0.0, sin(prog * TAU * 2.0))
 			bobber = rest + Vector2(0, roundf(dip * 3.0))
 			if dip > 0.5:
@@ -1500,23 +1558,23 @@ func _draw_fishing(t: int, now: int) -> void:
 				_fx_dip_up = false
 		Fishing.State.TANGLED:
 			# 空军：把竿提起来，线缠成一团，头顶冒出一团乱麻
-			tip = TIP_WAIT.lerp(TIP_IDLE, clampf(prog * 3.0, 0.0, 1.0))
+			tip = T_WAIT.lerp(TIP_IDLE, clampf(prog * 3.0, 0.0, 1.0))
 			if prog < 0.3:
 				bobber = (rest.lerp(cat_pos + tip, prog / 0.3)).round()
 		Fishing.State.HOOKED:
-			tip = TIP_WAIT + Vector2(1, 2)
+			tip = T_WAIT + Vector2(1, 2)
 			bobber = rest + Vector2((t / 80) % 2, 3)
 			m.draw_texture(m.tex["bang"], cat_pos + Vector2(24, -12))
 		Fishing.State.REELING:
-			tip = TIP_WAIT.lerp(TIP_REEL, minf(1.0, prog * 2.0))
+			tip = T_WAIT.lerp(T_REEL, minf(1.0, prog * 2.0))
 			fish_tex = _hooked_tex()
-			fish_pos = (rest.lerp(cat_pos + TIP_REEL + Vector2(-6, 8), prog)).round()
+			fish_pos = (rest.lerp(cat_pos + T_REEL + Vector2(-6, 8), prog)).round()
 		Fishing.State.SETTLEMENT:
-			tip = TIP_REEL.lerp(TIP_IDLE, prog)
+			tip = T_REEL.lerp(TIP_IDLE, prog)
 			fish_tex = _hooked_tex()
 			fish_pos = (cat_pos + Vector2(8, -12 - 6.0 * prog)).round()
 	var tip_abs := (cat_pos + tip).round()
-	m.pixel_line(cat_pos + HAND, tip_abs, Pal.U_O)
+	m.pixel_line(cat_pos + _hand(), tip_abs, Pal.U_O)
 	if bobber != Vector2.INF:
 		m.pixel_line(tip_abs, bobber + Vector2(2, 0), Pal.L_W)
 		m.draw_texture(m.tex["bobber"], bobber)

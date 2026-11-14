@@ -10,6 +10,7 @@ const NPC_NAMES := {"tackle": "渔具店", "tailor": "裁缝铺"}
 
 var open: bool = false
 var page: int = 0
+var dex_page: int = 0
 var sel_y: int = 2026
 var sel_m: int = 1
 var sel_d: int = 1
@@ -92,6 +93,28 @@ func shift_month(delta: int) -> void:
 	if _key(y, mo, sel_d) > _key(t[0], t[1], t[2]):
 		sel_d = int(t[2])
 
+# ------------------------------------------------------------------ 图鉴翻页
+## 一页放几行（每行 3 条）：窗口矮就少放，保证最后一行不会压到边框。
+func dex_rows() -> int:
+	return maxi(1, int((rect().size.y - 20.0 - 15.0) / 38.0))
+
+func dex_per_page() -> int:
+	return dex_rows() * 3
+
+func dex_pages() -> int:
+	return maxi(1, int(ceil(float(m.game.fish_list.size()) / float(dex_per_page()))))
+
+func dex_turn(delta: int) -> void:
+	dex_page = clampi(dex_page + delta, 0, dex_pages() - 1)
+
+func _dex_prev_rect() -> Rect2:
+	var r := rect()
+	return Rect2(r.end.x - 52, r.end.y - 14, 11, 11)
+
+func _dex_next_rect() -> Rect2:
+	var r := rect()
+	return Rect2(r.end.x - 15, r.end.y - 14, 11, 11)
+
 # ------------------------------------------------------------------ 输入
 func _chart_rect() -> Rect2:
 	var r := rect()
@@ -127,6 +150,13 @@ func click(p: Vector2) -> bool:
 				page = i
 				m.play("click")
 			return true
+	if page == 0:
+		if _dex_prev_rect().has_point(p):
+			dex_turn(-1)
+			m.play("click")
+		elif _dex_next_rect().has_point(p):
+			dex_turn(1)
+			m.play("click")
 	if page == 2:
 		if _prev_month_rect().has_point(p):
 			shift_month(-1)
@@ -166,9 +196,13 @@ func key(keycode: int) -> bool:
 		KEY_LEFT, KEY_A:
 			if page == 2:
 				shift_day(-1)
+			elif page == 0:
+				dex_turn(-1)
 		KEY_RIGHT, KEY_D:
 			if page == 2:
 				shift_day(1)
+			elif page == 0:
+				dex_turn(1)
 		KEY_UP, KEY_W:
 			if page == 2:
 				shift_month(-1)
@@ -233,9 +267,14 @@ func _draw_dex(r: Rect2) -> void:
 	var counts: Dictionary = g.state.stats["fish_counts"]
 	var best: Dictionary = g.state.stats["fish_best"]
 	var cw := (r.size.x - 12.0) / 3.0
-	for i in g.fish_list.size():
+	dex_page = clampi(dex_page, 0, dex_pages() - 1)
+	var per := dex_per_page()
+	for k in per:
+		var i := dex_page * per + k
+		if i >= g.fish_list.size():
+			break
 		var f: Dictionary = g.fish_list[i]
-		var c := r.position + Vector2(6.0 + (i % 3) * cw, 20.0 + (i / 3) * 38.0)
+		var c := r.position + Vector2(6.0 + (k % 3) * cw, 20.0 + (k / 3) * 38.0)
 		var n := int(counts.get(f["id"], 0))
 		m.draw_rect(Rect2(c, Vector2(cw - 4, 35)), Pal.U_A)
 		m.draw_rect(Rect2(c + Vector2(1, 1), Vector2(cw - 6, 33)), Pal.U_B if n > 0 else Pal.U_K)
@@ -248,6 +287,11 @@ func _draw_dex(r: Rect2) -> void:
 				m.text("%dcm" % b, c + Vector2(28, 26), Pal.L_Y)
 	m.label("共钓到", r.position + Vector2(6, r.size.y - 13), Pal.L_A)
 	m.text(str(int(g.state.stats["total_fish"])), r.position + Vector2(40, r.size.y - 10), Pal.L_W)
+	if dex_pages() > 1:
+		m.tex_frame("btn_left", _dex_prev_rect().position, 0 if dex_page > 0 else 1, 2)
+		m.tex_frame("btn_right", _dex_next_rect().position, 0 if dex_page < dex_pages() - 1 else 1, 2)
+		var ps := "%d/%d" % [dex_page + 1, dex_pages()]
+		m.text(ps, Vector2(r.end.x - 33.0 - ps.length() * 2.0, r.end.y - 11), Pal.L_W)
 
 func _draw_records(r: Rect2) -> void:
 	var g = m.game

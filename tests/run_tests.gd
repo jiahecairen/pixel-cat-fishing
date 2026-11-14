@@ -60,6 +60,7 @@ func _init() -> void:
 		test_v055(balance, fish)
 		test_v056(balance, fish)
 		test_v059(balance, fish)
+		test_v061(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -1514,6 +1515,49 @@ func test_v059(balance: Dictionary, fish: Array) -> void:
 	var used := g3.inventory.slots_used(g3.state)
 	check(used == 3, "先把格子占满：铃铛 20 个占 2 格 + 珍珠 1 格")
 	check(g3.give("plank") == "replaced" and g3.inventory.count(g3.state, "bell") == 10 and g3.inventory.count(g3.state, "plank") == 1, "木板顶掉一格铃铛（10 个），不是整堆 20 个")
+
+func test_v061(balance: Dictionary, fish: Array) -> void:
+	print("v061: 拱桥桥顶钓位、蟹笼、自动规则（雾灯岛 80%、10 秒）")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(161))
+	g.state.effects["bridge"] = 1
+	g.journey._enter(Journey.Activity.ISLAND, 0, 0)
+	var bx := g.bridge_spot_x()
+	var lx := g.lake_spot_x()
+	check(bx < lx - 20.0, "桥顶钓位在湖东岸钓位西侧")
+	g.journey.set_roam_x(int(bx))
+	check(g.at_bridge_spot() and g.at_lake_spot(), "站在桥顶算在钓位上")
+	check(g.nearest_spot_x(bx + 5.0) == bx and g.nearest_spot_x(lx - 3.0) == lx, "最近的钓位：桥顶或东岸")
+	g.journey.set_roam_x(int(lx))
+	check(g.at_lake_spot() and not g.at_bridge_spot(), "东岸钓位不是桥顶")
+	g.state.effects["bridge"] = 0
+	g.journey.set_roam_x(int(bx))
+	check(not g.at_lake_spot(), "没建桥时桥顶不是钓位")
+	# 10 秒内能不能走到钓位
+	g.state.effects["bridge"] = 1
+	g.journey.set_roam_x(int(g.island_land_x()))
+	var far := absf(g.nearest_spot_x(g.island_land_x()) - g.island_land_x())
+	check(g.island_spot_reachable(g.island_land_x()) == (far / 70.0 <= 10.0), "走到钓位的时间按 10 秒判断")
+	g.journey.set_roam_x(int(lx))
+	check(g.island_spot_reachable(lx), "已经在钓位：当然够得着")
+	# 回镇后：鱼篓正好 30% 也去钓鱼，不再卖
+	var g2 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(162))
+	var n := 0
+	while g2.economy.basket_percent(g2.state) < 30:
+		g2.economy.add_catch(g2.state, "e%d" % n, "bass", false)
+		n += 1
+	var pct := g2.economy.basket_percent(g2.state)
+	var want_fish := pct <= 30
+	g2.journey._enter(Journey.Activity.ROAM, 0, 0)
+	g2.end_roam(0.5, 0.5, true)
+	check((g2.journey.activity() == Journey.Activity.WALK_TO_BOAT) == want_fish, "鱼篓 %d%%：不超过 30%% 去钓鱼，超过去卖" % pct)
+	# 蟹笼：钓着鱼也能收
+	var g3 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(163))
+	g3.journey._enter(Journey.Activity.ISLAND, 0, 0)
+	g3.journey.set_roam_x(int(g3.lake_spot_x()))
+	g3.state.effects["pot_0"] = 1
+	check(g3.pots_ready() >= 1, "蟹笼到时间了")
+	var got := g3.collect_pots()
+	check(int(got["gold"]) > 0 and g3.pots_ready() == 0, "收完蟹笼得到铜币，笼子重新下好")
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

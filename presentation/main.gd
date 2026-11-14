@@ -48,7 +48,7 @@ const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_dest", "lighthouse", "btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "noren_ship", "ship_model", "blueprint", "anchor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
-const CAT_FRAMES := 6
+const CAT_FRAMES := 9
 
 # ---- 界面布局（界面坐标） ----
 const PANEL_POS := Vector2(15, 1)
@@ -542,6 +542,7 @@ func _update_roam(dt: float) -> void:
 				if _stand_cast:
 					_stand_cast = false
 					world.roam_flip = true
+					_collect_pots_fx()
 					if game.cast_line():
 						play("click")
 	if int(game.state.effects.get("lake_resume", 0)) == 1 and j.activity() == Journey.Activity.FISHING:
@@ -852,13 +853,8 @@ func _interact_island(x: float) -> void:
 				_float("+1", str(idef.get("sprite", "")), world.cat_pos + Vector2(34, 8))
 	elif world.island_near_lake(x):
 		if game.at_lake_spot():
-			if game.pots_ready() > 0 and not game.line_out():
-				var pc: Dictionary = game.collect_pots()
-				play("catch")
-				_toast("收蟹笼", "有收获")
-				_float_money(int(pc["gold"]), world.cat_pos + Vector2(-24, 8))
-				for iid in pc["items"]:
-					_float("+%d" % int(pc["items"][iid]), str(game.inventory.by_id.get(iid, {}).get("sprite", "")), world.cat_pos + Vector2(-24, -6))
+			if game.pots_ready() > 0:
+				_collect_pots_fx()
 			elif game.line_out():
 				game.reel_in()
 				play("click")
@@ -870,7 +866,7 @@ func _interact_island(x: float) -> void:
 			else:
 				play("deny")
 		elif not game.pomodoro.is_break():
-			_stand_to = game.lake_spot_x()       # 慢慢走到湖边，到了自动甩竿
+			_stand_to = game.nearest_spot_x(float(game.journey.roam_x()))       # 慢慢走到钓位（有蟹笼好了就先收），到了自动甩竿
 			_stand_cast = true
 			play("click")
 		else:
@@ -2126,7 +2122,7 @@ func _pixel_line(a: Vector2, b: Vector2, color: Color) -> void:
 
 
 ## 迷你窗挂机：在海上/岛上（任何位置）鱼篓不到 50% 就自动钓（钓不了就去附近水域），到了 50% 自动回镇卖；
-## 卖完回来，鱼篓不到 30% 就去随机的近水域钓鱼，到 30% 就继续去摊位卖鱼（这一条在 game.end_roam）。
+## 卖完回来，鱼篓不超过 30% 就去随机的近水域钓鱼，超过 30% 就继续去摊位卖鱼（这一条在 game.end_roam）。
 func _auto_policy() -> void:
 	var j: Journey = game.journey
 	var pct: int = game.economy.basket_percent(game.state)
@@ -2143,10 +2139,13 @@ func _auto_policy() -> void:
 				if game.cast_line():
 					play("cast")
 		Journey.Activity.ISLAND:
-			if has_fish and pct >= fish_pct:
-				_town_button()                       # 够了：走到码头上船，回镇卖鱼
+			var isl_pct: int = int(game.auto_cfg().get("island_fish_pct", 80))
+			if has_fish and pct > isl_pct:
+				_town_button()                       # 超过 80%：走到码头上船，回镇卖鱼
+			elif not game.at_lake_spot() and not game.island_spot_reachable(float(j.roam_x())):
+				_town_button()                       # 10 秒内走不到钓位：离岛去别的水域（回镇路上再安排）
 			elif not game.at_lake_spot():
-				_stand_to = game.lake_spot_x()       # 岛上别的位置：走去湖边接着钓
+				_stand_to = game.nearest_spot_x(float(j.roam_x()))       # 岛上别的位置：走去钓位接着钓
 				_stand_cast = true
 			elif not game.line_out():
 				world.roam_flip = true
@@ -2155,6 +2154,19 @@ func _auto_policy() -> void:
 		Journey.Activity.SOLD_OUT:
 			game.journey.set_fish_spot(game.pick_water_x())
 			_go_fishing()
+
+## 在钓位上收好了的蟹笼：钱、物品飘字，不影响正在钓的鱼线。
+func _collect_pots_fx() -> void:
+	if game.pots_ready() <= 0:
+		return
+	var pc: Dictionary = game.collect_pots()
+	if int(pc["gold"]) <= 0:
+		return
+	play("catch")
+	_toast("收蟹笼", "有收获")
+	_float_money(int(pc["gold"]), world.cat_pos + Vector2(-24, 8))
+	for iid in pc["items"]:
+		_float("+%d" % int(pc["items"][iid]), str(game.inventory.by_id.get(iid, {}).get("sprite", "")), world.cat_pos + Vector2(-24, -6))
 
 ## 岛上此刻站的位置能做什么，作为屏幕底部的提示文字。
 func _island_hint(ix: float) -> String:
@@ -2172,10 +2184,10 @@ func _island_hint(ix: float) -> String:
 		return "空格键拾取"
 	if world.island_near_lake(ix):
 		if game.at_lake_spot():
-			if game.pots_ready() > 0 and not game.line_out():
+			if game.pots_ready() > 0:
 				return "空格键收蟹笼"
 			return "空格键收竿" if game.line_out() else "空格键钓鱼"
-		return "空格键去湖边钓鱼"
+		return "空格键收蟹笼" if game.pots_ready() > 0 else "空格键钓鱼"
 	if ix <= game.island_walk_min() + 2.0:
 		return "岛的最西边" if game.bridge_built() else "岛的西边还没开发"
 	return ""
