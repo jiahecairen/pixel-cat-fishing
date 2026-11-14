@@ -676,6 +676,33 @@ func walk(dx: float, dy: float) -> bool:
 	r["y"] = int(floor(p.y))
 	return true
 
+## 卡住自救：脚下的位置被石头、岩壁、梯子占着（旧存档、改了碰撞大小、炸弹之后都可能），就挪到最近的能站的地方。返回是否挪了。
+func unstick() -> bool:
+	if not in_run():
+		return false
+	var p := fpos()
+	if _free_at(p):
+		return false
+	var best := Vector2.INF
+	var bd := 1.0e9
+	for cy in range(int(p.y) - 5, int(p.y) + 6):
+		for cx in range(int(p.x) - 5, int(p.x) + 6):
+			if block(cx, cy) != "":
+				continue
+			var c := Vector2(cx + 0.5, cy + 0.5)
+			if _free_at(c) and c.distance_to(p) < bd:
+				bd = c.distance_to(p)
+				best = c
+	if best == Vector2.INF:
+		var en := entrance(floor_n())
+		best = Vector2(en.x + 0.5, en.y + 1.5)
+	var r := run()
+	r["fx"] = best.x
+	r["fy"] = best.y
+	r["x"] = int(floor(best.x))
+	r["y"] = int(floor(best.y))
+	return true
+
 ## 走进相邻的空格（四个方向都行；一格一格走，测试和旧逻辑用）。
 func move(dx: int, dy: int, now_ms: int = 0) -> bool:
 	var p := pos()

@@ -191,6 +191,8 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 	var now: int = m.game.now_ms()
 	for e in mn.update(now):
 		_on_event(e)
+	if mn.unstick():                           # 重启后站在石头里（旧存档、碰撞改过）：挪到最近的空地
+		_mcam = Vector2.INF
 	mine_moving = false
 	if menu != "":
 		mn.stop_dig(now)

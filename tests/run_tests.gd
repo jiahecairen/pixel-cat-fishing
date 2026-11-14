@@ -68,6 +68,7 @@ func _init() -> void:
 		test_v078(balance, fish)
 		test_v082(balance, fish)
 		test_v083(balance, fish)
+		test_unstick(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -2385,3 +2386,29 @@ func test_v083(balance: Dictionary, fish: Array) -> void:
 			found_sets += 1
 	check(found_sets == 3, "三道菜都有持续时间（分钟）")
 	check(float(g.mine.cfg()["layout"].get("crate_chance", 1.0)) < 0.5, "木箱概率调低了")
+
+func test_unstick(balance: Dictionary, fish: Array) -> void:
+	print("v0.83: 重启后站在石头里会被挪到空地")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(84))
+	var mn = g.mine
+	mn.ensure(clock.t)
+	mn.begin_run(1, clock.t)
+	_clear_crates(mn)
+	var rock := Vector2i(-1, -1)
+	for yy in range(2, mn.height()):
+		for xx in mn.width():
+			if rock.x < 0 and mn.block(xx, yy) in ["dirt", "stone", "rock", "deep"] and mn.has_rock(xx, yy):
+				rock = Vector2i(xx, yy)
+	check(rock.x >= 0, "找到一块石头")
+	mn.m()["run"]["x"] = rock.x
+	mn.m()["run"]["y"] = rock.y
+	mn.m()["run"].erase("fx")
+	check(not mn._free_at(mn.fpos()), "存档里的位置在石头正中（卡住了）")
+	check(mn.unstick() and mn._free_at(mn.fpos()) and mn.block(mn.pos().x, mn.pos().y) == "", "自救：挪到了最近的空地")
+	check(not mn.unstick(), "站在空地上不会乱挪")
+	var en: Vector2i = mn.entrance(1)
+	mn.m()["run"]["x"] = en.x
+	mn.m()["run"]["y"] = en.y
+	mn.m()["run"].erase("fx")
+	check(mn.unstick() and mn.pos() != en and mn.block(mn.pos().x, mn.pos().y) == "", "站在梯子里也会被挪出来")
