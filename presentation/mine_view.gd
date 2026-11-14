@@ -6,8 +6,9 @@ const Pal := preload("res://presentation/palette.gd")
 const MoneyC := preload("res://core/money.gd")
 
 const CELL := 32
-const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "rubble": 1}
+const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "tnt": 15, "exit_mark": 16, "hole": 17}
 const CRACK0 := 11
+const MINE_FRAMES := 18
 const CROSS_MS := 4200
 const RIDE_MS := 1500
 const ISLE_W := 560.0
@@ -32,8 +33,8 @@ var menu: String = ""           # "" / "shop" / "cook" / "cart" / "repair"
 var menu_sel: int = 0
 var perk_sel: int = 0
 var ride_shaft: int = 1
-var ask_ladder: bool = false
-var _asked_at: int = -1
+var ride_floor: int = 1
+var flashes: Array = []
 var _step_cd: float = 0.0
 var _swing_t: int = 0
 var _shake_t: int = -10000
@@ -70,7 +71,6 @@ func go(r: String) -> void:
 	region = r
 	t0 = Time.get_ticks_msec()
 	menu = ""
-	ask_ladder = false
 	var mn = m.game.mine
 	if r != "":
 		mn.ensure(m.game.now_ms())
@@ -124,11 +124,9 @@ func process(dt: float, dx: int, dy: int) -> void:
 				if mn2.in_run():                  # 上次没结束的一局（中途离开过）：接着挖
 					perk_sel = 0
 					go("mine")
-					_asked_at = -1
-				elif mn2.begin_run(ride_shaft, m.game.now_ms()):
+				elif mn2.begin_run(ride_shaft, m.game.now_ms(), ride_floor):
 					perk_sel = 0
 					go("mine")
-					_asked_at = -1
 				else:
 					go("cave")
 					say("矿车出了点问题，再试一次")
@@ -158,7 +156,7 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 	var now: int = m.game.now_ms()
 	for e in mn.update(now):
 		_on_event(e)
-	if ask_ladder or not mn.draft().is_empty():
+	if not mn.draft().is_empty():
 		mn.stop_dig(now)
 		return
 	_step_cd -= dt
@@ -169,17 +167,15 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 		if mn.digging():
 			mn.stop_dig(now)
 		return
-	var p: Vector2i = mn.pos()
-	# 前面是空的就走过去（挖完一格后按住方向键会接着往前走）
+	# 站在挖开的出口上按↓：下一层
+	if mn.on_exit() and dy > 0 and _step_cd <= 0.0:
+		_descend()
+		return
+	# 前面是空的就走过去（四个方向都行；挖完一格后按住方向键会接着往前走）
 	if not mn.digging() and _step_cd <= 0.0:
 		if mn.move(dx, dy, now):
 			_step_cd = STEP_S / m.game.move_speed()
-			if mn.at_ladder_end() and mn.can_extend() and _asked_at != mn.ladder():
-				ask_ladder = true
-				_asked_at = mn.ladder()
 			return
-	if dy < 0:
-		return
 	var why: String = mn.start_dig(dx, dy, now)
 	match why:
 		"":
@@ -193,19 +189,21 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 		"open":
 			pass
 		"granite":
-			_warn("花岗岩挖不动")
+			_warn("最外圈的花岗岩挖不动")
 		"notool":
 			_warn("没有镐子，去找雾灯岛的老柯要一把")
 		"tool":
 			_warn("太硬了，要更好的镐子（工具店升级）")
-		"ladder":
-			if mn.can_extend():
-				ask_ladder = true
-				_asked_at = mn.ladder()
-			else:
-				_warn("梯子不够长，只能横着挖")
-		"shaft":
-			_warn("只能在竖井里往下挖")
+
+func _descend() -> void:
+	var mn = m.game.mine
+	if mn.descend():
+		_step_cd = 0.3
+		m.play("done")
+		var f: int = mn.floor_n()
+		say("第 %d 层" % f + ("  这里有电梯" if mn.has_elevator() else ""))
+		_mcam = Vector2.INF
+		m.game.dirty = true
 
 func _shake(amp: float, ms: int) -> void:
 	_shake_t = Time.get_ticks_msec() + ms
@@ -221,18 +219,28 @@ func _float(x: int, y: int, s: String, c: Color) -> void:
 	floats.append({"p": Vector2(x * CELL + 16, y * CELL - 4), "s": s, "c": c, "t": Time.get_ticks_msec()})
 
 func _on_event(e: Dictionary) -> void:
+	if e["type"] == "boom":
+		_boom_fx(int(e["x"]), int(e["y"]))
+		return
 	if e["type"] != "dug":
 		return
 	var x: int = e["x"]
 	var y: int = e["y"]
-	_chips(x, y, 14, 90.0)
+	_chips(x, y, 12, 90.0)
 	_shake(2.0, 160)
 	var o := str(e["ore"])
-	if int(e["gold"]) > 0:
+	if o == "exit":
+		_float(x, y, "出口！按↓下一层", Pal.L_Y)
+		m.play("rare")
+		say("找到出口了")
+	elif bool(e["lost"]):
+		_float(x, y, "背包满了", Pal.L_R)
+		_warn("背包满了，回地面卖掉再来")
+	elif int(e["gold"]) > 0:
 		_float(x, y, "+%s" % _price(int(e["gold"])), Pal.L_Y)
-	if str(e["item"]) != "":
+	if str(e["item"]) != "" and not bool(e["lost"]):
 		var nm: String = str(m.game.inventory.by_id.get(e["item"], {}).get("name", e["item"]))
-		_float(x, y - 1, ("%s（包满了）" % nm) if e["lost"] else ("%s +%d" % [nm, int(e["n"])]), Pal.L_W if not e["lost"] else Pal.L_R)
+		_float(x, y - 1, "%s +%d" % [nm, int(e["n"])], Pal.L_W)
 	if bool(e["chest"]):
 		_float(x, y - 2, "宝箱！", Pal.L_Y)
 		_shake(3.5, 260)
@@ -242,13 +250,17 @@ func _on_event(e: Dictionary) -> void:
 		m.play("coin")
 	elif o == "metal" or o == "stone":
 		m.play("buy")
-	else:
+	elif o != "exit" and o != "tnt":
 		m.play("catch")
-	if bool(e["cavein"]):
-		_shake(5.0, 500)
-		say("落石！身后的路被堵住了")
-		m.play("deny")
+	if bool(e["chain"]):
+		_float(x, y, "连锁！", Pal.L_C)
 	m.game.dirty = true
+
+func _boom_fx(x: int, y: int) -> void:
+	_shake(5.0, 380)
+	m.play("deny")
+	flashes.append({"p": Vector2(x * CELL + 16, y * CELL + 16), "t": Time.get_ticks_msec()})
+	_chips(x, y, 22, 140.0)
 
 func _block_color(b: String) -> Color:
 	return {"dirt": Pal.U_O, "stone": Pal.L_A, "rock": Pal.U_A, "deep": Pal.U_S}.get(b, Pal.L_A)
@@ -276,31 +288,20 @@ func key(code: int) -> bool:
 		elif act:
 			_take_perk(perk_sel)
 		return true
-	if ask_ladder:
-		if act:
-			if mn.extend_ladder():
-				say("梯子延长了 %d 格" % int(mn.cfg().get("ladder_rows", 3)))
-				m.play("buy")
-				m.game.dirty = true
-		ask_ladder = false
-		return true
 	if menu != "":
 		_menu_key(code, act)
 		return true
 	if region == "mine":
+		if code in [KEY_B, KEY_X, KEY_F]:
+			_bomb()
+			return true
 		if act:
-			if mn.pos().y == 0:
-				mn.stop_dig(m.game.now_ms())
-				mn.end_run()
-				region = "ride_back"
-				menu = ""
-				t0 = Time.get_ticks_msec()
-				mn.m()["at"] = "cave"
-				m.play("click")
-			elif mn.at_ladder_end() and mn.can_extend():
-				ask_ladder = true
+			if mn.on_exit():
+				_descend()
+			elif mn.on_entrance():
+				_ascend()
 			else:
-				say("爬回最上面一层，按空格回大厅")
+				say("找到出口：挖开发光的洞，站上去按↓；回入口按空格")
 			return true
 		return code in [KEY_UP, KEY_W, KEY_DOWN, KEY_S]
 	if region == "isle" and act:
@@ -310,6 +311,45 @@ func key(code: int) -> bool:
 		_interact_cave()
 		return true
 	return region.begins_with("cross") or region.begins_with("ride")
+
+func _bomb() -> void:
+	var mn = m.game.mine
+	match mn.place_bomb(m.game.now_ms()):
+		"":
+			m.play("click")
+			m.game.dirty = true
+		"empty":
+			_warn("没有炸弹了，去工具店买")
+		"busy":
+			_warn("这里已经放着一颗了")
+
+## 站在入口台阶上：回上一层；第 1 层和有电梯的层直接回大厅，背包里的东西换成钱和材料。
+func _ascend() -> void:
+	var mn = m.game.mine
+	var r: String = mn.ascend()
+	if r == "up":
+		_mcam = Vector2.INF
+		say("回到第 %d 层" % mn.floor_n())
+		m.play("click")
+	elif r == "hall":
+		mn.stop_dig(m.game.now_ms())
+		var res: Dictionary = mn.end_run()
+		var parts: Array = []
+		if int(res["coins"]) > 0:
+			parts.append("+%s" % _price(int(res["coins"])))
+		if int(res["stone"]) > 0:
+			parts.append("石头×%d" % int(res["stone"]))
+		if int(res["metal"]) > 0:
+			parts.append("金属×%d" % int(res["metal"]))
+		if int(res["lost"]) > 0:
+			parts.append("物品栏满了丢了 %d 个" % int(res["lost"]))
+		region = "ride_back"
+		menu = ""
+		t0 = Time.get_ticks_msec()
+		mn.m()["at"] = "cave"
+		m.play("coin" if int(res["coins"]) > 0 else "click")
+		m.game.dirty = true
+		say("回到地面：" + ("  ".join(parts) if not parts.is_empty() else "空手而归"))
 
 func _take_perk(i: int) -> void:
 	var id: String = m.game.mine.choose_perk(i)
@@ -321,9 +361,9 @@ func _take_perk(i: int) -> void:
 
 func _menu_rows() -> int:
 	match menu:
-		"shop": return 3
+		"shop": return 4
 		"cook": return m.game.mine.dishes().size()
-		"cart": return 2
+		"cart": return m.game.mine.start_floors().size() + 1
 	return 1
 
 func _menu_key(code: int, act: bool) -> void:
@@ -387,8 +427,10 @@ func _interact_cave() -> void:
 			_open("repair")
 
 func _cart(i: int) -> void:
-	if i == 0:
+	var fl: Array = m.game.mine.start_floors()
+	if i < fl.size():
 		ride_shaft = 1
+		ride_floor = int(fl[i])
 		menu = ""
 		region = "ride_in"
 		t0 = Time.get_ticks_msec()
@@ -403,18 +445,18 @@ func _buy(i: int) -> void:
 	match i:
 		0: why = mn.buy_level("pick")
 		1: why = mn.buy_level("lamp")
-		2: why = mn.buy_rope(m.game.now_ms())
+		2: why = mn.buy_level("bag")
+		3: why = mn.buy_bomb()
 	match why:
 		"":
 			m.play("buy")
 			m.game.dirty = true
-			say(["买到了：%s" % str(mn.pick_def().get("name", "")), "买到了：%s" % str(mn.lamp_def().get("name", "")), "买到一根绳子"][i])
+			say(["买到了：%s" % str(mn.pick_def().get("name", "")), "买到了：%s" % str(mn.lamp_def().get("name", "")), "背包变大了：%d 格" % mn.bag_cap(), "买到一颗炸弹（有 %d 颗）" % mn.bombs()][i])
 		"gold": say("钱不够")
 		"mat": say("材料不够（石头和金属在矿里挖）")
 		"nopick": say("你还没有镐子，去找雾灯岛的老柯")
 		"max": say("已经是最好的了")
-		"soldout": say("绳子卖完了，过一会儿再来")
-		"bag": say("物品栏满了")
+		"full": say("炸弹带不下了（最多 %d 颗）" % mn.bomb_carry())
 	if why != "":
 		m.play("deny")
 
@@ -454,11 +496,14 @@ func hint() -> String:
 				"rail2": return "空格键看 2 号井"
 			return "方向键走动"
 		"mine":
-			if ask_ladder or not m.game.mine.draft().is_empty():
+			var mh = m.game.mine
+			if not mh.draft().is_empty():
 				return ""
-			if m.game.mine.pos().y == 0:
-				return "按住方向键挖  空格键回大厅"
-			return "按住方向键挖  ↑↓爬梯子"
+			if mh.on_exit():
+				return "↓下一层"
+			if mh.on_entrance():
+				return "空格键回上一层" if (mh.floor_n() > 1 and not mh.has_elevator()) else "空格键回大厅（背包换钱）"
+			return "方向键挖  B 放炸弹（有 %d 颗）" % mh.bombs()
 	return ""
 
 ## ================= 绘制 =================
@@ -603,9 +648,10 @@ func _draw_menu(view: Vector2) -> void:
 				rows.append([pk, ("升级 %s：%s" % [str(mn.pick_def(mn.pick() + 1).get("name", "")), _cost_text(pc)]) if not pc.is_empty() else "已经最好"])
 			var lc: Dictionary = mn.next_cost("lamp")
 			rows.append(["灯：%s（光圈 %.1f 格）" % [str(mn.lamp_def().get("name", "")), mn.lamp_def().get("radius", 1.6)], ("升级 %s：%s" % [str(mn.lamp_def(mn.lamp() + 1).get("name", "")), _cost_text(lc)]) if not lc.is_empty() else "已经最好"])
-			var rc: Dictionary = mn.cfg().get("rope", {})
-			rows.append(["绳子（剩 %d/%d，每小时补 %d）" % [mn.rope_stock(m.game.now_ms()), int(rc.get("cap", 6)), int(rc.get("per_hour", 2))], "%s 一根" % _price(int(rc.get("price", 25)))])
-			_panel(view, "鼹鼠工具店", _wallet_text(), rows, "↑↓选择  空格买  Esc离开", 112.0)
+			var bc: Dictionary = mn.next_cost("bag")
+			rows.append(["背包：%d 格" % mn.bag_cap(), ("升级到 %d 格：%s" % [int((mn.cfg().get("bag", {}).get("sizes", []) as Array)[mn.bag_lv() + 1]), _cost_text(bc)]) if not bc.is_empty() else "已经最大"])
+			rows.append(["炸弹（有 %d/%d 颗）" % [mn.bombs(), mn.bomb_carry()], "%s 一颗，一次炸一片" % _price(mn.bomb_price())])
+			_panel(view, "鼹鼠工具店", _wallet_text(), rows, "↑↓选择  空格买  Esc离开", 20.0 + rows.size() * 28.0 + 20.0)
 		"cook":
 			var rows2: Array = []
 			for d in mn.dishes():
@@ -614,7 +660,11 @@ func _draw_menu(view: Vector2) -> void:
 			var foot := ("已备好：%s" % waiting) if waiting != "" else ("鱼篓里有 %d 条鱼" % m.game.state.basket.size())
 			_panel(view, "鼹鼠饭店  下一次下井生效", _wallet_text(), rows2, foot + "   空格点菜  Esc离开", 20.0 + rows2.size() * 28.0 + 20.0)
 		"cart":
-			_panel(view, "矿车", "", [["1 号井", "接着上次的一局往下挖" if m.game.mine.in_run() else "铁路畅通，直达"], ["2 号井", "铁路坏了"]], "↑↓选择  空格出发  Esc离开", 96.0)
+			var crow: Array = []
+			for f in mn.start_floors():
+				crow.append(["1 号井  第 %d 层" % int(f), "接着上次的一局往下挖" if mn.in_run() else ("铁路畅通，直达" if int(f) == 1 else "上次到过这一层，电梯直达")])
+			crow.append(["2 号井", "铁路坏了"])
+			_panel(view, "矿车", "", crow, "↑↓选择  空格出发  Esc离开", 20.0 + crow.size() * 28.0 + 20.0)
 		"repair":
 			var need: Dictionary = mn.cfg().get("repair2", {})
 			var inv = m.game.inventory
@@ -717,10 +767,14 @@ func _draw_cave(view: Vector2, t: int) -> void:
 func _draw_mine(view: Vector2, t: int) -> void:
 	var mn = m.game.mine
 	var p: Vector2i = mn.pos()
-	var target := Vector2(p.x * CELL + 16 - view.x / 2.0, p.y * CELL + 16 - view.y / 2.0 - 10.0)
+	var mw: float = float(mn.width() * CELL)
+	var mh: float = float(mn.height() * CELL)
+	var target := Vector2(p.x * CELL + 16 - view.x / 2.0, p.y * CELL + 16 - view.y / 2.0)
+	target.x = clampf(target.x, -16.0, maxf(-16.0, mw + 16.0 - view.x)) if mw + 32.0 > view.x else (mw - view.x) / 2.0
+	target.y = clampf(target.y, -16.0, maxf(-16.0, mh + 16.0 - view.y)) if mh + 32.0 > view.y else (mh - view.y) / 2.0
 	if _mcam == Vector2.INF:
 		_mcam = target
-	_mcam = _mcam.lerp(target, 0.18)
+	_mcam = _mcam.lerp(target, 0.2)
 	var cam := _mcam.round()
 	if t < _shake_t:
 		var k := clampf(float(_shake_t - t) / 160.0, 0.0, 1.0)
@@ -729,7 +783,6 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		_shake_amp = 0.0
 	m.draw_rect(Rect2(Vector2.ZERO, view), Pal.U_K)
 	m.draw_set_transform(-cam)
-	var w: int = mn.width()
 	var x0 := int(floor(cam.x / CELL)) - 1
 	var x1 := int(ceil((cam.x + view.x) / CELL)) + 1
 	var y0 := int(floor(cam.y / CELL)) - 1
@@ -737,32 +790,46 @@ func _draw_mine(view: Vector2, t: int) -> void:
 	var now: int = m.game.now_ms()
 	var R: float = mn.light_radius()
 	var dt: Vector2i = mn.dig_target()
-	# 洞口那一行以上：岩顶
-	if y0 < 0:
-		m.draw_rect(Rect2(x0 * CELL, y0 * CELL, (x1 - x0) * CELL, -y0 * CELL), Color("#1d1626"))
-	for y in range(maxi(0, y0), y1):
+	var scout: bool = mn.perk_count("scout") > 0
+	var ex: Vector2i = mn.exit_pos(mn.floor_n())
+	var en: Vector2i = mn.entrance(mn.floor_n())
+	for y in range(y0, y1):
 		for x in range(x0, x1):
 			var pos := Vector2(x * CELL, y * CELL)
 			var b: String = mn.block(x, y)
 			if b == "":
-				m.tex_frame("mine_tiles", pos, TILE["back"], 15)
-				if x == mn.shaft() and y >= 0 and y <= mn.ladder():
-					m.tex_frame("mine_tiles", pos, TILE["ladder"], 15)
+				m.tex_frame("mine_tiles", pos, TILE["back"], MINE_FRAMES)
+				if Vector2i(x, y) == en:
+					m.tex_frame("mine_tiles", pos, TILE["ladder"], MINE_FRAMES)
+				elif Vector2i(x, y) == ex:
+					m.tex_frame("mine_tiles", pos, TILE["hole"], MINE_FRAMES)
 			else:
 				var f: float = mn.progress_at(x, y, now) if b != "granite" else 0.0
 				var shake := Vector2.ZERO
 				if Vector2i(x, y) == dt and f > 0.0:
 					shake = Vector2(roundf(sin(float(t) / 35.0) * (0.5 + f)), 0)
-				m.tex_frame("mine_tiles", pos + shake, TILE.get(b, 0), 15)
-				if b == "rubble":
-					m.draw_rect(Rect2(pos + shake + Vector2(4, 4), Vector2(10, 8)), Pal.U_A)
-					m.draw_rect(Rect2(pos + shake + Vector2(17, 15), Vector2(11, 9)), Pal.U_S)
-				var o: String = mn.ore(x, y) if b != "granite" and b != "rubble" else ""
+				m.tex_frame("mine_tiles", pos + shake, TILE.get(b, 0), MINE_FRAMES)
+				var o: String = mn.ore(x, y) if b != "granite" else ""
 				var seen := Vector2(x - p.x, y - p.y).length() <= R + 0.6
-				if o != "" and seen:
-					m.tex_frame("mine_tiles", pos + shake, TILE["stone_ore" if o == "stone" else o], 15)
+				if o == "exit":
+					if seen or scout:
+						var bob := roundf(sin(float(t) / 160.0) * 1.5)
+						m.tex_frame("mine_tiles", pos + shake + Vector2(0, bob), TILE["exit_mark"], MINE_FRAMES)
+				elif o != "" and seen:
+					m.tex_frame("mine_tiles", pos + shake, TILE["stone_ore" if o == "stone" else o], MINE_FRAMES)
 				if f > 0.02:
-					m.tex_frame("mine_tiles", pos + shake, CRACK0 + clampi(int(f * 4.0), 0, 3), 15)
+					m.tex_frame("mine_tiles", pos + shake, CRACK0 + clampi(int(f * 4.0), 0, 3), MINE_FRAMES)
+	# 放着的炸弹
+	for bm in mn.live_bombs():
+		var bp := Vector2(int(bm["x"]) * CELL + 10, int(bm["y"]) * CELL + 14)
+		m.draw_rect(Rect2(bp + Vector2(-1, -1), Vector2(14, 14)), Pal.U_K)
+		m.draw_rect(Rect2(bp, Vector2(12, 12)), Pal.U_S)
+		m.draw_rect(Rect2(bp + Vector2(2, 2), Vector2(3, 3)), Pal.L_A)
+		m.draw_rect(Rect2(bp + Vector2(6, -4), Vector2(2, 4)), Pal.U_O)
+		if (t / 120) % 2 == 0:
+			m.draw_rect(Rect2(bp + Vector2(6, -7), Vector2(3, 3)), Pal.L_Y)
+		else:
+			m.draw_rect(Rect2(bp + Vector2(6, -7), Vector2(3, 3)), Pal.L_R)
 	# 碎块
 	var keep: Array = []
 	for d in debris:
@@ -787,18 +854,29 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		var tip := Vector2(hx + (-10.0 if flip else 10.0) * (1.0 if sw else 0.6), hy - (10.0 if sw else -4.0))
 		if dirv.y > 0:
 			tip = Vector2(hx + (4.0 if not flip else -4.0), hy + (12.0 if sw else 6.0))
+		elif dirv.y < 0:
+			tip = Vector2(hx + (4.0 if not flip else -4.0), hy - (14.0 if sw else 8.0))
 		m.pixel_line(Vector2(hx, hy), tip, Pal.U_O)
 		m.draw_rect(Rect2(tip - Vector2(2, 1), Vector2(5, 2)), Pal.L_A)
-	# 黑暗：按到小猫的距离一格一格变暗（4 档），洞口那一行有天光
-	for y in range(maxi(0, y0), y1):
+	# 黑暗：按到小猫的距离一格一格变暗（4 档）
+	for y in range(y0, y1):
 		for x in range(x0, x1):
-			var d := Vector2(x - p.x, y - p.y).length()
-			var a := clampf((d - R + 0.5) / 2.0, 0.0, 1.0)
-			if y == 0:
-				a = minf(a, 0.35)
+			var d2 := Vector2(x - p.x, y - p.y).length()
+			var a := clampf((d2 - R + 0.5) / 2.0, 0.0, 1.0)
 			a = floorf(a * 4.0) / 4.0
 			if a > 0.0:
 				m.draw_rect(Rect2(x * CELL, y * CELL, CELL, CELL), Color(0.06, 0.04, 0.09, a * 0.95))
+	# 爆炸的闪光（盖在黑暗上面）
+	var fk: Array = []
+	for fl in flashes:
+		var age3 := float(t - int(fl["t"])) / 1000.0
+		if age3 < 0.35:
+			fk.append(fl)
+			var rr := 20.0 + age3 * 120.0
+			var al := clampf(1.0 - age3 / 0.35, 0.0, 1.0)
+			m.draw_rect(Rect2(fl["p"] - Vector2(rr, rr), Vector2(rr, rr) * 2.0), Color(1.0, 0.85, 0.4, 0.45 * al))
+			m.draw_rect(Rect2(fl["p"] - Vector2(rr * 0.5, rr * 0.5), Vector2(rr, rr)), Color(1.0, 1.0, 0.9, 0.7 * al))
+	flashes = fk
 	# 飘字
 	var fkeep: Array = []
 	for f2 in floats:
@@ -817,9 +895,9 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		m.draw_rect(Rect2(0, view.y - e - 6, view.x, 6), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(e, 0, 6, view.y), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(view.x - e - 6, 0, 6, view.y), Color(0, 0, 0, a2))
-	# 信息：几号井、深度、梯子、镐、这一局的天赋和菜
-	var info := "%d号井 深 %d 层  梯子 %d  %s" % [mn.shaft_id(), p.y, mn.ladder(), str(mn.pick_def().get("name", ""))]
-	m.dyn_text(info, Vector2(view.x - 8 - m.dyn_text_width(info), view.y - 18), Pal.L_W)
+	# 信息：第几层、背包、炸弹、镐、这一局的天赋和菜
+	var info := "第 %d 层  背包 %d/%d  炸弹 %d  %s" % [mn.floor_n(), mn.bag_n(), mn.bag_cap(), mn.bombs(), str(mn.pick_def().get("name", ""))]
+	m.dyn_text(info, Vector2(view.x - 8 - m.dyn_text_width(info), view.y - 18), Pal.L_R if mn.bag_full() else Pal.L_W)
 	var line := ""
 	for pid in mn.run().get("perks", {}):
 		line += "%s×%d " % [str(mn.perk_def(str(pid)).get("name", pid)), mn.perk_count(str(pid))]
@@ -828,12 +906,6 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		line += "【%s】" % dn
 	if line != "":
 		m.dyn_text(line, Vector2(8, view.y - 18), Pal.L_Y)
-	if ask_ladder:
-		var r := Rect2(view.x / 2.0 - 100, view.y / 2.0 - 22, 200, 44)
-		m.draw_rect(r.grow(1), Pal.U_K)
-		m.draw_rect(r, Color("#2b2137"))
-		m.dyn_text("要用一架梯子把它延长 %d 格吗？" % int(mn.cfg().get("ladder_rows", 3)), r.position + Vector2(8, 6), Pal.L_W)
-		m.dyn_text("空格=好（还有 %d 架）  其他键=不了" % m.game.inventory.count(m.game.state, "ladder"), r.position + Vector2(8, 24), Pal.L_Y)
 	if not mn.draft().is_empty():
 		_draw_draft(view)
 

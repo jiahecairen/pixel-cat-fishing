@@ -236,6 +236,17 @@ func _ready() -> void:
 			if OS.has_environment("CATFISH_DIG"):     # 调试：选完天赋后朝下开始挖
 				game.mine.m()["pick"] = maxi(game.mine.pick(), 1)
 				game.mine.start_dig(0, 1, game.now_ms())
+		if OS.has_environment("CATFISH_KIT"):     # 调试：铁镐、油灯、5 颗炸弹，往下挖几格再放一颗炸弹
+			var mk = game.mine
+			mk.m()["pick"] = 2
+			mk.m()["lamp"] = 2
+			mk.m()["bombs"] = 5
+			mk.stop_dig(game.now_ms())
+			mk.m()["run"]["y"] = 3
+			for kx in range(mk.pos().x - 1, mk.pos().x + 2):
+				for ky in range(1, 4):
+					mk.m()["run"]["dug"][mk._key(kx, ky)] = 1
+			mine_view._bomb()
 	if OS.has_environment("CATFISH_ISLEX"):
 		mine_view.isle_x = OS.get_environment("CATFISH_ISLEX").to_float()
 	state.cat["created"] = true      # v0.66 起主角形象固定（D152），不再捏猫，直接进入起名
@@ -1036,15 +1047,6 @@ func _interact_inside() -> void:
 			play("click")
 			menu.tab = 0
 			menu.open = true
-		"craft":
-			var why: String = game.mine.craft_ladder()
-			if why == "":
-				play("buy")
-				game.dirty = true
-				_toast("梯子做好了", "")
-			else:
-				play("deny")
-				_toast("材料不够" if why == "mat" else "物品栏满了", "要绳子和木板" if why == "mat" else "")
 		"storage":
 			play("click")
 			bag.open_warehouse()

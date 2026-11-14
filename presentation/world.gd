@@ -1747,10 +1747,10 @@ const ROOMS := {
 	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"], [118, "quest"]]},
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[172, "quest"]]},       # 主角形象固定后不卖衣帽（D152）
 	"shipyard": {"keeper": 2, "wall": "w", "spots": [[150, "boats"]]},
-	"workshop": {"keeper": 1, "wall": "w", "spots": [[150, "talk"], [106, "craft"]]},
+	"workshop": {"keeper": 1, "wall": "w", "spots": [[150, "talk"]]},
 	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [106, "piggy"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船", "talk": "空格键和师傅聊聊", "craft": "空格键做梯子"}
+const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船", "talk": "空格键和师傅聊聊"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false

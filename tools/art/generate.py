@@ -1748,6 +1748,24 @@ def mine_tile(kind):
         c.rect(9, 0, 9, 31, "O"); c.rect(24, 0, 24, 31, "O")
         for y in (4, 14, 24):
             c.rect(10, y, 21, y + 2, "n"); c.rect(10, y + 2, 21, y + 2, "O")
+    elif kind == "tnt":                                       # 炸药桶：红桶、黑箍、引线
+        h = Canvas(16, 16)
+        h.rect(4, 4, 11, 13, "R"); h.rect(4, 4, 5, 13, "H"); h.rect(10, 4, 11, 13, "n")
+        h.rect(4, 6, 11, 6, "K"); h.rect(4, 11, 11, 11, "K"); h.rect(6, 8, 9, 9, "W")
+        h.rect(7, 2, 8, 3, "K"); h.set(9, 1, "y"); h.set(10, 0, "W")
+        h.outline()
+        c = _up2(h)
+    elif kind == "exit_mark":                                 # 出口提示：发光的向下箭头
+        h = Canvas(16, 16)
+        h.rect(6, 3, 9, 8, "y"); h.rows(3, 8, ["yyyyyyyy", ".yyyyyy.", "..yyyy..", "...yy..."])
+        h.rect(7, 4, 8, 7, "W"); h.outline()
+        c = _up2(h)
+    elif kind == "hole":                                      # 挖开的出口：黑洞和台阶
+        c.rect(0, 0, 31, 31, "K")
+        c.rect(4, 6, 27, 27, "S")
+        for i in range(5):
+            c.rect(6 + i * 2, 8 + i * 4, 25 - i * 2, 11 + i * 4, "A" if i % 2 == 0 else "a")
+        c.rect(4, 6, 27, 6, "W")
     elif kind in ("gold", "metal", "stone_ore", "chest"):
         h = Canvas(16, 16)
         if kind == "gold":                                   # 金矿：黄色矿粒
@@ -2018,7 +2036,7 @@ def build():
         made["villager_%d" % k] = save(sheet([villager(k, 0), villager(k, 1)]), "villager_%d" % k)
     for n in BTN:
         made["btn_" + n] = save(sheet([button(n), button(n, True)]), "btn_" + n)
-    tiles = ["dirt", "stone", "rock", "deep", "granite", "back", "ladder", "gold", "metal", "stone_ore", "chest", "crack1", "crack2", "crack3", "crack4"]
+    tiles = ["dirt", "stone", "rock", "deep", "granite", "back", "ladder", "gold", "metal", "stone_ore", "chest", "crack1", "crack2", "crack3", "crack4", "tnt", "exit_mark", "hole"]
     made["mine_tiles"] = save(sheet([mine_tile(k) for k in tiles]), "mine_tiles")
     for r in range(3):
         made["mole_%d" % r] = save(sheet([mole(r, 0), mole(r, 1)]), "mole_%d" % r)

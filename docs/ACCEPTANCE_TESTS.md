@@ -211,3 +211,8 @@
 ## C159 v0.71 去矿车、走路速度翻倍
 - 自动：run_tests（684 项）ALL TESTS PASS；sim_long_run SIM PASS；无 SCRIPT ERROR。
 - 截图目检（Linux 模拟画面）：矿井里没有矿车。走路速度手感只能在真实 macOS 上试：未运行。
+
+## C160（v0.72）矿井新玩法
+- 自动测试（Linux 沙盒）：run_tests 694 项通过，sim_long_run SIM PASS。
+- 沙盒截图：第 1 层地图、炸弹爆炸、矿车菜单——已目检。
+- 在 macOS 真机上：方向键挖掘手感、B 放炸弹、爆炸观感、下楼/回大厅提示、电梯——未运行。
