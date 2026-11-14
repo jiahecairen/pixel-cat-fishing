@@ -199,6 +199,16 @@
       "drop": "quest"
     },
     {
+      "id": "lamp_shell",
+      "important": true,
+      "name": "雾灯贝",
+      "desc": "岛心湖里的发光小贝壳",
+      "sprite": "item_lamp_shell",
+      "weight": 0,
+      "use": "",
+      "drop": "quest"
+    },
+    {
       "id": "lucky_bait",
       "name": "幸运鱼饵",
       "desc": "十分钟内更走运",
@@ -476,6 +486,10 @@
       ]
     ]
   },
+  "lake_junk": {
+    "chance": 0.22,
+    "pool": [["lamp_shell", 45], ["bottle", 25], ["boot", 20], ["pearl", 10]]
+  },
   "hook_wait_mult": [
     1.0,
     0.95,
@@ -496,6 +510,21 @@
       "talk_lines": ["灯塔的灯坏了", "帮我找这些吧"],
       "idle_lines": ["欢迎来到雾灯岛", "能帮个忙吗"],
       "done_lines": ["灯又亮了", "蟹笼配方给你", "以后去工坊看看"]
+    },
+    {
+      "id": "lighthouse2",
+      "npc": "lighthouse",
+      "start_on_talk": true,
+      "requires": "lighthouse",
+      "reward_slots": 2,
+      "reward_name": "小背包",
+      "wants": [
+        {"item": "lamp_shell", "n": 3}
+      ],
+      "letter_lines": ["灯塔看守的信"],
+      "talk_lines": ["灯芯要用雾灯贝", "湖里能钓到它"],
+      "idle_lines": ["灯修好了", "谢谢你"],
+      "done_lines": ["灯更亮了", "小背包送你", "多装两样东西"]
     },
     {
       "id": "keeper",

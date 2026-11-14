@@ -90,6 +90,8 @@ func boat_y(t: int) -> float:
 	return WATER_Y - 9 + (1 if (t / 900) % 2 == 0 else 0)
 
 func bobber_rest() -> Vector2:
+	if m.game.journey.on_island():
+		return Vector2(cat_pos.x + 64, GROUND_Y + 1)       # 湖边：画在镜像里，实际落在小猫左边的湖面
 	return Vector2(boat_x + 74, WATER_Y - 3)
 
 ## 每帧先调用：根据活动状态算出船和猫的位置。
@@ -205,7 +207,7 @@ func island_near_keeper(x: float) -> bool:
 
 func island_near_lake(x: float) -> bool:
 	var lk: Vector2 = m.game.island_lake()
-	return x + 16.0 >= lk.x - 14.0 and x + 16.0 <= lk.y + 14.0
+	return x + 16.0 >= lk.x - 14.0 and x + 16.0 <= lk.y + 30.0
 
 func near_pier(x: float) -> bool:
 	return x <= PIER_X + NEAR
@@ -518,15 +520,11 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 		for rx2 in [lx - 6.0, lx + lw + 3.0, lx + lw + 8.0]:
 			m.draw_rect(Rect2(rx2, GROUND_Y - 9, 1, 9), Pal.U_G)
 			m.draw_rect(Rect2(rx2 - 1, GROUND_Y - 11, 3, 3), Pal.L_G)
-	# 湖上的木桥：小猫从桥上走过去，桥栏在小猫后面
-	if lx + lw > left - 20 and lx < right + 20:
-		m.draw_rect(Rect2(lx - 8, GROUND_Y + 2, lw + 16, 4), Pal.L_O)
-		m.draw_rect(Rect2(lx - 8, GROUND_Y + 5, lw + 16, 1), Pal.U_O)
-		for bx in range(int(lx) - 8, int(lx + lw) + 8, 10):
-			m.draw_rect(Rect2(bx, GROUND_Y + 2, 1, 3), Pal.U_O)
-		for rx3 in [lx - 8.0, lx + lw / 2.0, lx + lw + 6.0]:
-			m.draw_rect(Rect2(rx3, GROUND_Y - 6, 2, 9), Pal.U_O)
-		m.draw_rect(Rect2(lx - 8, GROUND_Y - 5, lw + 16, 1), Pal.U_O)
+	# 湖的东岸：钓位旁立一块小木牌
+	if lx + lw + 20 > left and lx + lw < right + 20:
+		m.draw_rect(Rect2(lx + lw + 14, GROUND_Y - 6, 2, 6), Pal.U_O)
+		m.draw_rect(Rect2(lx + lw + 11, GROUND_Y - 11, 8, 5), Pal.L_O)
+		m.draw_rect(Rect2(lx + lw + 13, GROUND_Y - 9, 4, 1), Pal.U_O)
 	# 树和灯塔
 	for tx in [-250.0, -330.0, -520.0, -590.0, -660.0]:
 		var px: float = shore + tx
@@ -1198,6 +1196,9 @@ func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 			if not m.game.state.basket.is_empty():        # 还有鱼就背着鱼篓
 				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if walk_flip else 3, 16 + (t / 180) % 2))
 		Journey.Activity.ROAM, Journey.Activity.ISLAND:
+			if act == Journey.Activity.ISLAND and not on_break and not roam_moving and m.game.at_lake_spot() and m.game.line_out():
+				_draw_lake_fishing(t, now)
+				return
 			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 4, roam_flip)
 			if not m.game.state.basket.is_empty():
 				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if roam_flip else 3, 16 + ((t / 180) % 2 if roam_moving else 0)))
@@ -1261,6 +1262,25 @@ func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:
 		frame = 2   # 钓到鱼：眯眼开心跳一下
 		pos.y -= 2 if t - hop_t0 < 140 else (1 if t - hop_t0 < 280 else 0)
 	m.draw_cat(pos, frame, flip)
+
+## 湖边钓鱼：把船上那套坐姿钓鱼左右镜像过来（小猫朝西对着湖）。
+var _mirror := false
+
+func _draw_lake_fishing(t: int, now: int) -> void:
+	var cx := cat_pos.x + 16.0
+	m.draw_set_transform_matrix(Transform2D(Vector2(-1, 0), Vector2(0, 1), Vector2(2.0 * cx - m.cam.x, -m.cam.y)))
+	var frame := (t / 700) % 2
+	var pos := cat_pos
+	if m.game.fishing.state == Fishing.State.TANGLED:
+		frame = 2
+	elif t - hop_t0 < 600:
+		frame = 2
+		pos.y -= 2 if t - hop_t0 < 140 else (1 if t - hop_t0 < 280 else 0)
+	m.draw_cat(pos, frame, false)
+	_mirror = true
+	_draw_fishing(t, now)
+	_mirror = false
+	m.draw_set_transform(-m.cam)
 
 func _idle_sleeping(now: int) -> bool:
 	return (now / 40000) % 2 == 0
@@ -1399,7 +1419,7 @@ func _draw_fishing(t: int, now: int) -> void:
 		_draw_baiting(tip_abs, prog)
 	if fs == Fishing.State.TANGLED and prog > 0.25:
 		m.draw_texture(m.tex["tangle"], (cat_pos + Vector2(11, -7 + roundf(sin(float(t) / 140.0) * 1.0))).round())
-	if fs == Fishing.State.SETTLEMENT and m.game.fishing.hooked_size > 0:
+	if fs == Fishing.State.SETTLEMENT and m.game.fishing.hooked_size > 0 and not _mirror:
 		_draw_size_tag(fish_pos, m.game.fishing.hooked_size)
 	if t - splash_t0 < 360:
 		m.tex_frame("splash", rest + Vector2(-3, 3), 0 if t - splash_t0 < 180 else 1, 2)

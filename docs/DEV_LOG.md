@@ -360,3 +360,9 @@
 - `world._stroll_pause`：聊天时间从路人的走路时间里扣掉；`main._stand_to`：小猫退开改为走过去。
 - `dest_panel`：高亮跟随 `menu.hover`。
 - 测试 450 项 ALL TESTS PASS、SIM PASS。版本号 0.53。
+
+## v0.54：雾灯岛岛心湖钓鱼
+- `core/game.gd`：`at_lake_spot`、`island_walk_min` 改为湖东岸；`fishing_blocked/cast_line/_tick` 支持 ISLAND；zone "lake"；`lake_junk` 杂物表；登岛收竿。
+- `world.gd`：`_draw_lake_fishing`（镜像画坐姿钓鱼）、去掉木桥换小木牌；`main.gd`：空格走到钓位/甩竿/收竿、走动自动收竿、提示文字。
+- 数据：鱼加 `zone_weights.lake`、`lamp_shell` 物品、`lighthouse2` 任务、`lake_junk`；素材 `item_lamp_shell`；`coin_copper` 变深。
+- 测试 458 项 ALL TESTS PASS、SIM PASS；新增 `test_v054`。版本号 0.54。

@@ -1150,6 +1150,10 @@ def item_icon(kind):
         c.rows(2, 8, ["a..........a", "aa........aa", ".aaaaaaaaaa.", "..aaaaaaaa..", "...AAAAAA..."])   # 贝壳
         c.ellipse(8, 6, 3, 3, "W")
         c.pts([(9, 7), (10, 6), (9, 8)], "c"); c.set(7, 5, "p")
+    elif kind == "lamp_shell":
+        c.rows(3, 8, ["...aaaaaa...", "..aWWWWWWa..", ".aWWyyyyWWa.", ".aWyyyyyyWa.", "..aAAAAAAa.."])   # 会发光的小贝壳
+        c.pts([(8, 3), (5, 5), (10, 5)], "y"); c.set(8, 2, "H")
+        c.rect(5, 13, 10, 13, "A")
     elif kind == "bait_worm":
         c.rows(3, 4, ["pp.....pp", ".pppp.ppp", "..pRRppR.", ".pp.RR.pp", "pR....R.R"][:5])    # 一条弯弯的蚯蚓
         c.rect(3, 9, 12, 12, "n"); c.rect(3, 12, 12, 12, "O")                                 # 下面一小块泥
@@ -1653,7 +1657,7 @@ def build():
         "tomato": save(tomato(), "tomato"),
         "coin": save(coin(), "coin"),
         "coin_silver": save(coin_of("a", "A", "W"), "coin_silver"),
-        "coin_copper": save(coin_of("n", "O", "l"), "coin_copper"),
+        "coin_copper": save(coin_of("o", "O", "n"), "coin_copper"),
         "umbrella": save(umbrella(), "umbrella"),
         "piggy": save(piggy(), "piggy"),
         "basket": save(basket(), "basket"),
@@ -1714,7 +1718,7 @@ def build():
         "rug": save(rug(), "rug"),
         "labels": labels(),
     }
-    for k in ("bottle", "crab_recipe", "lucky_bait", "bell", "map_piece", "pearl", "boot", "bait_worm", "bait_shrimp", "rod", "line", "hook"):
+    for k in ("bottle", "crab_recipe", "lucky_bait", "bell", "map_piece", "pearl", "lamp_shell", "boot", "bait_worm", "bait_shrimp", "rod", "line", "hook"):
         made["item_" + k] = save(item_icon(k), "item_" + k)
     for k in ("fruit", "veg", "bread", "flower"):
         made["goods_" + k] = save(goods(k), "goods_" + k)

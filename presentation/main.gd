@@ -470,6 +470,7 @@ func _update_camera(dt: float) -> void:
 
 
 ## 完整窗口里用方向键带着小猫在镇上走；松手一会儿后交还给自动流程。
+var _stand_cast: bool = false      # 走到湖边钓位后自动甩竿
 var _stand_to: float = INF         # 和居民聊天时慢慢退到的位置
 
 func _update_roam(dt: float) -> void:
@@ -506,8 +507,9 @@ func _update_roam(dt: float) -> void:
 			world.room_flip = dir < 0
 		return
 	if _stand_to != INF:
-		if dir != 0 or j.activity() != Journey.Activity.ROAM:
+		if dir != 0 or (j.activity() != Journey.Activity.ROAM and not j.on_island()):
 			_stand_to = INF
+			_stand_cast = false
 		else:
 			if absf(_roam_fx - j.roam_x()) > 1.5:
 				_roam_fx = j.roam_x()
@@ -517,6 +519,11 @@ func _update_roam(dt: float) -> void:
 			_last_walk_input = t
 			if absf(_roam_fx - _stand_to) < 0.5:
 				_stand_to = INF
+				if _stand_cast:
+					_stand_cast = false
+					world.roam_flip = true
+					if game.cast_line():
+						play("click")
 	if _auto_x != INF:
 		if dir != 0 or not game.can_steer() or interior != "":
 			_auto_x = INF                      # 按方向键 / 进入休息：取消自动航行，交还给手动
@@ -587,6 +594,8 @@ func _update_roam(dt: float) -> void:
 		if absf(_roam_fx - j.roam_x()) > 1.5:
 			_roam_fx = j.roam_x()
 		_roam_fx = clampf(_roam_fx + dir * World.ROAM_SPEED * game.move_speed() * dt, game.island_walk_min(), game.island_land_x())
+		if game.line_out() and absf(_roam_fx - j.roam_x()) > 0.01:
+			game.reel_in()                      # 一走动就收竿
 		j.set_roam_x(_roam_fx)
 		world.roam_moving = true
 		world.roam_flip = dir < 0
@@ -750,8 +759,23 @@ func _interact_island(x: float) -> void:
 		quest_panel.open_talk(game.room_quest("lighthouse"))
 		on_panel_toggled()
 	elif world.island_near_lake(x):
-		_toast("湖水很清", "湖里有鱼，还钓不了")
-		play("click")
+		if game.at_lake_spot():
+			if game.line_out():
+				game.reel_in()
+				play("click")
+			elif game.pomodoro.is_break():
+				play("deny")
+			elif game.cast_line():
+				world.roam_flip = true
+				play("click")
+			else:
+				play("deny")
+		elif not game.pomodoro.is_break():
+			_stand_to = game.island_walk_min()       # 慢慢走到湖边，到了自动甩竿
+			_stand_cast = true
+			play("click")
+		else:
+			play("deny")
 	else:
 		play("deny")
 
@@ -1637,7 +1661,7 @@ func _draw_hud(now: int) -> void:
 		elif game.journey.on_island():
 			label("方向键走动", Vector2(17, 30), hint_col)
 			var ix := float(game.journey.roam_x())
-			label("空格键回船" if world.island_near_pier(ix) else ("空格键和看守聊聊" if world.island_near_keeper(ix) else ("空格键互动" if world.island_near_lake(ix) else "岛的西边还没开发" if ix <= game.island_walk_min() + 2.0 else "")), Vector2(17, 41), hint_col)
+			label("空格键回船" if world.island_near_pier(ix) else ("空格键和看守聊聊" if world.island_near_keeper(ix) else ((("空格键收竿" if game.line_out() else "空格键钓鱼") if game.at_lake_spot() else "空格键去湖边钓鱼") if world.island_near_lake(ix) else "岛的西边还没开发" if ix <= game.island_walk_min() + 2.0 else "")), Vector2(17, 41), hint_col)
 		elif game.journey.in_town():
 			label("方向键走动", Vector2(17, 30), hint_col)
 			if game.journey.activity() == Journey.Activity.SOLD_OUT:

@@ -224,6 +224,10 @@ func _tick() -> Array:
 		Journey.Activity.IDLE_FULL:
 			_tick_idle_full(now, events)
 			_tick_birds(now, events)
+		Journey.Activity.ISLAND:
+			if line_out() and not at_lake_spot():
+				reel_in()
+			_tick_fishing(now, events)
 		_:
 			_tick_trip(now, events)
 	return events
@@ -441,8 +445,13 @@ func at_island_dock() -> bool:
 func island_land_x() -> float:
 	return island_x() - 34.0
 
+## 岛上能走的最西处：岛心湖的东岸（湖挡着路，小猫就站在岸边钓鱼）。
 func island_walk_min() -> float:
-	return island_x() - float(island_info().get("walk_west", 760))
+	return island_lake().y + 2.0
+
+## 小猫是不是站在湖边的钓位上。
+func at_lake_spot() -> bool:
+	return journey.on_island() and float(journey.roam_x()) <= island_walk_min() + 3.0
 
 func island_keeper_x() -> float:
 	return island_x() - float(island_info().get("keeper_off", 196))
@@ -461,7 +470,7 @@ func land_on_island() -> bool:
 		return false
 	var now: int = _clock.now_ms()
 	fishing.stop(now)
-	state.journey["line_out"] = 1
+	state.journey["line_out"] = 0
 	_cancel_bird()
 	if not journey.land_on_island(island_land_x(), now):
 		return false
@@ -471,6 +480,7 @@ func land_on_island() -> bool:
 ## 回到船上，接着钓鱼。
 func leave_island() -> bool:
 	var now: int = _clock.now_ms()
+	fishing.stop(now)
 	if not journey.leave_island(now):
 		return false
 	state.journey["line_out"] = 1
@@ -572,11 +582,14 @@ func at_dock() -> bool:
 
 ## 离码头一定距离内水太浅，不能钓鱼。
 func fishing_blocked() -> bool:
+	if journey.on_island():
+		return not at_lake_spot()
 	return journey.boat_in_shoal() or at_island_shoal()
 
 ## 停船后重新开始钓鱼。
 func cast_line() -> bool:
-	if fishing_blocked() or line_out() or journey.activity() != Journey.Activity.FISHING or pomodoro.is_break():
+	var act_ok: bool = journey.activity() == Journey.Activity.FISHING or journey.on_island()
+	if fishing_blocked() or line_out() or not act_ok or pomodoro.is_break():
 		return false
 	state.journey["line_out"] = 1
 	dirty = true
@@ -658,13 +671,16 @@ func _tick_fishing(now: int, events: Array) -> void:
 			fishing.advance(now)
 			return
 		fishing.stop(now)
-		journey.set_full(now)
+		if journey.on_island():          # 在岛上：只收竿，不会被带去小镇
+			state.journey["line_out"] = 0
+		else:
+			journey.set_full(now)
 		events.append({"type": "basket_full"})
 		dirty = true
 		return
 	if not fishing.is_active():
 		fishing.start(now)
-	fishing.zone = zone_id(float(journey.boat_x()))
+	fishing.zone = "lake" if journey.on_island() else zone_id(float(journey.boat_x()))
 	if fishing.baiting_started:         # 每次甩钩前上饵：装上的饵扣 1 个，没有了就用面团
 		fishing.baiting_started = false
 		events.append(_use_bait())
@@ -816,7 +832,7 @@ var _last_junk: String = ""
 
 func _roll_junk() -> String:
 	_last_junk = ""
-	var cfg: Dictionary = _cfg.get("junk", {})
+	var cfg: Dictionary = _cfg.get("lake_junk" if journey.on_island() else "junk", {})
 	if cfg.is_empty() or _rng.randf() >= float(cfg.get("chance", 0.0)):
 		return ""
 	var total := 0.0
