@@ -2125,7 +2125,7 @@ func _pixel_line(a: Vector2, b: Vector2, color: Color) -> void:
 			err += dx; y0 += sy
 
 
-## 迷你窗挂机：在海上/湖边鱼篓不到 50% 就自动钓（钓不了就去附近水域），到了 50% 自动回镇卖；
+## 迷你窗挂机：在海上/岛上（任何位置）鱼篓不到 50% 就自动钓（钓不了就去附近水域），到了 50% 自动回镇卖；
 ## 卖完回来，鱼篓不到 30% 就去随机的近水域钓鱼，到 30% 就继续去摊位卖鱼（这一条在 game.end_roam）。
 func _auto_policy() -> void:
 	var j: Journey = game.journey
@@ -2143,13 +2143,15 @@ func _auto_policy() -> void:
 				if game.cast_line():
 					play("cast")
 		Journey.Activity.ISLAND:
-			if game.at_lake_spot():
-				if has_fish and pct >= fish_pct:
-					_town_button()
-				elif not game.line_out():
-					world.roam_flip = true
-					if game.cast_line():
-						play("cast")
+			if has_fish and pct >= fish_pct:
+				_town_button()                       # 够了：走到码头上船，回镇卖鱼
+			elif not game.at_lake_spot():
+				_stand_to = game.lake_spot_x()       # 岛上别的位置：走去湖边接着钓
+				_stand_cast = true
+			elif not game.line_out():
+				world.roam_flip = true
+				if game.cast_line():
+					play("cast")
 		Journey.Activity.SOLD_OUT:
 			game.journey.set_fish_spot(game.pick_water_x())
 			_go_fishing()

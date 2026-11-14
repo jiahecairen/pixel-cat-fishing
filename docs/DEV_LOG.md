@@ -392,3 +392,6 @@
 - `game.gd`：`auto_cfg / pick_water_x / auto_fish_x / end_roam(by_policy)`；`journey.set_fish_spot`；`give()` 顶掉物品只拿走够用的格子。
 - `main.gd`：`_auto_policy`（每 1.5 秒判断一次，迷你窗、非休息、4 秒没操作）；ROAM 自动流程走 policy。
 - 数据 `balance.auto`；测试 522 项 ALL TESTS PASS、SIM PASS；新增 `test_v059`。版本号 0.59。
+
+## v0.60：岛上任意位置的迷你窗挂机
+- `main._auto_policy` 的 ISLAND 分支：到 50% 走去码头回镇，否则走去湖边钓。版本号 0.60，测试 522 项通过。
