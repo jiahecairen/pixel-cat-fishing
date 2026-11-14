@@ -6,9 +6,9 @@ const Pal := preload("res://presentation/palette.gd")
 const MoneyC := preload("res://core/money.gd")
 
 const CELL := 32
-const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "tnt": 15, "exit_mark": 16, "hole": 17}
+const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "tnt": 15, "exit_mark": 16, "hole": 17, "floor": 18, "wall": 19}
 const CRACK0 := 11
-const MINE_FRAMES := 18
+const MINE_FRAMES := 20
 const CROSS_MS := 4200
 const RIDE_MS := 1500
 const ISLE_W := 560.0
@@ -29,6 +29,7 @@ var cave_x: float = 60.0
 var cave_flip: bool = false
 var cave_moving: bool = false
 var face: int = 1               # 矿里小猫朝向
+var cart_pick: Dictionary = {}     # 每口井选中的起始层
 var _leave_dbg := false
 var _need_release := false      # 爆炸后要先松开方向键
 var menu: String = ""           # "" / "shop" / "cook" / "cart" / "repair"
@@ -378,13 +379,15 @@ func _menu_rows() -> int:
 	match menu:
 		"shop": return 4
 		"cook": return m.game.mine.dishes().size()
-		"cart": return m.game.mine.start_floors().size() + 1
+		"cart": return m.game.mine.shaft_count()
 		"leave": return 2
 	return 1
 
 func _menu_key(code: int, act: bool) -> void:
 	if code == KEY_ESCAPE:
 		menu = ""
+	elif menu == "cart" and code in [KEY_LEFT, KEY_A, KEY_RIGHT, KEY_D]:
+		_cart_page(menu_sel + 1, -1 if code in [KEY_LEFT, KEY_A] else 1)
 	elif code in [KEY_UP, KEY_W]:
 		menu_sel = posmod(menu_sel - 1, _menu_rows())
 	elif code in [KEY_DOWN, KEY_S]:
@@ -394,7 +397,7 @@ func _menu_key(code: int, act: bool) -> void:
 			"shop": _buy(menu_sel)
 			"cook": _cook(menu_sel)
 			"cart": _cart(menu_sel)
-			"repair": menu = ""
+			"repair": _repair()
 			"leave":
 				var go_up := menu_sel == 0
 				menu = ""
@@ -447,18 +450,65 @@ func _interact_cave() -> void:
 		"rail2":
 			_open("repair")
 
+## 每口井各记一个"准备从第几层开始"，默认是这口井到过的最深存档层。
+func _cart_floor(id: int) -> int:
+	var fl: Array = m.game.mine.start_floors(id)
+	if not cart_pick.has(id):
+		cart_pick[id] = fl.size() - 1
+	cart_pick[id] = clampi(int(cart_pick[id]), 0, fl.size() - 1)
+	return int(fl[int(cart_pick[id])])
+
+func _cart_page(id: int, d: int) -> void:
+	var mn = m.game.mine
+	if not mn.shaft_ok(id) or mn.in_run():
+		m.play("deny")
+		return
+	var fl: Array = mn.start_floors(id)
+	if fl.size() <= 1:
+		m.play("deny")
+		return
+	cart_pick[id] = posmod(int(cart_pick.get(id, fl.size() - 1)) + d, fl.size())
+	m.play("click")
+
 func _cart(i: int) -> void:
-	var fl: Array = m.game.mine.start_floors()
-	if i < fl.size():
-		ride_shaft = 1
-		ride_floor = int(fl[i])
-		menu = ""
-		region = "ride_in"
-		t0 = Time.get_ticks_msec()
-		m.play("click")
-	else:
-		menu = "repair"
-		menu_sel = 0
+	var mn = m.game.mine
+	var id := i + 1
+	match mn.shaft_status(id):
+		"ok":
+			if mn.in_run() and mn.shaft_id() != id:
+				say("上一局还没结束，先回到那口井")
+				m.play("deny")
+				return
+			ride_shaft = id
+			ride_floor = _cart_floor(id)
+			menu = ""
+			region = "ride_in"
+			t0 = Time.get_ticks_msec()
+			m.play("click")
+		"broken":
+			menu = "repair"
+			menu_sel = 0
+		_:
+			say("%d 号井还没有开放" % id)
+			m.play("deny")
+
+func _repair() -> void:
+	var mn = m.game.mine
+	var why: String = mn.repair_shaft()
+	match why:
+		"":
+			m.play("done")
+			m.game.dirty = true
+			say("2 号井的铁路修好了！")
+			menu = ""
+		"done":
+			menu = ""
+		"crew":
+			say("工人不够：去雾灯岛酒馆雇人")
+			m.play("deny")
+		_:
+			say("材料不够，先去矿里挖金属和石头")
+			m.play("deny")
 
 func _buy(i: int) -> void:
 	var mn = m.game.mine
@@ -659,20 +709,28 @@ func draw_mini(view: Vector2, t: int) -> void:
 	m.dyn_text(line, Vector2(r.position.x + 4, r.end.y - 12), Pal.L_W)
 
 ## ---- 菜单（工具店 / 饭店 / 矿车 / 2 号井） ----
-func _panel(view: Vector2, title: String, right: String, rows: Array, footer: String, h: float) -> Rect2:
-	var r := Rect2(view.x / 2.0 - 140, 30, 280, h)
+func _panel(view: Vector2, title: String, right: String, rows: Array, footer: String, h: float, compact := false) -> Rect2:
+	var r := Rect2(view.x / 2.0 - 140, 28 if compact else 30, 280, h)
+	var rh := 22.0 if compact else 28.0
+	var top := 17.0 if compact else 20.0
 	m.draw_rect(r.grow(1), Pal.U_K)
 	m.draw_rect(r, Color("#2b2137"))
-	m.dyn_text(title, r.position + Vector2(8, 4), Pal.L_Y)
+	m.dyn_text(title, r.position + Vector2(8, 3 if compact else 4), Pal.L_Y)
 	if right != "":
-		m.dyn_text(right, Vector2(r.end.x - 8 - m.dyn_text_width(right), r.position.y + 4), Pal.L_C)
+		m.dyn_text(right, Vector2(r.end.x - 8 - m.dyn_text_width(right), r.position.y + 3), Pal.L_C)
 	for i in rows.size():
-		var rr := Rect2(r.position.x + 6, r.position.y + 20 + i * 28, r.size.x - 12, 25)
+		var rr := Rect2(r.position.x + 6, r.position.y + top + i * rh, r.size.x - 12, rh - 3)
 		m.draw_rect(rr, Color("#3d3450") if i != menu_sel else Color("#5a4a6e"))
 		if i == menu_sel:
 			m.draw_rect(Rect2(rr.position, Vector2(2, rr.size.y)), Pal.L_Y)
-		m.dyn_text(str(rows[i][0]), rr.position + Vector2(6, 1), Pal.L_W)
-		m.dyn_text(str(rows[i][1]), rr.position + Vector2(6, 12), Pal.L_A)
+		var dim: bool = rows[i].size() > 2 and bool(rows[i][2])
+		if compact:
+			m.dyn_text(str(rows[i][0]), rr.position + Vector2(6, 4), Pal.L_A if dim else Pal.L_W)
+			var rt := str(rows[i][1])
+			m.dyn_text(rt, Vector2(rr.end.x - 6 - m.dyn_text_width(rt), rr.position.y + 4), Pal.L_A if dim else Pal.L_Y)
+		else:
+			m.dyn_text(str(rows[i][0]), rr.position + Vector2(6, 1), Pal.L_W)
+			m.dyn_text(str(rows[i][1]), rr.position + Vector2(6, 12), Pal.L_A)
 	m.dyn_text(footer, Vector2(r.position.x + 8, r.end.y - 13), Pal.L_A)
 	return r
 
@@ -718,10 +776,33 @@ func _draw_menu(view: Vector2) -> void:
 			_panel(view, "鼹鼠饭店  下一次下井生效", _wallet_text(), rows2, foot + "   空格点菜  Esc离开", 20.0 + rows2.size() * 28.0 + 20.0)
 		"cart":
 			var crow: Array = []
-			for f in mn.start_floors():
-				crow.append(["1 号井  第 %d 层" % int(f), "接着上次的一局往下挖" if mn.in_run() else ("铁路畅通，直达" if int(f) == 1 else "上次到过这一层，电梯直达")])
-			crow.append(["2 号井", "铁路坏了"])
-			_panel(view, "矿车", "", crow, "↑↓选择  空格出发  Esc离开", 20.0 + crow.size() * 28.0 + 20.0)
+			for id in range(1, mn.shaft_count() + 1):
+				var st: String = mn.shaft_status(id)
+				if st == "ok":
+					if mn.in_run() and mn.shaft_id() == id:
+						crow.append(["%d 号井" % id, "接着上一局：第 %d 层" % mn.floor_n()])
+					elif mn.in_run():
+						crow.append(["%d 号井" % id, "先结束上一局", true])
+					else:
+						var fl: Array = mn.start_floors(id)
+						var f := _cart_floor(id)
+						crow.append(["%d 号井" % id, ("◀  第 %d 层  ▶" % f) if fl.size() > 1 else "第 %d 层" % f])
+				elif st == "broken":
+					crow.append(["%d 号井" % id, "铁路坏了（空格看看）"])
+				else:
+					crow.append(["%d 号井" % id, "还没开放", true])
+			_panel(view, "矿车", "", crow, "↑↓选井  ←→换层  空格出发  Esc离开", 17.0 + crow.size() * 22.0 + 17.0, true)
+		"repair":
+			var need: Dictionary = mn.cfg().get("repair2", {})
+			var inv = m.game.inventory
+			var st2 = m.game.state
+			var r := _panel(view, "2 号井：铁路塌了", "", [], "空格修理  Esc关闭", 112.0)
+			var lines: Array = [
+				"修好它需要：",
+				"金属 ×%d（有 %d）   石头 ×%d（有 %d）" % [int(need.get("metal", 0)), inv.count(st2, "metal"), int(need.get("stone", 0)), inv.count(st2, "stone")],
+				"工人 ×%d（已雇 %d）  工人在雾灯岛的酒馆雇" % [int(need.get("crew", 0)), mn.crew()]]
+			for i in lines.size():
+				m.dyn_text(str(lines[i]), r.position + Vector2(10, 22 + i * 14), Pal.L_W if i != 1 else Pal.L_Y)
 		"leave":
 			var bgl: Dictionary = mn.bag()
 			var inl := "背包 %d 件：%s" % [mn.bag_n(), _price(int(bgl.get("coins", 0)))]
@@ -730,18 +811,6 @@ func _draw_menu(view: Vector2) -> void:
 			if int(bgl.get("metal", 0)) > 0:
 				inl += "  金属×%d" % int(bgl["metal"])
 			_panel(view, "回地面？", "", [["回地面", inl + "，这一局结束"], ["再挖一会儿", "继续待在第 %d 层" % mn.floor_n()]], "↑↓选择  空格确认  Esc取消", 20.0 + 2 * 28.0 + 20.0)
-		"repair":
-			var need: Dictionary = mn.cfg().get("repair2", {})
-			var inv = m.game.inventory
-			var st = m.game.state
-			var r := _panel(view, "2 号井：铁路塌了", "", [], "空格 / Esc 关闭", 112.0)
-			var lines: Array = [
-				"修好它需要：",
-				"金属 ×%d（有 %d）   石头 ×%d（有 %d）" % [int(need.get("metal", 0)), inv.count(st, "metal"), int(need.get("stone", 0)), inv.count(st, "stone")],
-				"还要从雾灯岛雇一队工人，",
-				"得有更大的船才载得动他们。（以后开放）"]
-			for i in lines.size():
-				m.dyn_text(str(lines[i]), r.position + Vector2(10, 22 + i * 14), Pal.L_W if i != 1 else Pal.L_Y)
 
 ## ---- 洞穴大厅 ----
 func _cart_world_x(t: int) -> float:
@@ -862,8 +931,18 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		for x in range(x0, x1):
 			var pos := Vector2(x * CELL, y * CELL)
 			var b: String = mn.block(x, y)
+			if not mn.is_floor(x, y):
+				# 岩壁：只画贴着地面的一圈，再往外是漆黑的岩体
+				var near := false
+				for oy in range(-1, 2):
+					for ox in range(-1, 2):
+						if mn.is_floor(x + ox, y + oy):
+							near = true
+				if near:
+					m.tex_frame("mine_tiles", pos, TILE["wall"], MINE_FRAMES)
+				continue
+			m.tex_frame("mine_tiles", pos, TILE["floor"], MINE_FRAMES)
 			if b == "":
-				m.tex_frame("mine_tiles", pos, TILE["back"], MINE_FRAMES)
 				if Vector2i(x, y) == en:
 					m.tex_frame("mine_tiles", pos, TILE["ladder"], MINE_FRAMES)
 				elif Vector2i(x, y) == ex:
@@ -930,7 +1009,7 @@ func _draw_mine(view: Vector2, t: int) -> void:
 			var a := clampf((d2 - R + 0.5) / 2.0, 0.0, 1.0)
 			a = floorf(a * 4.0) / 4.0
 			if a > 0.0:
-				m.draw_rect(Rect2(x * CELL, y * CELL, CELL, CELL), Color(0.06, 0.04, 0.09, a * 0.95))
+				m.draw_rect(Rect2(x * CELL, y * CELL, CELL, CELL), Color(0.03, 0.02, 0.05, a))
 	# 爆炸的闪光（盖在黑暗上面）
 	var fk: Array = []
 	for fl in flashes:

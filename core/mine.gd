@@ -17,6 +17,7 @@ const CHAIN_ORES := ["gold", "metal"]
 var _s: GameState
 var _inv: Inventory
 var _c: Dictionary
+var _lay: Dictionary = {}                 # 每层的洞穴形状缓存（由种子算出来，不存档）
 
 func _init(s: GameState, inv: Inventory, cfg: Dictionary) -> void:
 	_s = s
@@ -42,7 +43,7 @@ func checkpoint_every() -> int:
 func ensure(now_ms: int) -> void:
 	var d := m()
 	if not d.has("shafts"):
-		d["shafts"] = {"1": {"cp": 1, "best": 0}, "2": {"fixed": 0}}
+		d["shafts"] = {"1": {"cp": 1, "best": 0}, "2": {"fixed": 0, "cp": 1, "best": 0}}
 		d["runs"] = 0
 		d["dish"] = ""
 		d["run"] = {}
@@ -54,8 +55,11 @@ func ensure(now_ms: int) -> void:
 		d["run"] = {}
 	if in_run() and not run().has("sta"):          # v0.72 的存档里没有体力：补满
 		run()["sta"] = stamina_max()
-	if not shaft_state(1).has("cp"):
-		shaft_state(1)["cp"] = 1
+	for sid in [1, 2]:
+		if not m()["shafts"].has(str(sid)):
+			m()["shafts"][str(sid)] = {"fixed": 0, "cp": 1, "best": 0}
+		if not shaft_state(sid).has("cp"):
+			shaft_state(sid)["cp"] = 1
 
 ## ---- 永久：镐 / 灯 / 背包 / 炸弹 ----
 func pick() -> int:
@@ -93,16 +97,55 @@ func shaft_state(id: int) -> Dictionary:
 	return sh.get(str(id), {})
 
 func shaft_ok(id: int) -> bool:
-	return id == 1 or int(shaft_state(id).get("fixed", 0)) > 0
+	return id == 1 or (id == 2 and int(shaft_state(id).get("fixed", 0)) > 0)
 
-## 2 号井的修复条件（以后实现：要更大的船把工人送来）。
+func shaft_count() -> int:
+	return int(_c.get("shafts", 5))
+
+## "ok" 能下 / "broken" 铁路坏了能修 / "locked" 还没开放
+func shaft_status(id: int) -> String:
+	if shaft_ok(id):
+		return "ok"
+	return "broken" if id == 2 else "locked"
+
+## 2 号井的修复条件。
 func repair_need() -> Dictionary:
 	return _c.get("repair2", {})
 
-## 能从哪几层开始下井：第 1 层，和已经到过的整 5 层。
-func start_floors() -> Array:
+func crew() -> int:
+	return int(_s.effects.get("workers", 0))
+
+## 还缺什么：[[名称, 缺几个]]，空 = 都够了。
+func repair_missing() -> Array:
+	var need := repair_need()
+	var out: Array = []
+	for id in ["metal", "stone"]:
+		var lack := int(need.get(id, 0)) - _inv.count(_s, id)
+		if lack > 0:
+			out.append([id, lack])
+	var lack_w := int(need.get("crew", 0)) - crew()
+	if lack_w > 0:
+		out.append(["crew", lack_w])
+	return out
+
+## 修好 2 号井：扣材料，工人要先在雾灯岛酒馆雇好。
+func repair_shaft() -> String:
+	if shaft_ok(2):
+		return "done"
+	var miss := repair_missing()
+	if not miss.is_empty():
+		return "crew" if miss[miss.size() - 1][0] == "crew" and miss.size() == 1 else "mat"
+	var need := repair_need()
+	for id in ["metal", "stone"]:
+		_inv.remove(_s, id, int(need.get(id, 0)))
+	shaft_state(2)["fixed"] = 1
+	_s.revision += 1
+	return ""
+
+## 能从哪几层开始下井：第 1 层，和这口井已经到过的整 5 层。
+func start_floors(id: int = 1) -> Array:
 	var out: Array = [1]
-	var cp := int(shaft_state(1).get("cp", 1))
+	var cp := int(shaft_state(id).get("cp", 1))
 	var f := checkpoint_every()
 	while f <= cp:
 		out.append(f)
@@ -125,7 +168,7 @@ func floor_n() -> int:
 func begin_run(id: int, now_ms: int, start_floor: int = 1) -> bool:
 	if not shaft_ok(id) or in_run():
 		return false
-	if not start_floors().has(start_floor):
+	if not start_floors(id).has(start_floor):
 		return false
 	var runs := int(m().get("runs", 0)) + 1
 	m()["runs"] = runs
@@ -273,17 +316,96 @@ func entrance(f: int) -> Vector2i:
 	return Vector2i(2 + rng.randi() % maxi(1, width() - 4), 0)
 
 func exit_pos(f: int) -> Vector2i:
-	var en := entrance(f)
+	return _layout(f)["exit"]
+
+## 这一层的洞穴：自然地面（可走）、岩壁（挖不动）、地面上散落的石块（要挖）。
+## 形状由种子和层数决定：几个椭圆形的"房间"用走廊连起来，边缘参差不齐。
+func _layout(f: int) -> Dictionary:
+	var key := "%d:%d:%d:%d" % [seed_(), f, width(), height()]
+	if _lay.has(key):
+		return _lay[key]
+	var W := width()
+	var H := height()
+	var lc: Dictionary = _c.get("layout", {})
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([seed_(), f, "ex"])
-	var ex := 1
-	var ey := 4
-	for _i in 30:
-		ex = 1 + rng.randi() % (width() - 2)
-		ey = 4 + rng.randi() % (height() - 4)
-		if absi(ex - en.x) + ey >= 7:
-			break
-	return Vector2i(ex, ey)
+	rng.seed = hash([seed_(), f, "lay"])
+	var fl := PackedByteArray()
+	fl.resize(W * H)
+	var en := entrance(f)
+	var centers: Array = [Vector2i(en.x, 4)]
+	var rr: Array = lc.get("rooms", [5, 8])
+	var n_rooms: int = int(rr[0]) + rng.randi() % maxi(1, int(rr[1]) - int(rr[0]) + 1)
+	for _i in n_rooms:
+		centers.append(Vector2i(4 + rng.randi() % maxi(1, W - 8), 5 + rng.randi() % maxi(1, H - 8)))
+	for i in centers.size():
+		var c: Vector2i = centers[i]
+		var rw := 3 + rng.randi() % 4
+		var rh := 2 + rng.randi() % 3
+		for y in range(c.y - rh - 1, c.y + rh + 2):
+			for x in range(c.x - rw - 1, c.x + rw + 2):
+				if x < 1 or y < 1 or x > W - 2 or y > H - 2:
+					continue
+				var dx := float(x - c.x) / float(rw)
+				var dy := float(y - c.y) / float(rh)
+				var noise := float(absi(hash([seed_(), f, x, y, "n"])) % 100) / 100.0
+				if dx * dx + dy * dy <= 0.75 + 0.45 * noise:
+					fl[y * W + x] = 1
+		if i > 0:
+			var a: Vector2i = centers[i - 1]
+			var step := 1 if c.x >= a.x else -1
+			for x in range(a.x, c.x + step, step):
+				for oy in 2:
+					var yy := clampi(a.y + oy, 1, H - 2)
+					fl[yy * W + clampi(x, 1, W - 2)] = 1
+			var stepy := 1 if c.y >= a.y else -1
+			for y in range(a.y, c.y + stepy, stepy):
+				for ox in 2:
+					fl[clampi(y, 1, H - 2) * W + clampi(c.x + ox, 1, W - 2)] = 1
+	for y in range(0, 5):                                  # 入口：顶上的缺口，一条路通到第一个房间
+		fl[y * W + en.x] = 1
+		fl[y * W + clampi(en.x + 1, 1, W - 2)] = 1 if y > 0 else fl[y * W + clampi(en.x + 1, 1, W - 2)]
+	# 出口：从入口走过去最远的那一批地面里挑一个
+	var dist := {}
+	var q: Array = [en]
+	dist[en] = 0
+	var far := 0
+	var order: Array = []
+	while not q.is_empty():
+		var cur: Vector2i = q.pop_front()
+		order.append(cur)
+		far = maxi(far, int(dist[cur]))
+		for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = cur + dv
+			if n.x < 0 or n.y < 0 or n.x >= W or n.y >= H or dist.has(n) or fl[n.y * W + n.x] == 0:
+				continue
+			dist[n] = int(dist[cur]) + 1
+			q.append(n)
+	var cands: Array = []
+	for cell in order:
+		if int(dist[cell]) >= int(float(far) * float(lc.get("exit_far", 0.7))) and cell != en:
+			cands.append(cell)
+	var ex: Vector2i = cands[rng.randi() % cands.size()] if not cands.is_empty() else order[order.size() - 1]
+	# 石块：地面上一簇一簇的，出口一定埋在石块底下
+	var rk := PackedByteArray()
+	rk.resize(W * H)
+	for y in H:
+		for x in W:
+			if fl[y * W + x] == 0 or (absi(x - en.x) <= 1 and y <= 5):
+				continue
+			var pr := float(lc.get("rock_rich", 0.5)) if rich(x, y, f) else float(lc.get("rock", 0.1))
+			if rng.randf() < pr:
+				rk[y * W + x] = 1
+	rk[ex.y * W + ex.x] = 1
+	var out := {"floor": fl, "rock": rk, "exit": ex}
+	_lay[key] = out
+	return out
+
+## 自然地面（岩壁以外的地方，包括上面还压着石块的）。
+func is_floor(x: int, y: int) -> bool:
+	return in_map(x, y) and _layout(floor_n())["floor"][y * width() + x] == 1
+
+func has_rock(x: int, y: int) -> bool:
+	return in_map(x, y) and _layout(floor_n())["rock"][y * width() + x] == 1
 
 func _key(x: int, y: int, f: int = -1) -> String:
 	return "%d:%d,%d" % [floor_n() if f < 0 else f, x, y]
@@ -304,27 +426,27 @@ func layer(f: int) -> Dictionary:
 			return l
 	return {}
 
-## 格子的样子："" = 空；"granite" = 外圈的花岗岩；否则是这一层的块。
+## 格子的样子："" = 空地；"granite" = 岩壁（挖不动）；否则是压在这格上的石块（这一层的材质）。
 func block(x: int, y: int) -> String:
-	if not in_map(x, y):
+	if not in_map(x, y) or not is_floor(x, y):
 		return "granite"
-	if is_dug(x, y):
+	if is_dug(x, y) or not has_rock(x, y):
 		return ""
 	return str(layer(floor_n()).get("block", "deep"))
 
 ## 富矿脉：以 4×4 为一块，按种子有些块的矿物特别多。
-func rich(x: int, y: int) -> bool:
-	return absi(hash([seed_(), floor_n(), x / 4, y / 4, "rich"])) % 5 == 0
+func rich(x: int, y: int, f: int = -1) -> bool:
+	return absi(hash([seed_(), floor_n() if f < 0 else f, x / 4, y / 4, "rich"])) % 5 == 0
 
 ## 格子里埋着什么："exit"（往下的洞）/ "tnt" / "gold" / "metal" / "chest" / "stone" / ""。
 func ore(x: int, y: int) -> String:
-	if not in_map(x, y) or Vector2i(x, y) == entrance(floor_n()):
+	if not in_map(x, y) or Vector2i(x, y) == entrance(floor_n()) or not has_rock(x, y):
 		return ""
 	if Vector2i(x, y) == exit_pos(floor_n()):
 		return "exit"
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([seed_(), floor_n(), x, y])
-	var r := rng.randf()
+	var r := rng.randf() * float(_c.get("layout", {}).get("ore_scale", 0.4))
 	var k := luck_mul() * (2.2 if rich(x, y) else 1.0)
 	var acc := 0.0
 	for o in _c.get("ores", []):

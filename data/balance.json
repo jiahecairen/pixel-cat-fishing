@@ -1078,7 +1078,7 @@
     "stack": 10
   },
   "mine": {
-    "width": 15,
+    "width": 30,
     "boat_need": 2,
     "layers": [
       {
@@ -1313,10 +1313,9 @@
     "repair2": {
       "metal": 30,
       "stone": 40,
-      "crew": 1,
-      "boat_need": 3
+      "crew": 2
     },
-    "height": 10,
+    "height": 20,
     "checkpoint_every": 5,
     "chain_min": 3,
     "bag": {
@@ -1346,6 +1345,17 @@
       "start": 45,
       "per_pick": 10,
       "low": 0.25
-    }
+    },
+    "layout": {
+      "rooms": [
+        5,
+        8
+      ],
+      "rock": 0.1,
+      "rock_rich": 0.5,
+      "ore_scale": 0.4,
+      "exit_far": 0.7
+    },
+    "shafts": 5
   }
 }
