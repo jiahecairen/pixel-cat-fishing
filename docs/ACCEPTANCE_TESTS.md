@@ -207,3 +207,7 @@
 - 自动：run_tests（684 项）ALL TESTS PASS；sim_long_run SIM PASS；无 SCRIPT ERROR。对话属于界面层，没有自动测试覆盖。
 - 模拟画面里走过：工坊对话选"出售"→ 打开工坊回收物品栏；酒馆选"雇人"→ 打开雇人面板（调试变量 CATFISH_TALK + CATFISH_CHOOSE）。
 - 真实 macOS：未运行。
+
+## C159 v0.71 去矿车、走路速度翻倍
+- 自动：run_tests（684 项）ALL TESTS PASS；sim_long_run SIM PASS；无 SCRIPT ERROR。
+- 截图目检（Linux 模拟画面）：矿井里没有矿车。走路速度手感只能在真实 macOS 上试：未运行。

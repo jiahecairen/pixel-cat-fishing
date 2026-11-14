@@ -14,9 +14,9 @@ const ISLE_W := 560.0
 const SPOT := {"dock": 500.0, "rest": 380.0, "shop": 250.0, "gate": 96.0}
 const CAVE_W := 560.0
 const CAVE := {"exit": 40.0, "cart": 250.0, "shaft1": 360.0, "rail2": 440.0, "shaft2": 500.0}
-const STEP_S := 0.11
+const STEP_S := 0.055
 const SWING_MS := 230
-const WALK_SPEED := 46.0
+const WALK_SPEED := 92.0
 
 var m
 var region: String = ""
@@ -300,7 +300,7 @@ func key(code: int) -> bool:
 			elif mn.at_ladder_end() and mn.can_extend():
 				ask_ladder = true
 			else:
-				say("爬回最上面一层，按空格坐矿车回大厅")
+				say("爬回最上面一层，按空格回大厅")
 			return true
 		return code in [KEY_UP, KEY_W, KEY_DOWN, KEY_S]
 	if region == "isle" and act:
@@ -457,7 +457,7 @@ func hint() -> String:
 			if ask_ladder or not m.game.mine.draft().is_empty():
 				return ""
 			if m.game.mine.pos().y == 0:
-				return "按住方向键挖  空格键坐矿车回大厅"
+				return "按住方向键挖  空格键回大厅"
 			return "按住方向键挖  ↑↓爬梯子"
 	return ""
 
@@ -763,8 +763,6 @@ func _draw_mine(view: Vector2, t: int) -> void:
 					m.tex_frame("mine_tiles", pos + shake, TILE["stone_ore" if o == "stone" else o], 15)
 				if f > 0.02:
 					m.tex_frame("mine_tiles", pos + shake, CRACK0 + clampi(int(f * 4.0), 0, 3), 15)
-	# 洞口行的矿车（空格坐它回大厅）
-	m.draw_texture(m.tex["mine_cart"], Vector2((mn.shaft() - 3) * CELL + 6, 12))
 	# 碎块
 	var keep: Array = []
 	for d in debris:
