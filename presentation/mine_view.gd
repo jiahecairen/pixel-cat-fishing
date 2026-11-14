@@ -14,7 +14,7 @@ const RIDE_MS := 1500
 const ISLE_W := 560.0
 const SPOT := {"dock": 500.0, "rest": 380.0, "inn": 315.0, "shop": 250.0, "gate": 96.0}
 const CAVE_W := 560.0
-const CAVE := {"exit": 40.0, "cart": 250.0, "shaft1": 360.0, "rail2": 440.0, "shaft2": 500.0}
+const CAVE := {"miner": 150.0, "exit": 40.0, "cart": 250.0, "shaft1": 360.0, "rail2": 440.0, "shaft2": 500.0}
 const STEP_S := 0.055
 const SWING_MS := 440
 const WALK_SPEED := 92.0
@@ -60,6 +60,10 @@ func _el(t: int) -> float:
 
 func active() -> bool:
 	return region != ""
+
+## 在矿井里（状态栏换成层数、体力、炸弹、背包）。
+func in_mine() -> bool:
+	return region == "mine"
 
 func say(s: String) -> void:
 	msg = s
@@ -430,7 +434,7 @@ func _spot() -> String:
 
 func _cave_spot() -> String:
 	var cx := cave_x + 16.0
-	for k in ["exit", "cart", "rail2"]:
+	for k in ["exit", "miner", "cart", "rail2"]:
 		if absf(cx - CAVE[k]) <= 24.0:
 			return k
 	return ""
@@ -459,6 +463,8 @@ func _interact_cave() -> void:
 			isle_x = SPOT["gate"] - 16.0
 			isle_flip = false
 			m.play("click")
+		"miner":
+			m._talk("miner_menu")
 		"cart":
 			_open("cart")
 		"rail2":
@@ -620,6 +626,7 @@ func hint() -> String:
 		"cave":
 			match _cave_spot():
 				"exit": return "空格键回岛上"
+				"miner": return "空格键和老钻聊聊"
 				"cart": return "空格键坐矿车"
 				"rail2": return "空格键看 2 号井"
 			return "方向键走动"
@@ -948,8 +955,8 @@ func _draw_cave(view: Vector2, t: int) -> void:
 	m.draw_texture(m.tex["mine_gate"], Vector2(CAVE["shaft2"] - 28, fy - 46))
 	m.pixel_line(Vector2(CAVE["shaft2"] - 22, fy - 40), Vector2(CAVE["shaft2"] + 22, fy - 6), Pal.L_O)
 	m.pixel_line(Vector2(CAVE["shaft2"] - 22, fy - 6), Vector2(CAVE["shaft2"] + 22, fy - 40), Pal.L_O)
-	for sx in [CAVE["exit"], CAVE["shaft1"], CAVE["shaft2"]]:
-		var name: String = {CAVE["exit"]: "出口", CAVE["shaft1"]: "1号井", CAVE["shaft2"]: "2号井 封闭"}[sx]
+	for sx in [CAVE["exit"], CAVE["miner"], CAVE["shaft1"], CAVE["shaft2"]]:
+		var name: String = {CAVE["miner"]: "老钻", CAVE["exit"]: "出口", CAVE["shaft1"]: "1号井", CAVE["shaft2"]: "2号井 封闭"}[sx]
 		var w: float = m.dyn_text_width(name) + 6.0
 		m.draw_rect(Rect2(sx - w / 2.0 - 1, fy - 62, w + 2, 14), Pal.U_K)
 		m.draw_rect(Rect2(sx - w / 2.0, fy - 61, w, 12), Pal.L_N)
@@ -1112,24 +1119,6 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		m.draw_rect(Rect2(0, view.y - e - 6, view.x, 6), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(e, 0, 6, view.y), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(view.x - e - 6, 0, 6, view.y), Color(0, 0, 0, a2))
-	# 右下角只有两样：体力条、背包容量（背包就是物品栏）
-	var mx: float = float(mn.stamina_max())
-	var stam: float = mn.stamina_f()
-	var low: bool = stam <= mx * float(mn.cfg().get("stamina", {}).get("low", 0.25))
-	var bw := 96.0
-	var bx := view.x - 8.0 - bw
-	var by := view.y - 18.0
-	m.draw_rect(Rect2(bx - 1, by - 1, bw + 2, 9), Pal.U_K)
-	m.draw_rect(Rect2(bx, by, bw, 7), Pal.U_A)
-	var capv: float = mx * float(mn.cfg().get("stamina", {}).get("cap_mult", 1.3))
-	m.draw_rect(Rect2(bx, by, bw * minf(stam, mx) / capv, 7), Pal.L_R if low else Pal.L_G)
-	if stam > mx:                                        # 旅店睡出来的超上限部分：金色
-		m.draw_rect(Rect2(bx + bw * mx / capv, by, bw * (stam - mx) / capv, 7), Pal.L_Y)
-	m.draw_rect(Rect2(bx + bw * mx / capv, by - 1, 1, 9), Pal.L_W)     # 上限的刻度
-	var st := "体力 %d/%d" % [mn.stamina(), mn.stamina_max()]
-	m.dyn_text(st, Vector2(bx - 4 - m.dyn_text_width(st), by - 2), Pal.L_R if low else Pal.L_W)
-	var bl := "背包 %d/%d" % [mn.bag_n(), mn.bag_cap()]
-	m.dyn_text(bl, Vector2(view.x - 8 - m.dyn_text_width(bl), by - 14), Pal.L_R if mn.bag_full() else Pal.L_W)
 	# 天赋和菜（左下，超过一行就往上折行，不盖住右边）
 	var words: Array = []
 	var dn: String = str(mn.dish_def().get("name", ""))
@@ -1173,7 +1162,9 @@ func _draw_swing(cp: Vector2, flip: bool, dirv: Vector2i, t: int) -> void:
 		m.draw_rect(Rect2(tip + v * 3.0 - Vector2(2, 2), Vector2(4, 4)), Pal.L_Y)
 
 func _draw_overlay(view: Vector2, t: int) -> void:
-	if region in ["isle", "cave", "mine", "ride_in", "ride_back"]:
+	if region == "mine":
+		pass                                   # 矿井里状态栏已经有层数、体力、炸弹、背包，不再显示钱和提示
+	elif region in ["isle", "cave", "ride_in", "ride_back"]:
 		var w: float = 22.0 + m.dyn_text_width(_wallet_text())
 		m.draw_rect(Rect2(view.x - w - 8, 5, w + 4, 16), Color(0.1, 0.08, 0.14, 0.8))
 		m.draw_texture(m.tex[MoneyC.icon(m.game.state.wallet_gold)], Vector2(view.x - w - 4, 6))

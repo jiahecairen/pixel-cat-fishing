@@ -1402,6 +1402,24 @@ func pawn_redeem(id: String) -> String:
 	dirty = true
 	return ""
 
+## 矿洞大厅的老钻收矿石：只收石头、金属、金矿石，不记赎回。
+const ORE_ITEMS := ["stone", "metal", "gold_ore"]
+func ore_sell(id: String, all: bool = false) -> int:
+	if not id in ORE_ITEMS:
+		return 0
+	var total := 0
+	for i in (inventory.count(state, id) if all else 1):
+		var price := pawn_value(id)
+		if price <= 0 or not inventory.remove(state, id, 1):
+			break
+		economy.grant_gold(state, state.new_id("o"), price)
+		total += price
+	_clamp_wallet()
+	if total > 0:
+		state.revision += 1
+		dirty = true
+	return total
+
 ## 垃圾箱：任何东西都能扔（包括任务物品），扔掉就没了。返回扔了几个。
 func trash_item(id: String, all: bool = false) -> int:
 	var n := inventory.count(state, id)

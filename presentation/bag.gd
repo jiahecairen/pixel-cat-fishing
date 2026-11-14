@@ -6,6 +6,7 @@ const Pal := preload("res://presentation/palette.gd")
 
 var open: bool = false
 var sell_mode: bool = false   # 在典当行打开的（只有这里能卖东西）
+var ore_mode: bool = false    # 老钻收矿石：只能卖石头、金属、金矿石
 var trash_mode: bool = false  # 在垃圾箱打开的：什么都能扔
 var confirm_id: String = ""   # 扔任务物品要按两次：第一次记在这里
 var wh: bool = false      # 在家里仓库打开的：多了"身上 / 仓库"两页，按钮变成存入 / 取出
@@ -28,7 +29,7 @@ func _step() -> int:
 	return 19 if m.mini else 26
 
 func _tabbed() -> bool:
-	return wh or sell_mode
+	return wh or (sell_mode and not ore_mode)
 
 func _redeem() -> bool:
 	return sell_mode and tab == 1
@@ -73,7 +74,7 @@ func sell_stack_selected() -> void:
 	if sel >= owned.size():
 		m.play("deny")
 		return
-	var got: int = m.game.pawn_sell_stack(str(owned[sel]))
+	var got: int = m.game.ore_sell(str(owned[sel]), true) if ore_mode else m.game.pawn_sell_stack(str(owned[sel]))
 	if got <= 0:
 		m.play("deny")
 		return
@@ -85,14 +86,14 @@ func sell_stack_selected() -> void:
 
 func _sellable() -> bool:
 	var owned := _owned()
-	return sell_mode and tab == 0 and sel < owned.size() and m.game.pawn_value(str(owned[sel])) > 0
+	return sell_mode and tab == 0 and sel < owned.size() and m.game.pawn_value(str(owned[sel])) > 0 and (not ore_mode or str(owned[sel]) in m.game.ORE_ITEMS)
 
 func sell_selected() -> void:
 	var owned := _owned()
 	if sel >= owned.size():
 		m.play("deny")
 		return
-	var got: int = m.game.pawn_sell(str(owned[sel]))
+	var got: int = m.game.ore_sell(str(owned[sel])) if ore_mode else m.game.pawn_sell(str(owned[sel]))
 	if got <= 0:
 		m.play("deny")
 		return
@@ -132,7 +133,12 @@ func _wh_use_rect() -> Rect2:
 	return Rect2(a.position.x - a.size.x - 3, a.position.y, a.size.x, a.size.y)
 
 ## 工坊回收：和平时一样的物品栏，但多一个"全部卖"（整堆卖掉）。
+func open_ore() -> void:
+	open_pawn()
+	ore_mode = true
+
 func open_pawn() -> void:
+	ore_mode = false
 	open = true
 	wh = false
 	sell_mode = true
@@ -141,6 +147,7 @@ func open_pawn() -> void:
 	sel = 0
 
 func open_trash() -> void:
+	ore_mode = false
 	open = true
 	wh = false
 	sell_mode = false
@@ -213,6 +220,7 @@ func move_selected(all: bool) -> void:
 func toggle() -> void:
 	wh = false
 	sell_mode = false
+	ore_mode = false
 	trash_mode = false
 	tab = 0
 	open = not open
@@ -226,6 +234,7 @@ func click(p: Vector2) -> bool:
 		open = false
 		wh = false
 		sell_mode = false
+		ore_mode = false
 		trash_mode = false
 		m.play("click")
 		m.on_panel_toggled()
@@ -383,7 +392,7 @@ func draw() -> void:
 		m.draw_rect(r.grow(-1), Pal.U_K)
 	if not m.mini:
 		if sell_mode or trash_mode:
-			m.dyn_text("典当行" if sell_mode else "垃圾箱", r.position + Vector2(5, 2), Pal.L_Y if sell_mode else Pal.L_R)
+			m.dyn_text(("收购矿石" if ore_mode else "典当行") if sell_mode else "垃圾箱", r.position + Vector2(5, 2), Pal.L_Y if sell_mode else Pal.L_R)
 		else:
 			m.label("仓库" if wh else "物品栏", r.position + Vector2(5, 3), Pal.L_W)
 			m.draw_rect(Rect2(r.position.x + 5, r.position.y + 14, 29, 1), Pal.L_Y if wh else Pal.L_R)

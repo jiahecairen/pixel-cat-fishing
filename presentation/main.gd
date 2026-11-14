@@ -1000,6 +1000,9 @@ func _after_dialog() -> void:
 		"open_quest":
 			quest_panel.open_talk(game.room_quest("lighthouse"))
 			on_panel_toggled()
+		"open_ore_sell":
+			bag.open_ore()
+			on_panel_toggled()
 		"open_tavern":
 			_open_works("tavern")
 		"open_repair":
@@ -2011,12 +2014,28 @@ func _draw_hud(now: int) -> void:
 	draw_texture(tex["panel"], PANEL_POS)
 	var ph: int = game.pomodoro.phase()
 	var on_break: bool = game.pomodoro.is_break()
-	draw_texture(tex["zzz" if on_break else "tomato"], Vector2(19, 3))
-	var secs := int(ceil(game.pomodoro.remaining_ms(now) / 1000.0))
-	var tint := Pal.L_C if on_break else (Pal.L_W if ph == Pomodoro.Phase.FOCUS else Pal.L_A)
-	_text("%02d:%02d" % [secs / 60, secs % 60], Vector2(32, 6), tint)
-	for i in game.pomodoro.cycle_length():
-		_tex_frame("dots", Vector2(55 + i * 6, 6), 1 if i < game.pomodoro.cycle_done() else 0, 2)
+	var in_mine: bool = mine_view.in_mine() and game.mine.in_run()
+	if in_mine:
+		# 矿井里：番茄钟位置显示层数，四个点的位置显示体力条
+		var mnh = game.mine
+		dyn_text("%d 层" % mnh.floor_n(), Vector2(19, 1), Pal.L_W)
+		var mxs: float = float(mnh.stamina_max())
+		var capv: float = mxs * float(mnh.cfg().get("stamina", {}).get("cap_mult", 1.3))
+		var stam: float = mnh.stamina_f()
+		var lows: bool = stam <= mxs * float(mnh.cfg().get("stamina", {}).get("low", 0.25))
+		draw_rect(Rect2(54, 5, 26, 7), Pal.U_K)
+		draw_rect(Rect2(55, 6, 24, 5), Pal.U_A)
+		draw_rect(Rect2(55, 6, 24.0 * minf(stam, mxs) / capv, 5), Pal.L_R if lows else Pal.L_G)
+		if stam > mxs:
+			draw_rect(Rect2(55 + 24.0 * mxs / capv, 6, 24.0 * (stam - mxs) / capv, 5), Pal.L_Y)
+		draw_rect(Rect2(55 + 24.0 * mxs / capv, 5, 1, 7), Pal.L_W)
+	else:
+		draw_texture(tex["zzz" if on_break else "tomato"], Vector2(19, 3))
+		var secs := int(ceil(game.pomodoro.remaining_ms(now) / 1000.0))
+		var tint := Pal.L_C if on_break else (Pal.L_W if ph == Pomodoro.Phase.FOCUS else Pal.L_A)
+		_text("%02d:%02d" % [secs / 60, secs % 60], Vector2(32, 6), tint)
+		for i in game.pomodoro.cycle_length():
+			_tex_frame("dots", Vector2(55 + i * 6, 6), 1 if i < game.pomodoro.cycle_done() else 0, 2)
 
 	var main_btn := "btn_play"
 	if ph == Pomodoro.Phase.FOCUS:
@@ -2042,16 +2061,27 @@ func _draw_hud(now: int) -> void:
 	if _quit_button_visible():
 		_tex_frame("btn_close", BTN_CLOSE.position, 1 if _confirm_quit else 0, 2)
 
-	draw_money(game.state.wallet_gold, Vector2(20, 15), Pal.L_R if game.wallet_is_full() else Pal.L_Y)
-	# 专注且在海上：显示不限量的木箱（番茄渔获）；其余时候显示鱼篓
-	if ph == Pomodoro.Phase.FOCUS and game.journey.on_boat():
+	if in_mine:
+		# 炸弹数量（代替钱）和背包容量（代替鱼篓百分比）
+		draw_rect(Rect2(21, 18, 7, 7), Pal.U_K)
+		draw_rect(Rect2(22, 19, 5, 5), Pal.U_S)
+		draw_rect(Rect2(22, 19, 2, 2), Pal.L_A)
+		draw_rect(Rect2(26, 16, 2, 3), Pal.U_O)
+		draw_rect(Rect2(27, 15, 2, 2), Pal.L_Y)
+		_text("x%d" % game.mine.bombs(), Vector2(31, 17), Pal.L_W)
 		draw_texture(tex["hold"], Vector2(47, 14))
-		_text("x%d" % game.state.session_haul.size(), Vector2(60, 17), Pal.L_W)
+		_text("%d/%d" % [game.mine.bag_n(), game.mine.bag_cap()], Vector2(60, 17), Pal.L_R if game.mine.bag_full() else Pal.L_W)
 	else:
-		draw_texture(tex["basket"], Vector2(47, 14))
-		var full: bool = game.economy.basket_full(game.state)
-		_text("%d%%" % game.economy.basket_percent(game.state), Vector2(60, 17),
-				Pal.L_R if full else Pal.L_W)
+		draw_money(game.state.wallet_gold, Vector2(20, 15), Pal.L_R if game.wallet_is_full() else Pal.L_Y)
+		# 专注且在海上：显示不限量的木箱（番茄渔获）；其余时候显示鱼篓
+		if ph == Pomodoro.Phase.FOCUS and game.journey.on_boat():
+			draw_texture(tex["hold"], Vector2(47, 14))
+			_text("x%d" % game.state.session_haul.size(), Vector2(60, 17), Pal.L_W)
+		else:
+			draw_texture(tex["basket"], Vector2(47, 14))
+			var full: bool = game.economy.basket_full(game.state)
+			_text("%d%%" % game.economy.basket_percent(game.state), Vector2(60, 17),
+					Pal.L_R if full else Pal.L_W)
 	if game.move_speed() != 1.0 and not mini:
 		_text("x%d" % int(game.move_speed()), Vector2(17, 66), Pal.L_Y)      # 移动倍速（] 加快 / [ 减慢）
 	# 完整窗口里的操作提示（夜里天空是深色，换成浅色字）

@@ -226,7 +226,8 @@
       "sprite": "item_stone",
       "weight": 0,
       "use": "",
-      "drop": "quest"
+      "drop": "quest",
+      "sell": 3
     },
     {
       "id": "metal",
@@ -236,7 +237,8 @@
       "sprite": "item_metal",
       "weight": 0,
       "use": "",
-      "drop": "quest"
+      "drop": "quest",
+      "sell": 9
     },
     {
       "id": "lamp_scale",
@@ -528,7 +530,7 @@
     },
     {
       "id": "gold_ore",
-      "sell": 12,
+      "sell": 16,
       "name": "金矿石",
       "desc": "沉甸甸的金矿石，可以拿去典当行",
       "sprite": "item_gold_ore",

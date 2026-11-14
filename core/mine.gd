@@ -445,8 +445,14 @@ func dig_ms(x: int, y: int) -> int:
 ## 面朝 (dx, dy) 伸手够得到的那一格：从脚下往前探 REACH 格，落在哪一格就是哪一格（不要求对齐）。
 const REACH := 0.62
 func target(dx: int, dy: int) -> Vector2i:
-	var q := fpos() + Vector2(dx, dy) * REACH
-	return Vector2i(int(floor(q.x)), int(floor(q.y)))
+	var f := fpos()
+	var d := Vector2(dx, dy)
+	for t in [0.15, 0.3, 0.45, REACH]:
+		var q: Vector2 = f + d * float(t)
+		var c := Vector2i(int(floor(q.x)), int(floor(q.y)))
+		if block(c.x, c.y) != "" and (Vector2(c.x + 0.5, c.y + 0.5) - f).dot(d) > 0.1:      # 在脚下的格子里也行，只要石头在前方
+			return c
+	return Vector2i(int(floor((f + d * REACH).x)), int(floor((f + d * REACH).y)))
 
 ## 能不能朝 (dx, dy) 挖。""=可以，"open"=前面是空地，"granite"=岩壁，"pit"=下一层的洞，"chest"=补给箱（要打开不是挖），
 ## "notool"=没镐，"tool"=镐不够好，"tired"=没体力。
@@ -529,7 +535,7 @@ func shift(delta_ms: int) -> void:
 		rs["t1"] = int(rs["t1"]) + delta_ms
 
 ## ---- 顺滑走动：位置是小数（以格为单位，格子中心是 x+0.5），碰撞盒比一格小 ----
-const HB := Vector2(0.3, 0.28)
+const HB := Vector2(0.2, 0.12)       # 碰撞盒只算脚下这一小块，所以能走到离石头很近的地方
 
 ## 小猫脚下的精确位置。存的整数格变了（下楼、测试直接改）就以整数格中心为准。
 func fpos() -> Vector2:
@@ -543,8 +549,8 @@ func fpos() -> Vector2:
 	return Vector2(x + 0.5, y + 0.5)
 
 ## 石头只占格子正中一小块（比画出来的石头略小一点），木箱占大半格，洞口、岩壁占满一格。
-const ROCK_HALF := 0.26
-const CRATE_HALF := 0.4
+const ROCK_HALF := 0.22
+const CRATE_HALF := 0.36
 func _free_at(p: Vector2) -> bool:
 	for cy in range(int(floor(p.y - HB.y)), int(floor(p.y + HB.y)) + 1):
 		for cx in range(int(floor(p.x - HB.x)), int(floor(p.x + HB.x)) + 1):

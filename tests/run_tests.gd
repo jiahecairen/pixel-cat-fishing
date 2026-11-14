@@ -1830,11 +1830,15 @@ func test_v078(balance: Dictionary, fish: Array) -> void:
 	for _i in 60:
 		mn.walk(float(nb2.x) * 0.05, float(nb2.y) * 0.05)
 	var dist: float = (mn.fpos() - (Vector2(rockc) + Vector2(0.5, 0.5))).length()
-	check(dist > 0.5 and dist < 0.62, "能一直走到离石头很近的地方才被挡住（距离 %.2f 格，以前要隔 0.8）" % dist)
+	check(dist > 0.25 and dist < 0.5, "能一直走到贴着石头才被挡住（距离 %.2f 格，以前要隔 0.8）" % dist)
 	check(mn.target(nb2.x, nb2.y) == rockc, "走到最近处，面前还是那块石头")
 	mn.end_run()
 	g.state.inventory.clear()
 	g.state.bag_slots = 8
+	g.state.wallet_gold = 0
+	g.state.inventory["stone"] = 4
+	g.state.inventory["boot"] = 2
+	check(g.ore_sell("boot") == 0 and g.ore_sell("stone") == g.pawn_value("stone") and g.ore_sell("stone", true) == 3 * g.pawn_value("stone") and g.inventory.count(g.state, "stone") == 0 and g.pawn_count("stone") == 0, "老钻只收矿石（石头、金属、金矿石），不记赎回")
 	g.state.wallet_gold = 0
 	g.state.inventory["boot"] = 2
 	g.state.inventory["rope"] = 1

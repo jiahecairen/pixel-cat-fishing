@@ -249,3 +249,7 @@
 ## C168 v0.80
 - run_tests：ALL TESTS PASS（749 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：石头形状与反光。
 - 未运行：Mac 上按住方向键同时按空格的实际效果、洞口确认菜单的手感、.app 启动。
+
+## C169 v0.81
+- run_tests：ALL TESTS PASS（750 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：矿井状态栏、老钻对话。
+- 未运行：Mac 上石头贴近挖掘的手感、老钻收矿石的界面操作、迷你窗口里的状态栏、.app 启动。老钻头像暂用村民形象。
