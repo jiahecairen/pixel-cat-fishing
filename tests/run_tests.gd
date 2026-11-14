@@ -53,6 +53,7 @@ func _init() -> void:
 		test_v046(balance, fish)
 		test_v047(balance, fish)
 		test_v048(balance, fish)
+		test_v050(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -103,7 +104,7 @@ func test_fishing(balance: Dictionary, fish: Array) -> void:
 	print("fishing")
 	var cfg: Dictionary = balance["fishing"]
 	var fs := Fishing.new(cfg, fish, _rng(7))
-	fs.zone = "normal"
+	fs.zone = "shallow"
 	var now := 0
 	fs.start(now)
 	check(fs.state == Fishing.State.BAITING and fs.baiting_started, "开始后先上饵")
@@ -675,18 +676,18 @@ func test_weather(balance: Dictionary, fish: Array) -> void:
 func test_water(balance: Dictionary, fish: Array) -> void:
 	print("water: 水域与划船")
 	var fs := Fishing.new(balance["fishing"], fish, _rng(3))
-	var seen := {"shallow": {}, "normal": {}, "deep": {}}
+	var seen := {"shallow": {}, "deep": {}}
 	for z in seen:
 		fs.zone = z
 		for i in 4000:
 			seen[z][fs._roll_fish()] = true
-	check(not seen["shallow"].has("arowana") and not seen["shallow"].has("catfish") and not seen["shallow"].has("koi"), "浅滩钓不到深水鱼")
+	check(not seen["shallow"].has("arowana"), "浅水区钓不到银龙鱼")
 	check(seen["deep"].has("arowana") and seen["deep"].has("catfish") and not seen["deep"].has("loach"), "深水区有银龙鱼和鲶鱼，没有泥鳅")
-	check(seen["normal"].has("bass") and seen["normal"].has("koi") and not seen["normal"].has("arowana"), "普通水域有鲈鱼和锦鲤")
+	check(seen["shallow"].has("bass") and seen["shallow"].has("koi"), "浅水区有鲈鱼和锦鲤（已取消普通水域）")
 	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(4))
-	check(g.zone_id(100.0) == "deep" and g.zone_id(250.0) == "normal" and g.zone_id(400.0) == "shallow", "按位置判断水域")
+	check(g.zone_id(100.0) == "deep" and g.zone_id(250.0) == "shallow" and g.zone_id(400.0) == "shallow" and g.zone_id(-3000.0) == "deep", "按位置判断水域（远海也是深水区）")
 	var zb := g.zone_bounds(640.0)
-	check(zb.size() == 3 and zb[0]["x0"] == 0.0 and zb[2]["x1"] == 640.0 and zb[1]["x0"] == zb[0]["x1"], "水域范围首尾相接")
+	check(zb.size() == 2 and zb[1]["x1"] == 640.0 and zb[1]["x0"] == zb[0]["x1"], "水域范围首尾相接")
 	check(g.can_steer() and g.steer_to(120.0) and g.journey.boat_x() == 120, "钓鱼时可以划船")
 	check(g.steer_to(-50.0) and g.journey.boat_x() == 30 and g.steer_to(9999.0) and g.journey.boat_x() == 512, "划船范围有边界（右端是码头）")
 	check(not g.line_out() and g.fishing.state == Fishing.State.IDLE, "划船先收杆")
@@ -1268,6 +1269,38 @@ func test_v048(balance: Dictionary, fish: Array) -> void:
 	var expect: float = base_chest * (2.0 if focus else 1.0)
 	check(is_equal_approx(g.fishing.chest_chance, expect) and is_equal_approx(g.fishing.luck_mult, 2.0 if focus else 1.0), "宝箱概率只随专注翻倍，不随装备变化 (focus=%s)" % str(focus))
 
+func test_v050(balance: Dictionary, fish: Array) -> void:
+	print("v050: 小岛、被偷播报尺寸、普通水域取消")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(97))
+	var ix: float = g.island_x()
+	check(g.boat_limits().x == 30.0, "小木船只能划到浪区边上")
+	g.state.wallet_gold = 90000
+	g.buy_boat_upgrade(1)
+	check(g.boat_limits().x == ix, "能穿过浪区的船可以划到小岛 (%.0f)" % ix)
+	check(g.steer_to(ix) and g.journey.boat_x() == int(ix), "能划到小岛的码头")
+	check(g.at_island_dock() and g.fishing_blocked(), "小岛码头边水太浅，不能钓鱼")
+	var ev: Array = []
+	g._check_island(ev)
+	check(ev.size() == 1 and ev[0]["type"] == "island_found" and g.island_visited(), "第一次到小岛：发现事件")
+	var ev2: Array = []
+	g._check_island(ev2)
+	check(ev2.is_empty(), "只发现一次")
+	var st2 := GameState.new()
+	check(st2.from_dict(g.state.to_dict()) and st2.islands == g.state.islands, "已探索的岛随存档保存")
+	g.steer_to(-2000.0)
+	check(g.zone_id(float(g.journey.boat_x())) == "deep" and not g.fishing_blocked(), "远海是深水区，可以钓鱼")
+	# 被偷 / 被吃的鱼带尺寸
+	var g2 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(98))
+	check(g2.economy.add_catch(g2.state, "z1", "bass", false, 41) and g2.state.basket_sizes == [41], "鱼篓记着每条鱼的尺寸")
+	check(g2.economy.add_catch(g2.state, "z2", "crucian", false, 17), "再放一条")
+	check(g2.economy.eat_cheapest(g2.state) == "crucian" and g2.economy.last_removed_size == 17 and g2.state.basket_sizes == [41], "被吃的鱼报出尺寸")
+	var st3 := GameState.new()
+	check(st3.from_dict(g2.state.to_dict()) and st3.basket_sizes == [41], "尺寸随存档保存；旧存档没有尺寸也能读")
+	var old := g2.state.to_dict()
+	old.erase("basket_sizes")
+	var st4 := GameState.new()
+	check(st4.from_dict(old) and st4.basket_sizes.size() == st4.basket.size(), "旧存档补齐尺寸")
+
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")
 	# 杂物概率 1：每次咬钩都只有杂物，没有鱼
@@ -1310,7 +1343,7 @@ func test_v046(balance: Dictionary, fish: Array) -> void:
 
 	# 小鱼咬钩更快：第一次等待结束就咬钩的鱼，按占的单位分组比平均等待
 	var fs3 := Fishing.new(balance["fishing"], fish, _rng(91))
-	fs3.zone = "normal"
+	fs3.zone = "shallow"
 	var t3 := 0
 	fs3.start(t3)
 	var sums := {"small": 0.0, "big": 0.0}

@@ -400,14 +400,11 @@
       {"name": "远洋船", "price": 12000}
     ],
     "boat_max_x": 512,
+    "island": {"id": "mist", "name": "雾灯岛", "x": -3900, "auto_speed": 150, "no_fish": 70},
     "zones": [
       {
         "id": "deep",
         "max_x": 190
-      },
-      {
-        "id": "normal",
-        "max_x": 330
       },
       {
         "id": "shallow",

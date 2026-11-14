@@ -9,8 +9,7 @@
       "weight": 30,
       "rarity": 0,
       "zone_weights": {
-        "shallow": 45,
-        "normal": 10
+        "shallow": 55
       },
       "size_cm": [6, 15],
       "units": 0.2
@@ -23,8 +22,7 @@
       "weight": 60,
       "rarity": 0,
       "zone_weights": {
-        "shallow": 45,
-        "normal": 35,
+        "shallow": 80,
         "deep": 5
       },
       "size_cm": [8, 25],
@@ -38,8 +36,7 @@
       "weight": 30,
       "rarity": 0,
       "zone_weights": {
-        "shallow": 10,
-        "normal": 35
+        "shallow": 45
       },
       "size_cm": [20, 40],
       "units": 0.8
@@ -52,8 +49,7 @@
       "weight": 30,
       "rarity": 1,
       "zone_weights": {
-        "shallow": 3,
-        "normal": 30,
+        "shallow": 33,
         "deep": 15
       },
       "size_cm": [25, 50],
@@ -67,7 +63,7 @@
       "weight": 20,
       "rarity": 1,
       "zone_weights": {
-        "normal": 15,
+        "shallow": 15,
         "deep": 25
       },
       "size_cm": [50, 90],
@@ -81,7 +77,7 @@
       "weight": 20,
       "rarity": 1,
       "zone_weights": {
-        "normal": 5,
+        "shallow": 5,
         "deep": 30
       },
       "size_cm": [35, 90],
@@ -95,7 +91,7 @@
       "weight": 12,
       "rarity": 1,
       "zone_weights": {
-        "normal": 8,
+        "shallow": 8,
         "deep": 15
       },
       "size_cm": [20, 45],
@@ -109,7 +105,7 @@
       "weight": 10,
       "rarity": 2,
       "zone_weights": {
-        "normal": 3,
+        "shallow": 3,
         "deep": 10
       },
       "size_cm": [35, 70],

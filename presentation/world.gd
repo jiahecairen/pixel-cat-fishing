@@ -52,6 +52,9 @@ var cat_pos := Vector2(FISH_X + 10, WATER_Y - 34)   # 小猫贴图左上角（�
 var boat_x: float = FISH_X
 var boat_moving: bool = false   # 玩家正用方向键划船
 var boat_dir: float = 1.0
+var face_left: bool = false     # 划船向左停下后，小猫保持朝左，直到按互动键开始钓鱼才转身
+var turn_t0: int = -100000      # 转身动作开始的时刻
+const TURN_MS := 480
 var bird: Dictionary = {}       # 正在来访的鸟：{kind, item, t0}
 var retract_t0: int = -100000     # 划船前收杆动作开始的时刻
 var bait_id: String = ""        # 这一竿钩上的饵（"" = 面团），画上饵动作用
@@ -461,6 +464,50 @@ func _draw_pier_feet(left: float, right: float, t: int) -> void:
 		m.draw_rect(Rect2(px - 1 - rp, WATER_Y + 6, 5 + rp * 2, 1), Color(Pal.L_W, 0.7 - 0.2 * rp))
 
 
+## 西边的小岛：一条左右镜像的码头、草地、岛心湖、树和一座雾灯塔。位置跟着 balance.json 的 water.island.x。
+func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
+	var ix: float = float(m.game.island_info().get("x", -3900))
+	var shore: float = ix - 64.0                    # 岛的海岸线：码头在它右边，陆地在它左边
+	if right < shore - 700.0 or left > ix + 60.0:
+		return
+	var x0: float = maxf(left, shore - 760.0)
+	var x1: float = minf(right, shore)
+	if x0 < x1:
+		_tile_row("ground", 0, 1, GROUND_Y, x0, x1)
+		m.draw_rect(Rect2(x0, GROUND_Y + 16, x1 - x0, maxf(0, bottom - GROUND_Y - 16)), Pal.L_N)
+	# 岛心湖：地面中间凹下去一块，里面是水，岸边有芦苇
+	var lx: float = shore - 420.0
+	var lw: float = 150.0
+	if lx + lw > left and lx < right:
+		m.draw_rect(Rect2(lx - 3, GROUND_Y, lw + 6, 12), Pal.U_O)
+		m.draw_rect(Rect2(lx, GROUND_Y, lw, 10), Pal.L_B)
+		m.draw_rect(Rect2(lx, GROUND_Y, lw, 1), Pal.L_C)
+		for i in 5:
+			var rx: float = lx + 10.0 + fposmod(float(i) * 31.0 + float(t) / 900.0 * 4.0, lw - 20.0)
+			m.draw_rect(Rect2(rx, GROUND_Y + 3 + (i % 3) * 2, 4, 1), Color(Pal.L_W, 0.55))
+		for rx2 in [lx - 6.0, lx + lw + 3.0, lx + lw + 8.0]:
+			m.draw_rect(Rect2(rx2, GROUND_Y - 9, 1, 9), Pal.U_G)
+			m.draw_rect(Rect2(rx2 - 1, GROUND_Y - 11, 3, 3), Pal.L_G)
+	# 树和灯塔
+	for tx in [-250.0, -330.0, -520.0, -590.0, -660.0]:
+		var px: float = shore + tx
+		if px > left - 30 and px < right + 4:
+			m.draw_texture(m.tex["tree"], Vector2(px, GROUND_Y - 36))
+	var lhx: float = shore - 90.0
+	if lhx > left - 30 and lhx < right + 4:
+		m.draw_texture(m.tex["lighthouse"], Vector2(lhx, GROUND_Y - 56))
+		if (t / 700) % 2 == 0:                      # 灯一闪一闪
+			m.draw_rect(Rect2(lhx + 5, GROUND_Y - 53, 8, 3), Color(Pal.L_Y, 0.9))
+			m.draw_rect(Rect2(lhx - 4, GROUND_Y - 53, 5, 1), Color(Pal.L_Y, 0.45))
+			m.draw_rect(Rect2(lhx + 17, GROUND_Y - 53, 5, 1), Color(Pal.L_Y, 0.45))
+	# 码头：把右边的码头贴图左右翻转
+	var ptx: Texture2D = m.tex["pier"]
+	m.draw_texture_rect_region(ptx, Rect2(shore + 64.0, GROUND_Y, -64.0, ptx.get_height()), Rect2(0, 0, 64, ptx.get_height()))
+	var sign_x: float = shore - 24.0
+	if sign_x > left - 40 and sign_x < right + 10 and m.game.island_visited():
+		_plate(sign_x, GROUND_Y - 22, str(m.game.island_info().get("name", "")))
+
+
 ## 水域最左侧的浪区：浪头高出海面，越往左越高，白色的浪尖不停翻滚；小船划进去会被推回来。
 func _draw_waves(left: float, right: float, bottom: float, t: int) -> void:
 	var wz: Vector2 = m.game.wave_zone()
@@ -581,6 +628,7 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 				m.draw_rect(Rect2(bx - 2, WATER_Y - 2 + bob, 5, 1), Pal.U_K)
 	_draw_shoal(left, sea_right, bottom, t)
 	_draw_waves(left, sea_right, bottom, t)
+	_draw_island(left, right, bottom, t)
 	# 地面
 	var land_left := maxf(left, SHORE_X)
 	if land_left < right:
@@ -1119,7 +1167,11 @@ func _draw_leaving(t: int) -> void:
 func _draw_boat_cat(act: int, on_break: bool, now: int, t: int) -> void:
 	var frame := (t / 700) % 2
 	var pos := cat_pos
-	var flip := act == Journey.Activity.SAIL_BACK or (boat_moving and boat_dir < 0)
+	var flip := act == Journey.Activity.SAIL_BACK or (boat_moving and boat_dir < 0) or face_left
+	if t - turn_t0 < TURN_MS:                   # 转身：先朝着原来的方向顿一下，抬一下身子，再转向右边
+		flip = t - turn_t0 < TURN_MS / 2
+		if abs(t - turn_t0 - TURN_MS / 2) < 90:
+			pos.y -= 1
 	if on_break:
 		frame = 2 + (t / 1100) % 2
 	elif m.game.angry():
@@ -1154,6 +1206,8 @@ func _draw_retract(t: int) -> void:
 	m.draw_texture(m.tex["bobber"], b)
 
 func _draw_boat_extras(act: int, on_break: bool, now: int, t: int) -> void:
+	if (face_left or t - turn_t0 < TURN_MS) and not boat_moving and act == Journey.Activity.FISHING and not on_break:
+		return                      # 朝左停着 / 正在转身：竿子还收着，转过去再甩
 	if on_break:
 		m.draw_texture(m.tex["zzz"], cat_pos + Vector2(32, -2 - (t / 500) % 3))
 		return

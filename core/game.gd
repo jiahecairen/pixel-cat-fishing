@@ -190,6 +190,7 @@ func _tick() -> Array:
 		_raining = rain
 		events.append({"type": "weather", "raining": rain})
 	_refresh_modifiers(now)
+	_check_island(events)
 
 	var p := pomodoro.tick(now)
 	if p == "focus_done" or p == "focus_done_long":
@@ -368,12 +369,12 @@ func zone_id(x: float) -> String:
 	for z in _water.get("zones", []):
 		if x < float(z["max_x"]):
 			return z["id"]
-	return "normal"
+	return "shallow"
 
 ## 各水域的范围：[{id, x0, x1}]，从左到右；最后一片的右端用 sea_end 截断。
 func zone_bounds(sea_end: float) -> Array:
 	var out: Array = []
-	var x0 := 0.0
+	var x0 := -100000.0                  # 最左的深水区一直延伸到远海
 	for z in _water.get("zones", []):
 		var x1 := minf(float(z["max_x"]), sea_end)
 		out.append({"id": z["id"], "x0": x0, "x1": x1})
@@ -382,7 +383,38 @@ func zone_bounds(sea_end: float) -> Array:
 
 ## 船能划到的左右边界（船左端的世界坐标）。
 func boat_limits() -> Vector2:
-	return Vector2(float(_water.get("boat_min_x", 30)), float(_water.get("boat_max_x", 440)))
+	var lo := float(_water.get("boat_min_x", 30))
+	if boat_passes_waves() and not island_info().is_empty():
+		lo = float(island_info()["x"])       # 能穿过浪区的船，可以一直划到小岛
+	return Vector2(lo, float(_water.get("boat_max_x", 440)))
+
+## ---- 小岛 ----
+func island_info() -> Dictionary:
+	return _water.get("island", {})
+
+func island_x() -> float:
+	return float(island_info().get("x", -3900))
+
+func island_visited() -> bool:
+	return str(island_info().get("id", "")) in state.islands
+
+## 船在小岛岸边的浅水里，不能钓鱼。
+func at_island_shoal() -> bool:
+	return not island_info().is_empty() and float(journey.boat_x()) <= island_x() + float(island_info().get("no_fish", 70))
+
+## 船贴着小岛的码头。
+func at_island_dock() -> bool:
+	return not island_info().is_empty() and float(journey.boat_x()) <= island_x() + 14.0
+
+## 第一次靠近小岛：记下来并给界面一个"发现小岛"事件。
+func _check_island(events: Array) -> void:
+	if island_info().is_empty() or island_visited() or not journey.on_boat():
+		return
+	if float(journey.boat_x()) <= island_x() + 120.0:
+		state.islands.append(str(island_info()["id"]))
+		state.revision += 1
+		dirty = true
+		events.append({"type": "island_found", "id": island_info()["id"], "name": island_info().get("name", "")})
 
 ## 水域最左侧的浪区：x 在 wave_x 以内浪越来越大把船往回推，最远只能划到 wave_stop 附近
 ## （以后升级船只才能出得更远）。返回 Vector2(wave_x, wave_stop)。
@@ -447,7 +479,7 @@ func at_dock() -> bool:
 
 ## 离码头一定距离内水太浅，不能钓鱼。
 func fishing_blocked() -> bool:
-	return journey.boat_in_shoal()
+	return journey.boat_in_shoal() or at_island_shoal()
 
 ## 停船后重新开始钓鱼。
 func cast_line() -> bool:
@@ -462,7 +494,8 @@ func steer_to(x: float) -> bool:
 	if not can_steer():
 		return false
 	reel_in()                  # 划船要先收杆
-	var nx := clampf(x, float(_water.get("boat_min_x", 30)), float(_water.get("boat_max_x", 440)))
+	var lim := boat_limits()
+	var nx := clampf(x, lim.x, lim.y)
 	if int(round(nx)) != journey.boat_x():
 		journey.set_boat_x(nx)
 		_cancel_bird()                 # 船在开，鸟停不住
@@ -560,7 +593,7 @@ func _tick_fishing(now: int, events: Array) -> void:
 		give(junk, 1, events)
 		events.append({"type": "junk", "item": junk})
 		dirty = true
-	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus):
+	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus, fishing.hooked_size):
 		var size := fishing.hooked_size
 		var best: Dictionary = state.stats["fish_best"]
 		if size > int(best.get(fish_id, 0)):
@@ -601,7 +634,7 @@ func _tick_birds(now: int, events: Array) -> void:
 		elif _bird_kind == "steal":
 			var gone := economy.eat_cheapest(state)
 			_anger_until_ms = now + int(_birds.get("anger_ms", 1500))   # 气得冒红色💢，过一会儿才接着钓
-			events.append({"type": "bird_steal", "fish_id": gone})
+			events.append({"type": "bird_steal", "fish_id": gone, "size": economy.last_removed_size})
 		_bird_kind = ""
 		_bird_item = ""
 		dirty = true
@@ -644,7 +677,7 @@ func _tick_idle_full(now: int, events: Array) -> void:
 	elif journey.advance(now) == "eat":
 		var eaten := economy.eat_cheapest(state)
 		if eaten != "":
-			events.append({"type": "ate", "fish_id": eaten})
+			events.append({"type": "ate", "fish_id": eaten, "size": economy.last_removed_size})
 			journey.resume_fishing(now)
 		dirty = true
 

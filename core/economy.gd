@@ -41,7 +41,9 @@ func basket_full(s: GameState) -> bool:
 	return basket_used(s) >= s.basket_capacity - 0.0001
 
 ## 记录一次鱼获。to_haul=true 进入番茄渔获（不限量），否则进鱼篓（受容量限制）。
-func add_catch(s: GameState, catch_id: String, fish_id: String, to_haul: bool) -> bool:
+var last_removed_size: int = 0      # 刚被拿走（偷/吃/卖）的那条鱼的尺寸
+
+func add_catch(s: GameState, catch_id: String, fish_id: String, to_haul: bool, size: int = 0) -> bool:
 	if catch_id in s.processed_catch_ids or not _prices.has(fish_id):
 		return false
 	if not to_haul and basket_full(s):
@@ -51,6 +53,7 @@ func add_catch(s: GameState, catch_id: String, fish_id: String, to_haul: bool) -
 		s.session_haul.append(fish_id)
 	else:
 		s.basket.append(fish_id)
+		s.basket_sizes.append(size)
 	s.stats["total_fish"] = int(s.stats["total_fish"]) + 1
 	var counts: Dictionary = s.stats["fish_counts"]
 	counts[fish_id] = int(counts.get(fish_id, 0)) + 1
@@ -64,6 +67,7 @@ func sell_basket(s: GameState, sale_id: String) -> int:
 	var gold := value_of(s.basket)
 	_remember(s.processed_sale_ids, sale_id)
 	s.basket.clear()
+	s.basket_sizes.clear()
 	s.wallet_gold += gold
 	s.revision += 1
 	return gold
@@ -83,6 +87,7 @@ func sell_one(s: GameState, sale_id: String, multiplier: float = 1.0) -> Diction
 	if sale_id in s.processed_sale_ids or s.basket.is_empty():
 		return {}
 	var fish_id: String = s.basket.pop_front()
+	last_removed_size = int(s.basket_sizes.pop_front()) if not s.basket_sizes.is_empty() else 0
 	var gold := int(round(price_of(fish_id) * multiplier))
 	_remember(s.processed_sale_ids, sale_id)
 	s.wallet_gold += gold
@@ -112,7 +117,10 @@ func eat_cheapest(s: GameState) -> String:
 	if best < 0:
 		return ""
 	var eaten: String = s.basket[best]
+	last_removed_size = int(s.basket_sizes[best]) if best < s.basket_sizes.size() else 0
 	s.basket.remove_at(best)
+	if best < s.basket_sizes.size():
+		s.basket_sizes.remove_at(best)
 	s.revision += 1
 	return eaten
 

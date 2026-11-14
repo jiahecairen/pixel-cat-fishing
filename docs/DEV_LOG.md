@@ -330,3 +330,11 @@
 - 闪光粒子移到面板之前绘制；`boat(level)` 画出 4 种船，`CATFISH_BOATLV` 调试变量。
 - 版本号 0.49。测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR。
 - 岛、岛心湖、蟹笼、工坊只记了规划（D104），没做。
+
+## v0.50：小岛、目的地、转身、被偷播报
+- 小岛：`water.island`；`Game.island_*`、`_check_island`（第一次靠近发 `island_found`）、`boat_limits` 对 1 级以上的船放到岛边；世界向左延伸（`CAM_MIN` -4700），`world._draw_island` 画镜像码头、草地、岛心湖、树、雾灯塔。
+- 准星按钮（78,14）+ `presentation/dest_panel.gd`；`main.start_auto_sail/_auto_step` 自动航行（巡航 150 像素/秒，进港减速，按方向键取消）；到岛弹白色大标题 `_draw_island_title`。
+- 转身：`world.face_left/turn_t0`，`_pending_cast_at` 转完再甩竿。
+- 被偷/被吃：`economy.basket_sizes/last_removed_size`，`_show_loss`。
+- 取消普通水域，fish.json 的 zone_weights 并入 shallow；HUD 鱼篓图标左移 9 像素给准星按钮腾位置；版本号 0.50。
+- 测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR；新增 `test_v050`。
