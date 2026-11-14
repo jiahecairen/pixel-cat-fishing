@@ -559,8 +559,11 @@ func _update_roam(dt: float) -> void:
 				dir += 1
 				break
 	if mine_view.active():
-		if mini or not j.on_island():
+		if not j.on_island() or (mini and mine_view.region != "mine"):
 			mine_view.leave()
+			return
+		if mini:                          # 在矿井里缩成迷你窗：只播挖矿动画，游戏暂停
+			game.mine.stop_dig(game.now_ms())
 			return
 		var dy := 0
 		if not panel_open() and not mini and get_window().has_focus():
@@ -1488,7 +1491,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				admin.toggle()             # F9 后台
 			elif dialog.open:
 				dialog.key(event.keycode)
-			elif mine_view.active() and not panel_open() and mine_view.key(event.keycode):
+			elif mine_view.active() and not mini and not panel_open() and mine_view.key(event.keycode):
 				pass
 			elif works_panel.open:
 				if event.keycode == KEY_ESCAPE:
@@ -1595,7 +1598,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_press_main()
 	elif BTN_TOWN.has_point(hp):
 		_pressed_btn = "town"
-		_town_button()
+		var tb := _btn_block("town")
+		if tb != "":
+			_toast(tb, "")
+			play("deny")
+		else:
+			_town_button()
 	elif BTN_MENU.has_point(hp):
 		# 面板上只留"设置"。商店、图鉴、统计、换形象都要去镇上对应的房子里
 		play("click")
@@ -1621,7 +1629,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			book.open = false
 			dest_panel.open_panel()
 		else:
-			_toast("要先上船", "")
+			_toast(_btn_block("dest"), "")
 			play("deny")
 		_update_polygon()
 	elif BTN_STATUS.has_point(hp):
@@ -1841,7 +1849,10 @@ func _draw() -> void:
 	var t := Time.get_ticks_msec()
 	if mine_view.active():
 		draw_set_transform(Vector2.ZERO)
-		mine_view.draw(view, t)
+		if mini:
+			mine_view.draw_mini(view, t)
+		else:
+			mine_view.draw(view, t)
 	elif interior != "":
 		draw_set_transform(Vector2.ZERO)
 		world.draw_interior(interior, view, t)
@@ -1911,6 +1922,18 @@ func _draw_weather(t: int) -> void:
 		draw_rect(Rect2(r.position + Vector2(roundf(x), roundf(y)), Vector2(1, 3)), Color(Pal.U_W, 0.7))
 
 
+## 顶栏图标在当前场景不能用的原因（空 = 能用）；不能用的图标画成灰色，点了出提示和错误音。
+func _btn_block(which: String) -> String:
+	match which:
+		"town":
+			if mine_view.active() and (mine_view.region == "mine" or mine_view.region.begins_with("ride") or mine_view.region.begins_with("cross")):
+				return "在矿井里，先回地面"
+		"dest":
+			if not game.journey.on_boat():
+				return "要先上船"
+	return ""
+
+
 func _draw_hud(now: int) -> void:
 	draw_texture(tex["panel"], PANEL_POS)
 	var ph: int = game.pomodoro.phase()
@@ -1934,14 +1957,14 @@ func _draw_hud(now: int) -> void:
 	var sailing: bool = act_now == Journey.Activity.SAIL_OUT or act_now == Journey.Activity.SAIL_BACK
 	var town_ok: bool = game.can_halt_sail() if sailing else (true if act_now == Journey.Activity.WALK_TO_BOAT else true if act_now == Journey.Activity.ISLAND else game.can_go_fishing() if in_town else game.can_go_to_town())
 	_tex_frame("btn_fish" if show_fish else "btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
-			Color.WHITE if town_ok else Color(1, 1, 1, 0.35))
+			Color.WHITE if (town_ok and _btn_block("town") == "") else Color(1, 1, 1, 0.35))
 	if act_now == Journey.Activity.SAIL_OUT or act_now == Journey.Activity.SAIL_BACK or act_now == Journey.Activity.WALK_TO_BOAT:
 		_draw_marquee(Rect2(BTN_TOWN.position - Vector2.ONE, BTN_TOWN.size + Vector2(2, 2)), Time.get_ticks_msec())
 	_tex_frame("btn_gear", BTN_MENU.position, 1 if menu.open and menu.tab == 3 else 0, 2)
 	if adapter.is_overlay():
 		_tex_frame("btn_view", BTN_VIEW.position, 0, 2)
 	_tex_frame("btn_bag", BTN_BAG.position, 1 if bag.open else 0, 2)
-	_tex_frame("btn_dest", BTN_DEST.position, 1 if dest_panel.open else 0, 2)
+	_tex_frame("btn_dest", BTN_DEST.position, 1 if dest_panel.open else 0, 2, Color.WHITE if _btn_block("dest") == "" else Color(1, 1, 1, 0.35))
 	_tex_frame("btn_cat", BTN_STATUS.position, 1 if menu.open and menu.tab == 4 else 0, 2)
 	if _quit_button_visible():
 		_tex_frame("btn_close", BTN_CLOSE.position, 1 if _confirm_quit else 0, 2)

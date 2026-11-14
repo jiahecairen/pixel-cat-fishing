@@ -1086,28 +1086,32 @@
         "block": "dirt",
         "name": "泥土",
         "hard_s": 0.8,
-        "tool": 1
+        "tool": 1,
+        "cost": 1
       },
       {
         "to": 9,
         "block": "stone",
         "name": "石层",
         "hard_s": 1.4,
-        "tool": 2
+        "tool": 2,
+        "cost": 2
       },
       {
         "to": 15,
         "block": "rock",
         "name": "硬岩",
         "hard_s": 2.2,
-        "tool": 3
+        "tool": 3,
+        "cost": 3
       },
       {
         "to": 9999,
         "block": "deep",
         "name": "深岩",
         "hard_s": 3.2,
-        "tool": 4
+        "tool": 4,
+        "cost": 4
       }
     ],
     "ores": [
@@ -1268,6 +1272,12 @@
         "name": "探路",
         "desc": "6 格内能看见出口",
         "v": 1.0
+      },
+      {
+        "id": "tough",
+        "name": "结实",
+        "desc": "体力 +15",
+        "v": 15
       }
     ],
     "dishes": [
@@ -1277,7 +1287,8 @@
         "fish": 1,
         "price": 20,
         "speed": 0.2,
-        "desc": "下一局挖得快 20%"
+        "desc": "下一局挖得快 20%，体力 +10",
+        "stamina": 10
       },
       {
         "id": "soup",
@@ -1285,7 +1296,8 @@
         "fish": 2,
         "price": 50,
         "light": 1.0,
-        "desc": "下一局光圈 +1"
+        "desc": "下一局光圈 +1，体力 +10",
+        "stamina": 10
       },
       {
         "id": "bento",
@@ -1294,7 +1306,8 @@
         "price": 150,
         "speed": 0.3,
         "luck": 0.3,
-        "desc": "下一局挖快 30%、矿多 30%"
+        "desc": "下一局挖快 30%、矿多 30%，体力 +25",
+        "stamina": 25
       }
     ],
     "repair2": {
@@ -1328,6 +1341,11 @@
       "radius": 1,
       "carry": 20,
       "start": 0
+    },
+    "stamina": {
+      "start": 45,
+      "per_pick": 10,
+      "low": 0.25
     }
   }
 }

@@ -96,7 +96,10 @@ func _text() -> String:
 func _cond_ok(conds: Array) -> bool:
 	for c in conds:
 		var k := str(c)
-		if k.begins_with("!"):
+		if k == "@quest":          # 灯塔有进行中的委托才显示"东西带来了"
+			if m.game.quest_state(m.game.room_quest("lighthouse")) != "active":
+				return false
+		elif k.begins_with("!"):
 			if int(m.game.state.story.get(k.substr(1), 0)) > 0:
 				return false
 		elif int(m.game.state.story.get(k, 0)) <= 0:

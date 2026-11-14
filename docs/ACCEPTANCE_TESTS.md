@@ -220,3 +220,7 @@
 ## C161（v0.73）矿井 HUD 与天赋调整
 - Linux 沙盒：run_tests 694 项通过，sim_long_run SIM PASS，截图目检右下两行信息与左下天赋不再重叠。
 - macOS 真机：震波/探路的手感、HUD 排版——未运行。
+
+## C162（v0.74）
+- Linux 沙盒：run_tests 697 项通过，sim_long_run SIM PASS，无 SCRIPT ERROR；截图目检：回地面确认框、体力显示、灰图标、迷你窗挖矿动画。
+- macOS 真机：松键后才能再走的手感、体力数值是否合适、迷你窗动画、灰图标点击提示与错误音——未运行。

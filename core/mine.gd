@@ -52,6 +52,8 @@ func ensure(now_ms: int) -> void:
 		d["bag_lv"] = 0
 	if in_run() and not run().has("floor"):       # 旧版（竖井梯子）留下的一局：作废
 		d["run"] = {}
+	if in_run() and not run().has("sta"):          # v0.72 的存档里没有体力：补满
+		run()["sta"] = stamina_max()
 	if not shaft_state(1).has("cp"):
 		shaft_state(1)["cp"] = 1
 
@@ -133,8 +135,9 @@ func begin_run(id: int, now_ms: int, start_floor: int = 1) -> bool:
 		"shaft": id, "seed": 1 + absi(hash([now_ms, runs, _s.next_seq])) % 2000000000,
 		"floor": start_floor, "x": 0, "y": 0, "dug": {}, "partial": {}, "perks": {}, "dish": dish,
 		"dig": {}, "dir": [0, 0], "n": 0, "draft": [], "best": start_floor, "booms": [],
-		"bag": {"n": 0, "coins": 0, "stone": 0, "metal": 0},
+		"bag": {"n": 0, "coins": 0, "stone": 0, "metal": 0}, "sta": 0,
 	}
+	run()["sta"] = stamina_max()
 	var en := entrance(start_floor)
 	run()["x"] = en.x
 	run()["y"] = en.y
@@ -198,8 +201,23 @@ func choose_perk(i: int) -> String:
 	var id: String = d[i]
 	var perks: Dictionary = run()["perks"]
 	perks[id] = int(perks.get(id, 0)) + 1
+	if id == "tough":
+		run()["sta"] = stamina() + int(perk_def("tough").get("v", 15))
 	run()["draft"] = []
 	return id
+
+## 体力：每挖开一格（自己动手，炸弹不算）扣一点，越深越费；用完就挖不动了，只能走、放炸弹、回地面。
+func stamina_max() -> int:
+	var sc: Dictionary = _c.get("stamina", {})
+	var v := int(sc.get("start", 45)) + int(sc.get("per_pick", 10)) * maxi(0, pick() - 1)
+	v += int(float(perk_def("tough").get("v", 15)) * float(perk_count("tough")))
+	return v + int(dish_def().get("stamina", 0))
+
+func stamina() -> int:
+	return int(run().get("sta", 0))
+
+func dig_cost(_x: int, _y: int) -> int:
+	return int(layer(floor_n()).get("cost", 1))
 
 func speed_mul() -> float:
 	var sp := float(perk_def("swift").get("v", 0.25)) * float(perk_count("swift"))
@@ -348,6 +366,8 @@ func dig_block_reason(dx: int, dy: int) -> String:
 		return "notool"
 	if pick() < need_tool(tx, ty):
 		return "tool"
+	if stamina() < dig_cost(tx, ty):
+		return "tired"
 	return ""
 
 func digging() -> bool:
@@ -446,19 +466,12 @@ func descend() -> bool:
 		st["cp"] = maxi(int(st.get("cp", 1)), f)
 	return true
 
-## 站在入口台阶上：回上一层；第 1 层和有电梯的整 5 层直接回大厅（返回 "hall"，由界面调用 end_run）。
+## 站在入口台阶上：返回 "hall"，由界面（二次确认后）调用 end_run 回地面结算。
 func ascend() -> String:
 	if not on_entrance():
 		return ""
-	if floor_n() <= 1 or has_elevator():
-		return "hall"
 	stop_dig(0)
-	var f := floor_n() - 1
-	run()["floor"] = f
-	var ex := exit_pos(f)
-	run()["x"] = ex.x
-	run()["y"] = ex.y
-	return "up"
+	return "hall"
 
 ## ---- 炸弹 ----
 func place_bomb(now_ms: int) -> String:
@@ -492,6 +505,7 @@ func update(now_ms: int) -> Array:
 		var x := int(d["x"])
 		var y := int(d["y"])
 		var dir: Array = run().get("dir", [0, 0])
+		run()["sta"] = maxi(0, stamina() - dig_cost(x, y))
 		_break_chain(x, y, int(dir[0]), int(dir[1]), ev, 0)
 		run()["x"] = x
 		run()["y"] = y

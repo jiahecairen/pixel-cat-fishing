@@ -29,6 +29,8 @@ var cave_x: float = 60.0
 var cave_flip: bool = false
 var cave_moving: bool = false
 var face: int = 1               # 矿里小猫朝向
+var _leave_dbg := false
+var _need_release := false      # 爆炸后要先松开方向键
 var menu: String = ""           # "" / "shop" / "cook" / "cart" / "repair"
 var menu_sel: int = 0
 var perk_sel: int = 0
@@ -106,6 +108,10 @@ func leave() -> void:
 ## ---- 每帧 ----
 func process(dt: float, dx: int, dy: int) -> void:
 	var t := Time.get_ticks_msec()
+	if region == "mine" and menu == "" and not _leave_dbg and OS.has_environment("CATFISH_LEAVE") and t > 1500:
+		_leave_dbg = true                  # 调试：直接弹出"回地面？"确认
+		_open("leave")
+		menu_sel = 1
 	match region:
 		"cross_out":
 			if _el(t) >= CROSS_MS:
@@ -160,16 +166,20 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 		mn.stop_dig(now)
 		return
 	_step_cd -= dt
+	if menu != "":
+		mn.stop_dig(now)
+		return
+	if _need_release:                      # 炸弹/连锁炸开之后，要先松开方向键，免得一路冲出去
+		if dx == 0 and dy == 0:
+			_need_release = false
+		mn.stop_dig(now)
+		return
 	if dx != 0:
 		dy = 0
 		face = dx
 	if dx == 0 and dy == 0:
 		if mn.digging():
 			mn.stop_dig(now)
-		return
-	# 站在挖开的出口上按↓：下一层
-	if mn.on_exit() and dy > 0 and _step_cd <= 0.0:
-		_descend()
 		return
 	# 前面是空的就走过去（四个方向都行；挖完一格后按住方向键会接着往前走）
 	if not mn.digging() and _step_cd <= 0.0:
@@ -194,6 +204,8 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 			_warn("没有镐子，去找雾灯岛的老柯要一把")
 		"tool":
 			_warn("太硬了，要更好的镐子（工具店升级）")
+		"tired":
+			_warn("没力气了：回入口按空格回地面休息")
 
 func _descend() -> void:
 	var mn = m.game.mine
@@ -201,7 +213,7 @@ func _descend() -> void:
 		_step_cd = 0.3
 		m.play("done")
 		var f: int = mn.floor_n()
-		say("第 %d 层" % f + ("  这里有电梯" if mn.has_elevator() else ""))
+		say("第 %d 层" % f + ("  存档点：下次矿车能直达这里" if mn.has_elevator() else ""))
 		_mcam = Vector2.INF
 		m.game.dirty = true
 
@@ -221,6 +233,7 @@ func _float(x: int, y: int, s: String, c: Color) -> void:
 func _on_event(e: Dictionary) -> void:
 	if e["type"] == "boom":
 		_boom_fx(int(e["x"]), int(e["y"]))
+		_need_release = true
 		return
 	if e["type"] != "dug":
 		return
@@ -254,6 +267,7 @@ func _on_event(e: Dictionary) -> void:
 		m.play("catch")
 	if bool(e["chain"]):
 		_float(x, y, "连锁！", Pal.L_C)
+		_need_release = true
 	m.game.dirty = true
 
 func _boom_fx(x: int, y: int) -> void:
@@ -299,9 +313,10 @@ func key(code: int) -> bool:
 			if mn.on_exit():
 				_descend()
 			elif mn.on_entrance():
-				_ascend()
+				_open("leave")
+				menu_sel = 1                      # 默认停在"再挖一会儿"，免得手滑
 			else:
-				say("找到出口：挖开发光的洞，站上去按↓；回入口按空格")
+				say("找到出口：挖开发光的洞，站上去按空格；回入口梯子按空格回地面")
 			return true
 		return code in [KEY_UP, KEY_W, KEY_DOWN, KEY_S]
 	if region == "isle" and act:
@@ -364,6 +379,7 @@ func _menu_rows() -> int:
 		"shop": return 4
 		"cook": return m.game.mine.dishes().size()
 		"cart": return m.game.mine.start_floors().size() + 1
+		"leave": return 2
 	return 1
 
 func _menu_key(code: int, act: bool) -> void:
@@ -379,6 +395,11 @@ func _menu_key(code: int, act: bool) -> void:
 			"cook": _cook(menu_sel)
 			"cart": _cart(menu_sel)
 			"repair": menu = ""
+			"leave":
+				var go_up := menu_sel == 0
+				menu = ""
+				if go_up:
+					_ascend()
 
 func _open(name: String) -> void:
 	menu = name
@@ -500,9 +521,9 @@ func hint() -> String:
 			if not mh.draft().is_empty():
 				return ""
 			if mh.on_exit():
-				return "↓下一层"
+				return "空格键下一层"
 			if mh.on_entrance():
-				return "空格键回上一层" if (mh.floor_n() > 1 and not mh.has_elevator()) else "空格键回大厅（背包换钱）"
+				return "空格键回地面（背包换钱）"
 			return "方向键挖  B 放炸弹（有 %d 颗）" % mh.bombs()
 	return ""
 
@@ -601,6 +622,42 @@ func draw(view: Vector2, t: int) -> void:
 			_draw_mine(view, t)
 	_draw_overlay(view, t)
 
+## 迷你窗里的挖矿动画：小猫对着岩壁一下一下挥镐，碎石飞溅、矿石闪光。游戏暂停，放大窗口接着挖。
+func draw_mini(view: Vector2, t: int) -> void:
+	var mn = m.game.mine
+	var r := Rect2(3, 31, view.x - 6, 61)
+	m.draw_rect(r.grow(1), Pal.U_K)
+	m.draw_rect(r, Color("#241c2e"))
+	var col: Color = _block_color(str(mn.layer(mn.floor_n()).get("block", "dirt")))
+	# 右边的岩壁：一格一格的块，被敲的那块跟着挥镐抖
+	var swing := (t / 260) % 2
+	for ix in 3:
+		for iy in 4:
+			var bx := r.position.x + 74.0 + ix * 16.0
+			var by := r.position.y + 2.0 + iy * 14.0
+			var hit := ix == 0 and iy == 2
+			var off := Vector2(1 if (hit and swing == 1) else 0, 0)
+			var shade := Color(col, 1.0).darkened(0.12 * float((ix + iy) % 3))
+			m.draw_rect(Rect2(Vector2(bx, by) + off, Vector2(15, 13)), shade)
+			m.draw_rect(Rect2(Vector2(bx, by + 12) + off, Vector2(15, 1)), shade.darkened(0.35))
+			if (ix * 5 + iy * 3) % 7 == 2 and (t / 400 + ix + iy) % 3 != 0:
+				m.draw_rect(Rect2(Vector2(bx + 6, by + 5) + off, Vector2(3, 3)), Pal.L_Y)
+	# 小猫 + 镐
+	var cp := Vector2(r.position.x + 36.0, r.position.y + 22.0)
+	m.draw_cat(cp, 0, false)
+	var hand := cp + Vector2(28, 18)
+	var tip := hand + (Vector2(13, -11) if swing == 0 else Vector2(11, 4))
+	m.draw_line(hand, tip, Pal.U_O, 2.0)
+	m.draw_rect(Rect2(tip + Vector2(-2, -3), Vector2(4, 6)), Pal.L_A)
+	# 碎石
+	for k in 6:
+		var ph := fmod(float(t) / 520.0 + float(k) * 0.17, 1.0)
+		var q := Vector2(r.position.x + 74.0 - ph * 14.0 + float(k % 3) * 2.0, r.position.y + 38.0 - sin(ph * PI) * 12.0 + ph * ph * 26.0)
+		if ph < 0.9:
+			m.draw_rect(Rect2(q.round(), Vector2(2, 2)), col.lightened(0.15))
+	var line := "第 %d 层  体力 %d/%d" % [mn.floor_n(), mn.stamina(), mn.stamina_max()]
+	m.dyn_text(line, Vector2(r.position.x + 4, r.end.y - 12), Pal.L_W)
+
 ## ---- 菜单（工具店 / 饭店 / 矿车 / 2 号井） ----
 func _panel(view: Vector2, title: String, right: String, rows: Array, footer: String, h: float) -> Rect2:
 	var r := Rect2(view.x / 2.0 - 140, 30, 280, h)
@@ -665,6 +722,14 @@ func _draw_menu(view: Vector2) -> void:
 				crow.append(["1 号井  第 %d 层" % int(f), "接着上次的一局往下挖" if mn.in_run() else ("铁路畅通，直达" if int(f) == 1 else "上次到过这一层，电梯直达")])
 			crow.append(["2 号井", "铁路坏了"])
 			_panel(view, "矿车", "", crow, "↑↓选择  空格出发  Esc离开", 20.0 + crow.size() * 28.0 + 20.0)
+		"leave":
+			var bgl: Dictionary = mn.bag()
+			var inl := "背包 %d 件：%s" % [mn.bag_n(), _price(int(bgl.get("coins", 0)))]
+			if int(bgl.get("stone", 0)) > 0:
+				inl += "  石头×%d" % int(bgl["stone"])
+			if int(bgl.get("metal", 0)) > 0:
+				inl += "  金属×%d" % int(bgl["metal"])
+			_panel(view, "回地面？", "", [["回地面", inl + "，这一局结束"], ["再挖一会儿", "继续待在第 %d 层" % mn.floor_n()]], "↑↓选择  空格确认  Esc取消", 20.0 + 2 * 28.0 + 20.0)
 		"repair":
 			var need: Dictionary = mn.cfg().get("repair2", {})
 			var inv = m.game.inventory
@@ -896,8 +961,9 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		m.draw_rect(Rect2(e, 0, 6, view.y), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(view.x - e - 6, 0, 6, view.y), Color(0, 0, 0, a2))
 	# 信息（右下，两行）：第几层、炸弹、镐；背包里装的东西（回地面才换钱）
-	var info := "第 %d 层  炸弹 %d  %s" % [mn.floor_n(), mn.bombs(), str(mn.pick_def().get("name", ""))]
-	m.dyn_text(info, Vector2(view.x - 8 - m.dyn_text_width(info), view.y - 18), Pal.L_W)
+	var info := "第 %d 层  体力 %d/%d  炸弹 %d  %s" % [mn.floor_n(), mn.stamina(), mn.stamina_max(), mn.bombs(), str(mn.pick_def().get("name", ""))]
+	var low: bool = float(mn.stamina()) <= float(mn.stamina_max()) * float(mn.cfg().get("stamina", {}).get("low", 0.25))
+	m.dyn_text(info, Vector2(view.x - 8 - m.dyn_text_width(info), view.y - 18), Pal.L_R if low else Pal.L_W)
 	var bg: Dictionary = mn.bag()
 	var bl := "背包 %d/%d  钱 %s" % [mn.bag_n(), mn.bag_cap(), _price(int(bg.get("coins", 0)))]
 	for it in ["stone", "metal"]:
@@ -924,6 +990,7 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		lines.append(cur)
 	for li in lines.size():
 		m.dyn_text(str(lines[lines.size() - 1 - li]), Vector2(8, view.y - 18 - 12 * li), Pal.L_Y)
+	_draw_menu(view)
 	if not mn.draft().is_empty():
 		_draw_draft(view)
 

@@ -112,7 +112,10 @@
           {
             "text": "你托付的东西我带来了。",
             "next": "",
-            "action": "open_quest"
+            "action": "open_quest",
+            "if": [
+              "@quest"
+            ]
           },
           {
             "text": "没什么，随便看看。",

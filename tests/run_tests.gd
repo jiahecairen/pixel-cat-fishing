@@ -1749,6 +1749,9 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	var ex: Vector2i = mn.exit_pos(1)
 	check(mn.in_map(ex.x, ex.y) and absi(ex.x - en.x) + ex.y >= 7 and mn.ore(ex.x, ex.y) == "exit" and mn.block(ex.x, ex.y) != "", "出口埋在远处的一块石头下面")
 	check(mn.exit_pos(1) == ex, "同一层的地图每次都一样")
+	# 体力：每挖开一格扣一点，用完就挖不动，炸弹不耗体力
+	var sta0: int = mn.stamina()
+	check(sta0 == mn.stamina_max() and sta0 >= 45, "开局体力满：%d" % sta0)
 	# 往下挖，松手保留进度，不挂机
 	check(mn.start_dig(0, 1, clock.t) == "", "朝下挖")
 	var need: int = mn.dig_ms(en.x, 1)
@@ -1757,6 +1760,11 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	clock.t += 1
 	var ev: Array = mn.update(clock.t)
 	check(mn.pos() == Vector2i(en.x, 1) and mn.is_dug(en.x, 1) and ev.size() >= 1, "挖开后小猫进到那一格")
+	check(mn.stamina() == sta0 - 1, "泥土层挖一格体力 -1")
+	var sta_keep: int = mn.stamina()
+	g.state.mine["run"]["sta"] = 0
+	check(mn.dig_block_reason(1, 0) == "tired", "体力用完了挖不动")
+	g.state.mine["run"]["sta"] = sta_keep
 	check(mn.start_dig(1, 0, clock.t) == "" and mn.dig_block_reason(-1, 0) == "", "往旁边也能挖（没有竖井限制）")
 	var need_h: int = mn.dig_ms(en.x + 1, 1)
 	clock.t += need_h / 2
@@ -1783,8 +1791,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 		guard += 1
 	check(mn.pos() == ex and mn.on_exit(), "挖开出口，站在了出口上（用了 %d 步）" % guard)
 	check(mn.descend() and mn.floor_n() == 2 and mn.pos() == mn.entrance(2) and not mn.on_exit(), "下到第 2 层，站在新入口")
-	check(mn.ascend() == "up" and mn.floor_n() == 1 and mn.pos() == ex and mn.is_dug(en.x, 1), "回上一层落在出口，挖过的路还在")
-	check(mn.descend() and mn.ascend() == "up" and mn.descend(), "上上下下不重复挖")
+	check(mn.ascend() == "hall" and mn.floor_n() == 2 and mn.on_entrance(), "每层入口的梯子都是回地面（不是上一层）")
 	# 不会重复发奖励
 	var bag_before: int = mn.bag_n()
 	g.state.mine["run"]["floor"] = 1
@@ -1840,6 +1847,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.buy_bomb() == "" and mn.bombs() == 1 and g.state.wallet_gold == gold_before_bomb - mn.bomb_price(), "买一颗炸弹")
 	g.state.mine["run"]["x"] = 7
 	g.state.mine["run"]["y"] = 5
+	var sta_bomb: int = mn.stamina()
 	check(mn.place_bomb(clock.t) == "" and mn.bombs() == 0 and mn.live_bombs().size() == 1 and mn.place_bomb(clock.t) == "empty", "放下炸弹")
 	check(mn.update(clock.t + 500).is_empty() and mn.live_bombs().size() == 1, "引线没烧完不会炸")
 	var before_dug: int = g.state.mine["run"]["dug"].size()
@@ -1850,6 +1858,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 			booms += 1
 	check(booms >= 1 and g.state.mine["run"]["dug"].size() >= before_dug + 6 and mn.live_bombs().is_empty(), "炸弹一次炸开一片（%d 格）" % (g.state.mine["run"]["dug"].size() - before_dug))
 	check(mn.is_dug(8, 5) and mn.is_dug(6, 6), "范围是周围一圈")
+	check(mn.stamina() == sta_bomb, "炸弹不耗体力")
 	# 炸药桶连锁、矿脉连锁
 	var found_tnt := false
 	var tnt_cell := Vector2i(-1, -1)
