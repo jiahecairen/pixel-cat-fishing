@@ -1460,15 +1460,11 @@ func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 	match act:
 		Journey.Activity.WALK_TO_STALL, Journey.Activity.WALK_TO_BOAT:
 			m.draw_cat(cat_pos, 4 + (t / 180) % 2, walk_flip)
-			if not m.game.state.basket.is_empty():        # 还有鱼就背着鱼篓
-				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if walk_flip else 3, 16 + (t / 180) % 2))
 		Journey.Activity.ROAM, Journey.Activity.ISLAND:
 			if act == Journey.Activity.ISLAND and not on_break and not roam_moving and m.game.at_lake_spot() and m.game.line_out():
 				_draw_lake_fishing(t, now)
 				return
 			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 0, roam_flip)
-			if not m.game.state.basket.is_empty():
-				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if roam_flip else 3, 16 + ((t / 180) % 2 if roam_moving else 0)))
 		Journey.Activity.VENDING, Journey.Activity.SOLD_OUT:
 			var frame := (t / 700) % 2
 			var p := cat_pos
@@ -1927,10 +1923,10 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 		_draw_room_customer(kind, ox, fy, keeper_pos, t)
 	# 小猫
 	var pos := Vector2(ox + roundf(room_x), fy - 30)
-	if napping and kind == "home":
-		m.draw_cat(Vector2(ox + 162, fy - 34), 2 + (t / 700) % 2, false)
+	if napping and kind in ["home", "m_inn"]:
+		m.draw_cat(Vector2(ox + (162 if kind == "home" else 62), fy - 34), 2 + (t / 700) % 2, false)
 		var zy := (t / 400) % 3
-		m.label("Z", Vector2(ox + 150 + zy * 3, fy - 52 - zy * 4), Pal.U_K)
+		m.label("Z", Vector2(ox + (150 if kind == "home" else 50) + zy * 3, fy - 52 - zy * 4), Pal.U_K)
 	else:
 		var flip := room_flip
 		if not room_moving and keeper_pos != Vector2.INF and room_spot(kind) == "quest":

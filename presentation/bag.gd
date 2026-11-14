@@ -11,6 +11,8 @@ var trash_mode: bool = false  # 在垃圾箱打开的：什么都能扔
 var confirm_id: String = ""   # 扔任务物品要按两次：第一次记在这里
 var wh: bool = false      # 在家里仓库打开的：多了"身上 / 仓库"两页，按钮变成存入 / 取出
 var tab: int = 0          # 仓库模式下：0 = 身上，1 = 仓库
+var fish_view: bool = false   # 鱼篓视图：里面有哪些鱼、各占百分之几
+var fsel: int = 0
 var sel: int = 0          # 选中的是"手里有的物品"列表里的第几个
 var m
 
@@ -227,6 +229,7 @@ func move_selected(all: bool) -> void:
 	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
 
 func toggle() -> void:
+	fish_view = false
 	wh = false
 	sell_mode = false
 	ore_mode = false
@@ -236,9 +239,40 @@ func toggle() -> void:
 	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
 
 # ------------------------------------------------------------------ 输入
+## 物品栏旁边的鱼篓按钮（只有普通物品栏有）。
+func _fish_btn_rect() -> Rect2:
+	var r := rect()
+	return Rect2(r.position.x + (58 if m.mini else 88), r.position.y + 2, 15, 11)
+
+func _plain() -> bool:
+	return not wh and not sell_mode and not trash_mode
+
+## 鱼篓里每种鱼：[[id, 条数, 百分比]]，百分比 = 这种鱼占篓里所有鱼的几成。
+func fish_rows() -> Array:
+	var counts := {}
+	for f in m.game.state.basket:
+		counts[str(f)] = int(counts.get(str(f), 0)) + 1
+	var total: int = m.game.state.basket.size()
+	var out: Array = []
+	for id in m.game.fish_by_id:
+		if counts.has(id):
+			out.append([id, int(counts[id]), maxi(1, int(round(100.0 * float(counts[id]) / float(total))))])
+	return out
+
 func click(p: Vector2) -> bool:
 	if not open or not rect().has_point(p):
 		return false
+	if _plain() and not _close_rect().has_point(p) and _fish_btn_rect().has_point(p):
+		fish_view = not fish_view
+		m.play("click")
+		return true
+	if fish_view and not _close_rect().has_point(p):
+		var fr := fish_rows()
+		for i in mini(fr.size(), _cols() * _rows()):
+			if Rect2(_slot_pos(i), Vector2(_step() - 2, _step() - 2)).has_point(p):
+				fsel = i
+				m.play("click")
+		return true
 	if _close_rect().has_point(p):
 		open = false
 		wh = false
@@ -390,6 +424,31 @@ func _draw_chest_frame(r: Rect2) -> void:
 	m.draw_rect(Rect2(lx, r.position.y + 10, 9, 2), Pal.U_H)
 	m.draw_rect(Rect2(lx + 4, r.position.y + 7, 1, 3), Pal.U_K)
 
+func _draw_fish_view(r: Rect2, size: float) -> void:
+	var g = m.game
+	var fr := fish_rows()
+	fsel = clampi(fsel, 0, maxi(0, fr.size() - 1))
+	for i in mini(_cols() * _rows(), maxi(fr.size(), 1)):
+		var p := _slot_pos(i)
+		m.draw_rect(Rect2(p, Vector2(size, size)), Pal.L_Y if (i == fsel and i < fr.size()) else Pal.U_A)
+		m.draw_rect(Rect2(p + Vector2(1, 1), Vector2(size - 2, size - 2)), Pal.U_K)
+		m.draw_rect(Rect2(p + Vector2(2, 2), Vector2(size - 4, size - 4)), Pal.L_A)
+		if i < fr.size():
+			var f: Dictionary = g.fish_by_id[fr[i][0]]
+			m.draw_texture(m.tex[f["sprite"]], p + Vector2((size - 16) / 2, (size - 16) / 2))
+			var s := "%d%%" % int(fr[i][2])
+			m.draw_rect(Rect2(p.x + size - s.length() * 4 - 2, p.y + size - 7, s.length() * 4 + 1, 6), Pal.U_K)
+			m.text(s, Vector2(p.x + size - s.length() * 4 - 1, p.y + size - 6), Pal.L_W)
+	var dy := _detail_y()
+	if fr.is_empty():
+		m.label("鱼篓是空的", Vector2(r.position.x + 5, dy), Pal.L_A)
+		return
+	var fd: Dictionary = g.fish_by_id[fr[fsel][0]]
+	m.dyn_text(str(fd.get("name", "")), Vector2(r.position.x + 24, dy), Pal.L_W)
+	m.draw_texture(m.tex[fd["sprite"]], Vector2(r.position.x + 5, dy - 2))
+	if not m.mini:
+		m.dyn_text("占鱼篓 %d%%" % int(fr[fsel][2]), Vector2(r.position.x + 24, dy + 12), Pal.L_Y)
+
 func _btn(r: Rect2, text: String, c: Color, shade: Color) -> void:
 	m.draw_rect(r, c)
 	m.draw_rect(Rect2(r.position.x, r.end.y - 2, r.size.x, 2), shade)
@@ -424,6 +483,14 @@ func draw() -> void:
 			else:
 				m.label_centered("身上" if i == 0 else "仓库", tr.position.x + tr.size.x / 2, tr.position.y + 0, Pal.U_K if tab == i else Pal.L_A)
 	m.tex_frame("btn_close", _close_rect().position, 0, 2)
+	if _plain():                                            # 物品栏旁边的鱼篓按钮
+		var fb := _fish_btn_rect()
+		m.draw_rect(fb, Pal.L_Y if fish_view else Pal.U_A)
+		m.draw_rect(fb.grow(-1), Pal.U_K)
+		m.draw_texture(m.tex["basket"], fb.position + Vector2(2, 0))
+	if fish_view and _plain():
+		_draw_fish_view(r, size)
+		return
 	var owned := _owned()
 	var cells := _cols() * _rows()
 	if not ((wh and tab == 1) or _redeem()):

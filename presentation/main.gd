@@ -422,6 +422,13 @@ func _apply_debug_env() -> void:
 		st.quests = {"keeper": "active", "tailor": "active"}
 		game.inventory.add(st, "pearl", 1)
 		game.inventory.add(st, "boot", 1)
+	if OS.has_environment("CATFISH_FISHVIEW"):    # 调试：篓里放几条鱼，物品栏切到鱼篓视图
+		var ids: Array = game.fish_by_id.keys()
+		for k in 9:
+			st.basket.append(ids[k % mini(3, ids.size())])
+			st.basket_sizes.append(10)
+		bag.fish_view = true
+		bag.open = true
 	if OS.has_environment("CATFISH_BAGSEL"):      # 调试：物品栏选中第 N 个
 		bag.sel = OS.get_environment("CATFISH_BAGSEL").to_int()
 	if OS.has_environment("CATFISH_WALLET"):      # 调试：钱包铜币数
@@ -619,7 +626,7 @@ func _update_roam(dt: float) -> void:
 				dir += 1
 				break
 	if mine_view.active():
-		if not j.on_island() or (mini and mine_view.region != "mine"):
+		if not j.on_island():
 			mine_view.leave()
 			return
 		if mini:                          # 在矿井里缩成迷你窗：只播挖矿动画，游戏暂停

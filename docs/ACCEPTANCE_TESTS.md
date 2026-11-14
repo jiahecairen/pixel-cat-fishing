@@ -267,3 +267,7 @@
 ## C172 v0.84
 - run_tests：ALL TESTS PASS（790 项）；sim_long_run：SIM PASS（Linux 沙盒）。新增测试：站在石头正中、站在梯子里都会被挪到最近的空地，站在空地上不乱挪。
 - 未运行：用户 Mac 上的那份真实存档重启后是否恢复正常、.app 启动。
+
+## C173 v0.85
+- run_tests：ALL TESTS PASS（790 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：鱼篓视图、矿山岛山上的脚手架和小屋。
+- 未运行：迷你窗里旅店睡觉的画面（Linux 没有迷你窗，只确认脚本能加载）、旅店屋里睡觉的画面、背包满了的右上角提示、鱼篓按钮在 Mac 上的手感、.app 启动。

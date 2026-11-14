@@ -65,6 +65,8 @@ func active() -> bool:
 func in_mine() -> bool:
 	return region == "mine"
 
+var _full_t: int = -100000        # 上次"背包满了"的时刻（右上角提示，停一会儿再淡出）
+
 func say(s: String) -> void:
 	msg = s
 	msg_t = Time.get_ticks_msec()
@@ -88,6 +90,7 @@ func _enter_room(spot: String) -> void:
 func _leave_room() -> void:
 	var back: String = {"m_tools": "shop", "m_diner": "rest", "m_inn": "inn"}[room_kind]
 	room_kind = ""
+	m.world.napping = false
 	go("isle")
 	isle_x = SPOT[back] - 16.0
 	isle_flip = false
@@ -170,6 +173,7 @@ func process(dt: float, dx: int, dy: int) -> void:
 				isle_flip = dx < 0
 				isle_x = clampf(isle_x + dx * WALK_SPEED * m.game.move_speed() * dt, 20.0, ISLE_W - 40.0)
 		"room":
+			m.world.napping = m.game.mine.resting() and room_kind == "m_inn"
 			if menu != "":
 				return
 			m.world.room_moving = dx != 0
@@ -253,7 +257,7 @@ func _open_crate() -> void:
 	var r: Dictionary = mn.open_chest(face_v.x, face_v.y)
 	if not bool(r["ok"]):
 		if str(r.get("why", "")) == "full":
-			_warn("物品栏放不下，先腾点地方")
+			_full_t = Time.get_ticks_msec()
 			m.play("deny")
 		return
 	_chips(int(r["x"]), int(r["y"]), 14, 80.0)
@@ -305,8 +309,7 @@ func _on_event(e: Dictionary) -> void:
 	_shake(2.0, 160)
 	var o := str(e["ore"])
 	if bool(e["lost"]):
-		_float(x, y, "背包满了", Pal.L_R)
-		_warn("背包满了，带不走：回地面去典当行卖掉或扔掉")
+		_full_t = Time.get_ticks_msec()
 	if str(e["item"]) != "" and not bool(e["lost"]):
 		var nm: String = str(m.game.inventory.by_id.get(e["item"], {}).get("name", e["item"]))
 		_float(x, y - 1, "%s +%d" % [nm, int(e["n"])], Pal.L_W)
@@ -414,7 +417,8 @@ func _ascend() -> void:
 		mn.m()["at"] = "cave"
 		m.play("coin" if int(res["coins"]) > 0 else "click")
 		m.game.dirty = true
-		say("回到地面：" + ("  ".join(parts) if not parts.is_empty() else "空手而归"))
+		if not parts.is_empty():
+			say("回到地面：" + "  ".join(parts))
 
 func _menu_rows() -> int:
 	match menu:
@@ -459,15 +463,39 @@ func _open(name: String) -> void:
 	menu_sel = 0
 	m.play("click")
 
-## 山腰上挥镐的小鼹鼠：4×4 的几个像素（身子一小团、镐一举一落）。
-func _tiny_mole(p: Vector2, f: int) -> void:
-	m.draw_rect(Rect2(p + Vector2(0, 1), Vector2(3, 3)), Pal.U_O)          # 身子
-	m.draw_rect(Rect2(p + Vector2(0, 0), Vector2(2, 1)), Pal.L_A)          # 头灯安全帽
-	m.draw_rect(Rect2(p + Vector2(2, 2), Vector2(1, 1)), Pal.L_P)          # 鼻子
-	if f == 0:
-		m.draw_rect(Rect2(p + Vector2(3, 0), Vector2(1, 2)), Pal.L_A)      # 镐举起来
-	else:
-		m.draw_rect(Rect2(p + Vector2(3, 2), Vector2(1, 2)), Pal.L_A)      # 镐砸下
+## 山上的木脚手架和冒烟的小屋（远景，都很小）。x 是在山里的横坐标，y 贴着山的轮廓。
+const MTN_TOP := [33, 23, 14, 14, 23, 27, 18, 8, 4, 13, 22, 31, 24, 14, 10, 19, 28, 29, 20, 20]
+const MTN_PROPS := [[10, "s"], [26, "h"], [44, "s"], [58, "s"], [70, "h"], [84, "s"], [102, "s"], [116, "h"], [130, "s"], [146, "s"], [20, "s"], [96, "h"], [138, "h"]]
+
+func _mtn_y(x: float) -> float:
+	var k := clampf(x / 8.0, 0.0, 18.99)
+	var i := int(k)
+	return lerpf(float(MTN_TOP[i]), float(MTN_TOP[i + 1]), k - float(i))
+
+func _mtn_props(mx: float, my: float, idx: int, t: int) -> void:
+	for n in MTN_PROPS.size():
+		if (n + idx) % 3 == 0 and n % 2 == 1:
+			continue                                   # 每座山的东西不完全一样
+		var px: float = float(MTN_PROPS[n][0]) + float((idx * 7 + n * 3) % 5)
+		var gy: float = my + _mtn_y(px) + 4.0                   # 脚踩的地方
+		var pos := Vector2(mx + px, gy)
+		if str(MTN_PROPS[n][1]) == "s":
+			var h: float = 7.0 + float((n + idx) % 3) * 2.0       # 脚手架：两根立柱、横梁、斜撑、顶上一块板
+			m.draw_rect(Rect2(pos + Vector2(0, -h), Vector2(1, h)), Pal.U_O)
+			m.draw_rect(Rect2(pos + Vector2(5, -h), Vector2(1, h)), Pal.U_O)
+			m.draw_rect(Rect2(pos + Vector2(-1, -h), Vector2(8, 1)), Pal.L_O)
+			m.draw_rect(Rect2(pos + Vector2(0, -h * 0.5), Vector2(6, 1)), Pal.L_O)
+			m.draw_rect(Rect2(pos + Vector2(1, -h + 1), Vector2(1, 1)), Pal.L_O)
+			m.draw_rect(Rect2(pos + Vector2(2, -h * 0.5 - 1), Vector2(1, 1)), Pal.L_O)
+			m.draw_rect(Rect2(pos + Vector2(3, -h * 0.5 - 2), Vector2(1, 1)), Pal.L_O)
+		else:
+			m.draw_rect(Rect2(pos + Vector2(0, -5), Vector2(8, 5)), Pal.L_N)       # 小屋：墙、屋顶、烟囱
+			m.draw_rect(Rect2(pos + Vector2(-1, -7), Vector2(10, 2)), Pal.U_O)
+			m.draw_rect(Rect2(pos + Vector2(2, -6), Vector2(2, 2)), Pal.U_K)
+			m.draw_rect(Rect2(pos + Vector2(6, -10), Vector2(2, 4)), Pal.U_A)
+			for k in 3:                                                           # 烟一团一团往上飘
+				var ph := float((t / 90 + k * 8 + n * 5) % 24) / 24.0
+				m.draw_rect(Rect2(pos + Vector2(6 + sin(ph * 5.0 + float(k)) * 2.0, -12 - ph * 14.0), Vector2(2, 2)), Color(Pal.U_W, 0.55 * (1.0 - ph)))
 
 func _spot() -> String:
 	var cx := isle_x + 16.0
@@ -731,8 +759,7 @@ func _draw_isle(view: Vector2, t: int) -> void:
 	for i in 5:
 		var mx := float(i) * 160.0 + par - 40.0
 		m.draw_texture(m.tex["mine_mtn"], Vector2(mx, fy - 58))
-		var hole: Array = [[40, 34], [92, 28], [128, 38]][i % 3]
-		_tiny_mole(Vector2(mx + hole[0] + 8, fy - 58 + hole[1] - 4), ((t + i * 250) / 420) % 2)
+		_mtn_props(mx, fy - 58, i, t)
 	# 地面和海
 	m.draw_rect(Rect2(0, fy, ISLE_W - 60, view.y - fy), Pal.L_N)
 	m.draw_rect(Rect2(0, fy, ISLE_W - 60, 3), Pal.L_G)
@@ -803,9 +830,32 @@ func _draw_wall(mn, x: int, y: int, pos: Vector2) -> void:
 	if mn.is_floor(x, y - 1):
 		m.draw_rect(Rect2(pos, Vector2(CELL, 3)), rim)
 
+## 迷你窗里不在矿井时：睡觉的话显示睡着的小猫，否则小猫站着等。
+func _draw_mini_town(view: Vector2, t: int) -> void:
+	var mn = m.game.mine
+	var r := Rect2(3, 31, view.x - 6, 61)
+	m.draw_rect(r.grow(1), Pal.U_K)
+	m.draw_rect(r, Color("#3a2c3e"))
+	m.draw_rect(Rect2(r.position.x, r.end.y - 14, r.size.x, 14), Pal.L_O)
+	if mn.resting():
+		m.draw_texture(m.tex["bed"], Vector2(r.position.x + 38, r.end.y - 33))
+		m.draw_cat(Vector2(r.position.x + 40, r.end.y - 38), 2 + (t / 700) % 2, false)
+		var zy := (t / 400) % 3
+		m.label("Z", Vector2(r.position.x + 70 + zy * 3, r.position.y + 14 - zy * 3), Pal.L_W)
+		var k: float = mn.rest_progress(m.game.now_ms())
+		m.draw_rect(Rect2(r.position.x + 10, r.end.y - 8, r.size.x - 20, 4), Pal.U_K)
+		m.draw_rect(Rect2(r.position.x + 11, r.end.y - 7, (r.size.x - 22) * k, 2), Pal.L_G)
+	else:
+		m.draw_cat(Vector2(r.position.x + 40, r.end.y - 44), 0, false)
+		var nm: String = {"cave": "矿洞大厅", "room": "屋子里", "isle": "矿山岛"}.get(region, "矿山岛")
+		m.dyn_text(nm, Vector2(r.position.x + 6, r.position.y + 4), Pal.L_W)
+
 ## 迷你窗里的挖矿动画：小猫对着岩壁一下一下挥镐，碎石飞溅、矿石闪光。游戏暂停，放大窗口接着挖。
 func draw_mini(view: Vector2, t: int) -> void:
 	var mn = m.game.mine
+	if region != "mine":
+		_draw_mini_town(view, t)
+		return
 	var r := Rect2(3, 31, view.x - 6, 61)
 	m.draw_rect(r.grow(1), Pal.U_K)
 	m.draw_rect(r, Color("#241c2e"))
@@ -1112,16 +1162,6 @@ func _draw_mine(view: Vector2, t: int) -> void:
 			var q: Vector2 = d["p"] + d["v"] * age + Vector2(0, 220.0 * age * age)
 			m.draw_rect(Rect2(q.round(), Vector2(3, 3)), d["c"])
 	debris = keep
-	# 洞口、木箱、梯子：面朝着时画黄色框（石头不画框）
-	if _special_ahead() != "":
-		var tc: Vector2i = mn.target(face_v.x, face_v.y)
-		var tr := Rect2(tc.x * CELL + 1, tc.y * CELL + 1, CELL - 2, CELL - 2)
-		var blink := 0.55 + 0.35 * sin(float(t) / 140.0)
-		var yc := Color(Pal.L_Y, blink)
-		m.draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1)), yc)
-		m.draw_rect(Rect2(tr.position + Vector2(0, tr.size.y - 1), Vector2(tr.size.x, 1)), yc)
-		m.draw_rect(Rect2(tr.position, Vector2(1, tr.size.y)), yc)
-		m.draw_rect(Rect2(tr.position + Vector2(tr.size.x - 1, 0), Vector2(1, tr.size.y)), yc)
 	# 小猫（脚在 fpos；挖的时候挥镐）
 	var cp := Vector2(roundf(fp.x * CELL - 15.0), roundf(fp.y * CELL - 26.0))
 	var dig: bool = mn.digging()
@@ -1220,6 +1260,11 @@ func _draw_overlay(view: Vector2, t: int) -> void:
 		var h := hint()
 		if h != "" and menu == "":
 			m.dyn_text(h, Vector2(8, 28), Pal.L_W if region != "isle" else Pal.U_K)
+	if t - _full_t < 2600:
+		var al := clampf(float(2600 - (t - _full_t)) / 900.0, 0.0, 1.0)
+		var fw: float = m.dyn_text_width("背包满了") + 10.0
+		m.draw_rect(Rect2(view.x - fw - 6, 6, fw, 16), Color(0.1, 0.08, 0.14, 0.85 * al))
+		m.dyn_text("背包满了", Vector2(view.x - fw - 1, 8), Color(Pal.L_R, al))
 	if msg != "" and t - msg_t < 2800:
 		var w2: float = m.dyn_text_width(msg)
 		var r := Rect2(view.x / 2.0 - w2 / 2.0 - 6, view.y - 44, w2 + 12, 16)
