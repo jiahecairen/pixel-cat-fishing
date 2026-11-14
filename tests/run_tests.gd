@@ -50,6 +50,7 @@ func _init() -> void:
 		test_sail_turn(balance, fish)
 		test_dock_shoal(balance, fish)
 		test_money_waves(balance, fish)
+		test_v046(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -893,7 +894,7 @@ func test_bag_gear_quests(balance: Dictionary, fish: Array) -> void:
 	g5.state.quests["keeper"] = "done"
 	check(g5.next_quest_letter() == "tailor", "老板的任务完成后，下一封信是服装店的")
 	g5.state.quests["tailor"] = "active"
-	check(g5.room_quest("tailor") == "tailor" and g5.room_quest("tackle") == "keeper", "按屋子找到该说的任务")
+	check(g5.room_quest("tailor") == "tailor" and g5.room_quest("tackle") == "keeper2", "按屋子找到该说的任务（做完的不再占着，下一个没开始的任务先说）")
 	g5.inventory.add(g5.state, "boot", 2); g5.inventory.add(g5.state, "bell")
 	check(g5.turn_in("tailor") and g5.state.bag_slots == 12 and g5.quest_state("tailor") == "done", "交付后背包扩到 12 格")
 	check(g5.next_quest_letter() == "keeper2", "两个都完成后，下一封信是老板的第二个任务")
@@ -1203,3 +1204,44 @@ func test_money_waves(balance: Dictionary, fish: Array) -> void:
 	check(s3.piggy == 77, "存钱罐存档往返")
 	var w := g.wave_zone()
 	check(g.wave_push(w.x + 5.0) == 0.0 and g.wave_push(w.y) == 1.0 and g.wave_push((w.x + w.y) / 2.0) > 0.0, "浪区推力：入口 0，最深处 1")
+
+
+func test_v046(balance: Dictionary, fish: Array) -> void:
+	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")
+	# 杂物概率 1：每次咬钩都只有杂物，没有鱼
+	var b2 := balance.duplicate(true)
+	b2["junk"]["chance"] = 1.0
+	var g := Game.new(b2, fish, GameState.new(), FakeClock.new(), _rng(81))
+	var c: FakeClock = g._clock
+	var fish_events := 0
+	var junk_events := 0
+	for e in _run(g, c, 400.0):
+		if e["type"] == "catch":
+			fish_events += 1
+		elif e["type"] == "junk":
+			junk_events += 1
+	check(junk_events > 0 and fish_events == 0, "杂物概率 1：只有杂物没有鱼 (%d / %d)" % [junk_events, fish_events])
+	check(g.fishing.hooked_fish == "" or g.fishing.hooked_fish.begins_with(Fishing.JUNK_PREFIX) or g.fishing.hooked_fish == Fishing.CHEST, "咬钩的东西从一开始就是杂物")
+	# 仓库里直接使用：装备、一次性物品
+	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(82))
+	g2.state.warehouse["rod_2"] = 1
+	g2.state.warehouse["bell"] = 2
+	var res := g2.use_item_w("rod_2")
+	check(res["ok"] and int(g2.state.gear["rod"]) == 2 and g2.inventory.count_w(g2.state, "rod_2") == 0, "仓库里的鱼竿直接装上")
+	check(g2.inventory.count(g2.state, "rod_0") == 1 or g2.inventory.count_w(g2.state, "rod_0") == 1, "换下来的鱼竿放进物品栏（或仓库）")
+	check(g2.use_item_w("bell")["ok"] and g2.inventory.count_w(g2.state, "bell") == 1 and int(g2.state.effects["bell_sales"]) > 0, "仓库里的招财铃直接用掉一个")
+	check(not g2.use_item_w("pearl")["ok"], "仓库里没有的东西不能用")
+	# 上次钓到鱼的地方
+	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(83))
+	var c3: FakeClock = g3._clock
+	g3.steer_to(300.0)
+	g3.state.journey["fish_x"] = 300
+	g3.steer_to(g3.journey.cfg_dock_x())
+	g3.go_to_town()
+	_run(g3, c3, 40.0)
+	g3.begin_roam(580.0)
+	g3.roam_board(0.5)
+	_run(g3, c3, 60.0)
+	check(g3.journey.boat_x() == 300, "手动靠岸后回船，船开回上次钓到鱼的地方 (%d)" % g3.journey.boat_x())
+	# 店主默认的话
+	check(not g3.shop_chat("tackle").is_empty() and not g3.shop_chat("tailor").is_empty(), "店主有默认的话")

@@ -1304,7 +1304,11 @@ func _draw_size_tag(fish_pos: Vector2, size: int) -> void:
 func _hooked_tex() -> Texture2D:
 	if m.game.fishing.hooked_fish == Fishing.CHEST:
 		return null      # 宝箱是两帧的图，由 _draw_hooked 单独画
-	var f: Dictionary = m.game.fish_by_id.get(m.game.fishing.hooked_fish, {})
+	var hf: String = m.game.fishing.hooked_fish
+	if hf.begins_with(Fishing.JUNK_PREFIX):          # 杂物：画物品图标，不是鱼
+		var jd: Dictionary = m.game.inventory.by_id.get(hf.substr(Fishing.JUNK_PREFIX.length()), {})
+		return m.tex.get(jd.get("sprite", ""), null)
+	var f: Dictionary = m.game.fish_by_id.get(hf, {})
 	return m.tex.get(f.get("sprite", ""), null)
 
 ## 画钓上来的东西：鱼，或者宝箱（提上来时关着，结算时打开）。

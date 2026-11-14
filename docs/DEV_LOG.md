@@ -299,3 +299,12 @@
 - 生成脚本字符检查对含 ASCII 的标签跳过逐字检查。
 - 新增调试变量 `CATFISH_ADMIN`、`CATFISH_CATCH=鱼id`。
 - 测试 ALL TESTS PASS、SIM PASS；启动检查无 SCRIPT ERROR。居民聊天后的位置、后台按钮点击、存钱罐、浪区推回手感都没有实机验证，全部待 Mac。
+
+## v0.46 杂物和鱼二选一、仓库木箱、默认对话、上次钓鱼点
+- 杂物改在咬钩时（`FishingSystem._after_twitch`，经 `junk_roller`）决定，hooked_fish 是 `junk:物品id`；世界层提竿时画物品图标；存档断点也认这种值。
+- `main.gd` 的收杆动画只在浮漂已入水（WAITING/TWITCH/HOOKED/REELING/SETTLEMENT）时演（`_bobber_in_water`）。
+- 仓库：`bag._draw_chest_frame`，"使用/装备"按钮 + U 键；`Game.use_item_w`。
+- 店主：`quest_panel.just_done`、`Game.shop_chat`；`room_quest` 优先级改成 进行中 > 未开始 > 做完。
+- `journey.remember_fish_spot / fish_spot`，WALK_TO_BOAT 结束时手动靠岸的船改开回钓鱼点。
+- 测试 ALL TESTS PASS、SIM PASS；新增 `test_v046`。教训：测试输出里出现 SCRIPT ERROR 时，"ALL TESTS PASS" 也不算过——这次先发现并修了测试里调用不存在的 FakeClock.advance。
+- 没验证：提竿画面里杂物图标、收杆动画是否不再触发、仓库按钮实际点击、对话画面，全部待 Mac。

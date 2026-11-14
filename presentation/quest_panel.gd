@@ -11,6 +11,7 @@ const BTN_RECT := Rect2(76, 83, 33, 10)
 var open: bool = false
 var mode: String = "talk"      # "letter" / "talk"
 var qid: String = "keeper"
+var just_done: bool = false     # 刚交付完：这次面板里还念"交接的话"，下次聊天就是默认的话
 var m
 
 func _init(main) -> void:
@@ -23,6 +24,7 @@ func open_letter(id: String) -> void:
 
 func open_talk(id: String) -> void:
 	qid = id
+	just_done = false
 	mode = "talk"
 	open = true
 
@@ -34,6 +36,7 @@ func _press() -> void:
 	var g = m.game
 	if mode == "talk" and g.quest_state(qid) == "active":
 		if g.turn_in(qid):
+			just_done = true
 			m.play("rare")
 			m.log.write("quest_done", {"quest": qid})
 		else:
@@ -83,7 +86,10 @@ func draw() -> void:
 		if st == "":
 			_lines(q.get("idle_lines", []), 44.0)
 		elif st == "done":
-			_lines(q.get("done_lines", []), 44.0)
+			if just_done:
+				_lines(q.get("done_lines", []), 44.0)
+			else:      # 任务早就完成了：店主说平常的话
+				_lines(g.shop_chat(str(q.get("npc", ""))), 44.0)
 		else:
 			var y := _lines(q.get("talk_lines", []), 41.0) + 1.0
 			for n in g.quest_needs(qid):

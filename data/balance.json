@@ -434,6 +434,10 @@
   "dough": {
     "name": "面团"
   },
+  "shop_chat": {
+    "tackle": ["欢迎常来", "今天鱼口怎么样"],
+    "tailor": ["衣服随便挑", "穿上一定好看"]
+  },
   "junk": {
     "chance": 0.1,
     "pool": [

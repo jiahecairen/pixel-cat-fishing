@@ -73,6 +73,7 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	_chest_cfg = balance.get("chest", {})
 	_base_chest = float(_chest_cfg.get("chance", 0.0)) if not _chest_cfg.get("tiers", []).is_empty() else 0.0
 	fishing.chest_chance = _base_chest
+	fishing.junk_roller = Callable(self, "_roll_junk")
 	inventory = Inventory.new(balance.get("items", []))
 	inventory.stack_default = int(balance.get("bag", {}).get("stack", 10))
 	_init_gear()
@@ -525,8 +526,8 @@ func _tick_fishing(now: int, events: Array) -> void:
 				give(loot["item"], 1, events)
 			events.append({"type": "chest", "gold": loot["gold"], "tier": loot["tier"], "item": loot["item"]})
 			dirty = true
-	elif fish_id != "" and _roll_junk() != "":
-		var junk := _last_junk
+	elif fish_id.begins_with(FishingSystem.JUNK_PREFIX):
+		var junk := fish_id.substr(FishingSystem.JUNK_PREFIX.length())
 		give(junk, 1, events)
 		events.append({"type": "junk", "item": junk})
 		dirty = true
@@ -537,6 +538,8 @@ func _tick_fishing(now: int, events: Array) -> void:
 			best[fish_id] = size
 		events.append({"type": "catch", "fish_id": fish_id, "size": size})
 		dirty = true
+	if fish_id != "":
+		journey.remember_fish_spot()      # 钓到东西的地方记下来：靠岸再回来时开回这里
 
 ## 上饵：扣掉装上的饵 1 个（用完自动换回面团），并把它的稀有鱼加成交给钓鱼系统。
 func _use_bait() -> Dictionary:
@@ -779,6 +782,34 @@ func use_item(id: String) -> Dictionary:
 	dirty = true
 	return {"ok": true, "use": str(d["use"]), "gold": gold, "quest": quest}
 
+## 直接用仓库里的物品（不用先取出来，所以身上满了也能用）。装备：装上，换下来的进物品栏（放不下就进仓库）；
+## 鱼饵：尽量取到身上再装上；其它：用掉一份。返回和 use_item 一样的字典。
+func use_item_w(id: String) -> Dictionary:
+	var d: Dictionary = inventory.by_id.get(id, {})
+	var need := inventory.need(id)
+	if d.is_empty() or str(d.get("use", "")) == "" or inventory.count_w(state, id) < need:
+		return {"ok": false, "use": "", "gold": 0}
+	if str(d["use"]) == "bait":
+		if inventory.fetch(state, id, inventory.count_w(state, id)) <= 0:
+			return {"ok": false, "use": "", "gold": 0}
+		return use_item(id)
+	# 先把要用的几份挪到身上（直接写，不受格子限制），用完马上就没了；用不成再原样放回去
+	var left := inventory.count_w(state, id) - need
+	if left > 0:
+		state.warehouse[id] = left
+	else:
+		state.warehouse.erase(id)
+	state.inventory[id] = inventory.count(state, id) + need
+	var res := use_item(id)
+	if not res["ok"]:
+		state.inventory[id] = inventory.count(state, id) - need
+		if int(state.inventory[id]) <= 0:
+			state.inventory.erase(id)
+		state.warehouse[id] = inventory.count_w(state, id) + need
+	state.revision += 1
+	dirty = true
+	return res
+
 ## ---- 放进物品栏（放不下就送去仓库）----
 ## 返回 "bag" / "warehouse"。送去仓库时给 events 加一条 overflow 事件（界面提示"行李满了"）。
 func give(id: String, n: int = 1, events: Array = []) -> String:
@@ -926,7 +957,11 @@ func room_quest(kind: String) -> String:
 			_:
 				if idle == "":
 					idle = id
-	return started if started != "" else (done if done != "" else idle)
+	return started if started != "" else (idle if idle != "" else done)
+
+## 店主平常说的话（没有进行中的任务、任务也都交付完了的时候）。
+func shop_chat(npc: String) -> Array:
+	return _cfg.get("shop_chat", {}).get(npc, [])
 
 ## ---- 支线任务（数据在 balance.json 的 quests） ----
 func _quest_cfg_list() -> Array:

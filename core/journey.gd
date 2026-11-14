@@ -92,6 +92,14 @@ func in_town() -> bool:
 func boat_x() -> int:
 	return int(_j["boat_x"])
 
+## 记住"上次钓到东西的地方"：靠岸、上岸之后回船，船开回这里，而不是停在登岸的码头边。
+func remember_fish_spot() -> void:
+	if on_boat() and not boat_in_shoal():
+		_j["fish_x"] = boat_x()
+
+func fish_spot() -> int:
+	return int(_j.get("fish_x", -1))
+
 func set_boat_x(x: float) -> void:
 	_j["boat_x"] = int(round(x))
 
@@ -200,6 +208,8 @@ func advance(now_ms: int) -> String:
 				return "sale"
 		Activity.WALK_TO_BOAT:
 			if now_ms >= int(_j["phase_end_ms"]):
+				if boat_in_shoal() and fish_spot() >= 0 and fish_spot() < int(_cfg.get("dock_x", 512)) - int(_cfg.get("dock_no_fish", 70)):
+					set_boat_x(float(fish_spot()))      # 手动靠岸的：开回上次钓到鱼的地方，不是留在码头边
 				if boat_at_dock():            # 船停在码头边：上船后就停在原地，不用划
 					_enter(Activity.FISHING, now_ms, 0)
 					return "moored"

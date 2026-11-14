@@ -10,6 +10,8 @@ var state: int = State.IDLE
 var state_start_ms: int = 0
 var deadline_ms: int = 0
 var wait_multiplier: float = 1.0
+const JUNK_PREFIX := "junk:"       # 钓上来的是杂物（漂流瓶、旧靴子…）时，hooked_fish 是 "junk:物品id"：这次咬钩只有杂物，没有鱼
+var junk_roller: Callable = Callable()   # 咬钩时问一次：返回杂物物品 id 或 ""（由 Game 设置）
 const CHEST := "chest"            # 钓上来的不是鱼而是宝箱时，hooked_fish 取这个值
 
 var hooked_fish: String = ""
@@ -39,7 +41,7 @@ func checkpoint() -> Dictionary:
 func restore(cp: Dictionary) -> bool:
 	var s := int(cp.get("state", State.IDLE))
 	var fish := str(cp.get("hooked_fish", ""))
-	var known := fish == "" or fish == CHEST
+	var known := fish == "" or fish == CHEST or fish.begins_with(JUNK_PREFIX)
 	for f in _fish:
 		if f["id"] == fish:
 			known = true
@@ -122,8 +124,12 @@ func _after_twitch(now_ms: int) -> void:
 		if chest_chance > 0.0 and _rng.randf() < chest_chance:
 			hooked_fish = CHEST
 		else:
-			hooked_fish = _roll_fish()
-			hooked_size = _roll_size(hooked_fish)
+			var junk: String = str(junk_roller.call()) if junk_roller.is_valid() else ""
+			if junk != "":
+				hooked_fish = JUNK_PREFIX + junk
+			else:
+				hooked_fish = _roll_fish()
+				hooked_size = _roll_size(hooked_fish)
 		_enter(State.HOOKED, now_ms, int(_cfg["hooked_ms"]))
 		return
 	stage += 1

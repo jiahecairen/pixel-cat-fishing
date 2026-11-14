@@ -68,6 +68,11 @@ func _all_rect() -> Rect2:
 	var u := _use_rect()
 	return Rect2(u.position.x - u.size.x - 3, u.position.y, u.size.x, u.size.y)
 
+## 仓库里的"使用"按钮：直接用（或装备）选中的东西，不用先取出来。
+func _wh_use_rect() -> Rect2:
+	var a := _all_rect()
+	return Rect2(a.position.x - a.size.x - 3, a.position.y, a.size.x, a.size.y)
+
 func open_warehouse() -> void:
 	open = true
 	wh = true
@@ -127,6 +132,8 @@ func click(p: Vector2) -> bool:
 			move_selected(false)
 		elif _all_rect().has_point(p):
 			move_selected(true)
+		elif _wh_use_rect().has_point(p):
+			use_selected()
 	elif _use_rect().has_point(p):
 		use_selected()
 	return true
@@ -145,6 +152,9 @@ func key(keycode: int) -> bool:
 		KEY_DOWN, KEY_S:
 			if sel + _cols() < n:
 				sel += _cols()
+		KEY_U:
+			if wh:
+				use_selected()
 		KEY_SPACE, KEY_ENTER, KEY_E:
 			if wh:
 				move_selected(false)
@@ -160,7 +170,7 @@ func use_selected() -> void:
 		m.play("deny")
 		return
 	var id: String = owned[sel]
-	var res: Dictionary = m.game.use_item(id)
+	var res: Dictionary = m.game.use_item_w(id) if (wh and tab == 1) else m.game.use_item(id)
 	if not res["ok"]:
 		m.play("deny")
 		return
@@ -182,6 +192,32 @@ var gain_text: String = ""      # 刚用物品得到的金币，在面板里闪�
 var gain_t0: int = -100000
 
 # ------------------------------------------------------------------ 绘制
+## 仓库是一口大木箱：木板箱身、铁箍、铆钉，箱盖中间一把金锁，里面是深色的箱底。
+func _draw_chest_frame(r: Rect2) -> void:
+	m.draw_rect(r, Pal.U_K)
+	m.draw_rect(r.grow(-1), Pal.L_O)
+	var y := r.position.y + 2
+	while y < r.end.y - 2:                                   # 木板接缝
+		m.draw_rect(Rect2(r.position.x + 1, y, r.size.x - 2, 1), Pal.U_O)
+		y += 8.0
+	m.draw_rect(Rect2(r.position.x + 1, r.position.y + 1, r.size.x - 2, 1), Pal.L_N)
+	var inner := Rect2(r.position + Vector2(4, 15), r.size - Vector2(8, 19))   # 箱子里面
+	m.draw_rect(inner.grow(1), Pal.U_K)
+	m.draw_rect(inner, Pal.U_O)
+	for bx in [r.position.x + 1, r.end.x - 4]:               # 左右铁箍
+		m.draw_rect(Rect2(bx, r.position.y + 1, 3, r.size.y - 2), Pal.U_A)
+		m.draw_rect(Rect2(bx, r.position.y + 1, 1, r.size.y - 2), Pal.L_A)
+		for ry in [r.position.y + 4, r.end.y - 6]:
+			m.draw_rect(Rect2(bx + 1, ry, 1, 1), Pal.L_Y)
+	m.draw_rect(Rect2(r.position.x + 1, r.position.y + 13, r.size.x - 2, 1), Pal.U_K)   # 箱盖和箱身的缝
+	var lx := r.position.x + r.size.x / 2.0 - 4.0            # 金锁
+	m.draw_rect(Rect2(lx + 2, r.position.y + 1, 5, 1), Pal.U_A)
+	m.draw_rect(Rect2(lx + 2, r.position.y + 2, 1, 3), Pal.U_A)
+	m.draw_rect(Rect2(lx + 6, r.position.y + 2, 1, 3), Pal.U_A)
+	m.draw_rect(Rect2(lx, r.position.y + 5, 9, 7), Pal.L_Y)
+	m.draw_rect(Rect2(lx, r.position.y + 10, 9, 2), Pal.U_H)
+	m.draw_rect(Rect2(lx + 4, r.position.y + 7, 1, 3), Pal.U_K)
+
 func draw() -> void:
 	if not open:
 		return
@@ -189,11 +225,14 @@ func draw() -> void:
 	var r := rect()
 	var step := _step()
 	var size := step - 2
-	m.draw_rect(r, Pal.U_A)
-	m.draw_rect(r.grow(-1), Pal.U_K)
+	if wh:
+		_draw_chest_frame(r)
+	else:
+		m.draw_rect(r, Pal.U_A)
+		m.draw_rect(r.grow(-1), Pal.U_K)
 	if not m.mini:
 		m.label("仓库" if wh else "物品栏", r.position + Vector2(5, 3), Pal.L_W)
-		m.draw_rect(Rect2(r.position.x + 5, r.position.y + 14, 29, 1), Pal.L_R)
+		m.draw_rect(Rect2(r.position.x + 5, r.position.y + 14, 29, 1), Pal.L_Y if wh else Pal.L_R)
 	if wh:
 		for i in 2:
 			var tr := _tab_rect(i)
@@ -206,7 +245,7 @@ func draw() -> void:
 	if not (wh and tab == 1):
 		cells = mini(cells, g.state.bag_slots)             # 身上只有这么多格；仓库不限
 		if not m.mini:
-			m.text("%d/%d" % [g.inventory.slots_used(g.state), g.state.bag_slots], r.position + Vector2(42, 6), Pal.L_A)
+			m.text("%d/%d" % [g.inventory.slots_used(g.state), g.state.bag_slots], r.position + Vector2(118 if wh else 42, 6), Pal.L_Y if wh else Pal.L_A)
 	for i in cells:
 		var p := _slot_pos(i)
 		# 格子：选中的描金边
@@ -261,6 +300,8 @@ func draw() -> void:
 		m.text(status, Vector2(tx + m.label_width(def["name"]) + 3, dy + 3), Pal.L_G)
 	if wh:
 		var bu := [[_use_rect(), "存入" if tab == 0 else "取出"], [_all_rect(), "全部"]]
+		if usable:
+			bu.append([_wh_use_rect(), "装备" if str(def.get("use", "")) == "gear" else "使用"])
 		for b in bu:
 			var br: Rect2 = b[0]
 			m.draw_rect(br, Pal.L_G)

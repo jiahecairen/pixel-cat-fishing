@@ -484,9 +484,12 @@ func _update_roam(dt: float) -> void:
 		if absf(_boat_fx - float(j.boat_x())) > 1.5:
 			_boat_fx = float(j.boat_x())
 		if game.line_out():                          # 竿还在水里：先快速收杆，收完才开始划
+			# 只有浮漂已经在水里时才演收杆动画；上饵、甩竿途中浮漂还没入水，直接收起来就划
+			var bobber_in_water: bool = _bobber_in_water()
 			game.reel_in()
-			world.retract_t0 = t
-			_row_ready_at = t + World.RETRACT_MS
+			if bobber_in_water:
+				world.retract_t0 = t
+				_row_ready_at = t + World.RETRACT_MS
 		world.boat_dir = float(dir)
 		_last_walk_input = t
 		if t >= _row_ready_at:
@@ -1230,8 +1233,12 @@ func _go_fishing() -> void:
 		play("deny")
 
 
+func _bobber_in_water() -> bool:
+	return game.fishing.state in [Fishing.State.WAITING, Fishing.State.TWITCH, Fishing.State.HOOKED, Fishing.State.REELING, Fishing.State.SETTLEMENT]
+
+
 func _go_to_town() -> void:
-	var had_line: bool = game.line_out() and game.fishing.is_active()
+	var had_line: bool = game.line_out() and game.fishing.is_active() and _bobber_in_water()
 	if game.go_to_town():
 		if had_line:
 			world.retract_t0 = Time.get_ticks_msec()      # 先收杆再开船
