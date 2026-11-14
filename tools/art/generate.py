@@ -1744,13 +1744,27 @@ def mine_tile(kind):
     rnd = random.Random(kind)
     c = Canvas(32, 32)
     rocks = {"dirt": ("n", "o", "O"), "stone": ("w", "a", "A"), "rock": ("a", "A", "K"), "deep": ("s", "S", "K")}
-    if kind in rocks:                                         # 地上的一块石头（不再是方块）：圆滚滚，左上亮、右下暗
-        hi, mid, lo = rocks[kind]
+    base = kind[:-1] if (kind[:-1] in rocks and kind[-1] in "12") else kind
+    var = int(kind[-1]) if base != kind else 0
+    if base in rocks:                                         # 地上的一块石头：三种形状（圆、扁、两块叠着），哪块里有矿看不出来
+        hi, mid, lo = rocks[base]
         h = Canvas(16, 16)
-        h.ellipse(8, 9, 4.3, 3.7, mid)                       # 小一圈：约 0.55 格宽，碰撞盒也是这么大
-        h.ellipse(7, 8, 2.4, 1.7, hi)
-        h.ellipse(9.4, 10.4, 2.8, 1.5, lo)
-        h.set(6, 7, "W" if kind != "dirt" else "w")
+        if var == 0:
+            h.ellipse(8, 9, 4.3, 3.7, mid)
+            h.ellipse(7, 8, 2.4, 1.7, hi)
+            h.ellipse(9.4, 10.4, 2.8, 1.5, lo)
+            h.set(6, 7, "W" if base != "dirt" else "w")
+        elif var == 1:                                        # 扁平的一块
+            h.ellipse(8, 10, 5.0, 2.8, mid)
+            h.ellipse(7, 9, 3.0, 1.3, hi)
+            h.ellipse(10, 11.4, 3.2, 1.2, lo)
+            h.set(5, 9, "W" if base != "dirt" else "w")
+        else:                                                 # 两块小石头叠在一起
+            h.ellipse(6.5, 10, 3.0, 2.6, mid)
+            h.ellipse(10, 8.5, 3.0, 3.0, mid)
+            h.ellipse(9.2, 7.5, 1.7, 1.4, hi)
+            h.ellipse(6, 9.2, 1.6, 1.2, hi)
+            h.ellipse(10.5, 10, 2.0, 1.4, lo)
         h.rect(6, 13, 10, 13, "K")
         h.outline()
         c = _up2(h)
@@ -2107,7 +2121,7 @@ def build():
         made["villager_%d" % k] = save(sheet([villager(k, 0), villager(k, 1)]), "villager_%d" % k)
     for n in BTN:
         made["btn_" + n] = save(sheet([button(n), button(n, True)]), "btn_" + n)
-    tiles = ["dirt", "stone", "rock", "deep", "granite", "back", "ladder", "gold", "metal", "stone_ore", "chest", "crack1", "crack2", "crack3", "crack4", "tnt", "exit_mark", "hole", "floor", "wall", "walltop", "crate"]
+    tiles = ["dirt", "stone", "rock", "deep", "granite", "back", "ladder", "gold", "metal", "stone_ore", "chest", "crack1", "crack2", "crack3", "crack4", "tnt", "exit_mark", "hole", "floor", "wall", "walltop", "crate", "dirt1", "dirt2", "stone1", "stone2", "rock1", "rock2", "deep1", "deep2"]
     made["mine_tiles"] = save(sheet([mine_tile(k) for k in tiles]), "mine_tiles")
     for r in range(3):
         made["mole_%d" % r] = save(sheet([mole(r, 0), mole(r, 1)]), "mole_%d" % r)

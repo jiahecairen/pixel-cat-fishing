@@ -1254,7 +1254,6 @@
         }
       }
     ],
-    "perks": [],
     "dishes": [
       {
         "id": "skewer",
@@ -1292,23 +1291,6 @@
     },
     "height": 20,
     "checkpoint_every": 5,
-    "chain_min": 3,
-    "bag": {
-      "sizes": [
-        24,
-        36,
-        52,
-        75,
-        110
-      ],
-      "prices": [
-        0,
-        80,
-        250,
-        700,
-        2000
-      ]
-    },
     "bomb": {
       "price": 40,
       "fuse_ms": 1100,

@@ -1956,12 +1956,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 			open_walls += 1
 	check(open_walls == 0 and mn.exit_pos(1) == path[path.size() - 1], "路上没有岩壁，终点是出口")
 	var ex: Vector2i = mn.exit_pos(1)
-	var ring := 0
-	for oy in range(-1, 2):
-		for ox in range(-1, 2):
-			if (ox != 0 or oy != 0) and mn.is_floor(ex.x + ox, ex.y + oy) and mn.has_rock(ex.x + ox, ex.y + oy):
-				ring += 1
-	check(mn.block(ex.x, ex.y) == "pit" and not mn.has_rock(ex.x, ex.y) and ring >= 2, "出口是地上的黑洞，周围有 %d 块石头堵着" % ring)
+	check(mn.has_rock(ex.x, ex.y) and mn.ore(ex.x, ex.y) == "" and mn.block(ex.x, ex.y) in ["dirt", "stone", "rock", "deep"], "下一层的洞埋在一块普通石头下面，不直接露出来")
 	check(mn.exit_pos(1) == ex, "同一层的地图每次都一样")
 	# 走到第一块挡路的石头前面
 	var k := 0
@@ -1974,7 +1969,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.pos() == path[k - 1] and mn.dig_block_reason(face.x, face.y) == "notool", "没有镐子挖不动")
 	check(mn.give_first_pick() and mn.pick() == 1 and not mn.give_first_pick(), "管理员送第一把镐子，只送一次")
 	check(mn.buy_level("pick") == "gold", "铁镐要金币")
-	check(mn.draft().is_empty() and not mn.cfg().has("perks_on"), "不再有天赋选择")
+	check(not mn.cfg().has("perks") and not mn.has_method("draft") and not mn.has_method("choose_perk"), "肉鸽天赋已清理干净")
 	var base_ms: int = mn.dig_ms(path[k].x, path[k].y)
 	check(base_ms >= 300 and base_ms <= 2500, "主动挖：这一块约 %d 毫秒" % base_ms)
 	# 体力
@@ -2019,7 +2014,11 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 			mn.move(step.x, step.y, clock.t)
 		guard += 1
 	var last: Vector2i = path[path.size() - 1] - path[path.size() - 2]
-	check(mn.pos() == path[path.size() - 2] and mn.exit_ahead(last.x, last.y) and mn.block(ex.x, ex.y) == "pit", "挖开周围的石头，走到洞口前（走了 %d 步）" % guard)
+	check(mn.pos() == path[path.size() - 2] and not mn.exit_ahead(last.x, last.y) and not mn.descend(last.x, last.y) and mn.block(ex.x, ex.y) != "pit", "走到盖着洞的石头前（还下不去）（走了 %d 步）" % guard)
+	check(mn.start_dig(last.x, last.y, clock.t) == "", "凿那块石头")
+	clock.t += mn.dig_ms(ex.x, ex.y) + 1
+	mn.update(clock.t)
+	check(mn.block(ex.x, ex.y) == "pit" and mn.pos() == path[path.size() - 2], "凿碎后露出下一层的黑洞")
 	check(not mn.move(last.x, last.y, clock.t) and mn.pos() == path[path.size() - 2], "洞口走不上去（像矿石一样要面对着互动）")
 	check(not mn.descend(-last.x, -last.y), "背对着洞下不去")
 	check(mn.descend(last.x, last.y) and mn.floor_n() == 2 and mn.pos() == mn.entrance(2) and mn.on_entrance(), "下到第 2 层，站在新入口")
@@ -2079,6 +2078,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	var exit4: Vector2i = mn.exit_pos(4)
 	g.state.mine["run"]["x"] = exit4.x
 	g.state.mine["run"]["y"] = exit4.y
+	g.state.mine["run"]["dug"][mn._key(exit4.x, exit4.y)] = 1
 	check(mn.descend() and mn.floor_n() == 5 and mn.has_elevator() and mn.ascend() == "hall", "到第 5 层：入口有电梯，直接回大厅")
 	mn.end_run()
 	check(mn.start_floors() == [1, 5] and mn.begin_run(1, clock.t + 2, 5) and mn.floor_n() == 5 and mn.pos() == mn.entrance(5), "矿车可以直接从第 5 层开始")
@@ -2132,24 +2132,19 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.stamina() == sta_bomb, "炸弹不耗体力")
 	# 矿脉连锁（炸药桶已取消）
 	check(mn.ore_def("tnt").is_empty() and mn.ore_def("chest").is_empty(), "矿里不再有炸药桶和宝箱矿")
+	# 连锁已取消：挖一块金属矿，旁边连着的金属矿不会跟着碎
 	var pair := Vector2i(-1, -1)
-	var pair_floor := 0
 	for ff in range(1, 200):
 		g.state.mine["run"]["floor"] = ff
 		for yy in range(1, mn.height() - 1):
 			for xx in range(1, mn.width() - 2):
 				if pair.x < 0 and mn.ore(xx, yy) == "metal" and mn.ore(xx + 1, yy) == "metal" and mn.block(xx, yy) != "" and mn.block(xx + 1, yy) != "":
 					pair = Vector2i(xx, yy)
-					pair_floor = ff
 		if pair.x > 0:
 			break
-	check(pair.x > 0, "能找到相邻的两块金属矿（第 %d 层）" % pair_floor)
-	g.state.mine["run"]["floor"] = pair_floor
-	mn._c["chain_min"] = 2
 	var vev: Array = []
 	mn._break_chain(pair.x, pair.y, 1, 0, vev, 0)
-	check(mn.is_dug(pair.x + 1, pair.y), "矿脉连锁：连着的金属矿一起碎")
-	mn._c["chain_min"] = 3
+	check(pair.x > 0 and vev.size() == 1 and not mn.is_dug(pair.x + 1, pair.y), "没有连锁：只碎被挖的那一块")
 	mn.end_run()
 	# 菜
 	mn.begin_run(1, clock.t + 3)

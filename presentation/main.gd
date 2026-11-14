@@ -247,6 +247,8 @@ func _ready() -> void:
 				if OS.get_environment("CATFISH_AT") == "crate" and not cr.is_empty():
 					tgt_c = cr[0]
 				var placed := false
+				if OS.get_environment("CATFISH_AT") == "pit":
+					game.mine.m()["run"]["dug"][game.mine._key(tgt_c.x, tgt_c.y)] = 1     # 把盖着洞的石头凿掉
 				for dv in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
 					var nc: Vector2i = tgt_c + dv
 					if not placed and game.mine.is_floor(nc.x, nc.y) and game.mine.block(nc.x, nc.y) in ["", "dirt", "stone", "rock", "deep"]:

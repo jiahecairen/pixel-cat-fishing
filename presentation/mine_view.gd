@@ -6,9 +6,9 @@ const Pal := preload("res://presentation/palette.gd")
 const MoneyC := preload("res://core/money.gd")
 
 const CELL := 32
-const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "tnt": 15, "exit_mark": 16, "hole": 17, "floor": 18, "wall": 19, "walltop": 20, "crate": 21}
+const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "tnt": 15, "exit_mark": 16, "hole": 17, "floor": 18, "wall": 19, "walltop": 20, "crate": 21, "dirt1": 22, "dirt2": 23, "stone1": 24, "stone2": 25, "rock1": 26, "rock2": 27, "deep1": 28, "deep2": 29}
 const CRACK0 := 11
-const MINE_FRAMES := 22
+const MINE_FRAMES := 30
 const CROSS_MS := 4200
 const RIDE_MS := 1500
 const ISLE_W := 560.0
@@ -37,7 +37,6 @@ var _leave_dbg := false
 var _need_release := false      # 爆炸后要先松开方向键
 var menu: String = ""           # "" / "shop" / "cook" / "cart" / "repair"
 var menu_sel: int = 0
-var perk_sel: int = 0
 var ride_shaft: int = 1
 var ride_floor: int = 1
 var flashes: Array = []
@@ -132,10 +131,8 @@ func process(dt: float, dx: int, dy: int) -> void:
 			if _el(t) >= RIDE_MS:
 				var mn2 = m.game.mine
 				if mn2.in_run():                  # 上次没结束的一局（中途离开过）：接着挖
-					perk_sel = 0
 					go("mine")
 				elif mn2.begin_run(ride_shaft, m.game.now_ms(), ride_floor):
-					perk_sel = 0
 					go("mine")
 				else:
 					go("cave")
@@ -180,10 +177,9 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 	var hold: bool = m.get_window().has_focus() and not m.panel_open() and (Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_E) or Input.is_key_pressed(KEY_ENTER))
 	hold = hold or OS.has_environment("CATFISH_HOLD")      # 调试：当作一直按着空格
 	if hold and _diggable_ahead():
-		if dx == 0 and dy == 0:
-			_dig_ahead(now)
-			return
-	if mn.digging() and (not hold or dx != 0 or dy != 0):
+		_dig_ahead(now)                        # 按着方向键也能挖：面朝石头时空格优先，不走动
+		return
+	if mn.digging():
 		mn.stop_dig(now)
 	if dx != 0 or dy != 0:
 		var v: Vector2 = Vector2(dx, dy).normalized() * MINE_WALK * m.game.move_speed() * minf(dt, 0.05)
@@ -290,8 +286,6 @@ func _on_event(e: Dictionary) -> void:
 		m.play("buy")
 	else:
 		m.play("catch")
-	if bool(e["chain"]):
-		_float(x, y, "连锁！", Pal.L_C)
 	m.game.dirty = true
 
 func _boom_fx(x: int, y: int) -> void:
@@ -327,8 +321,7 @@ func key(code: int) -> bool:
 			if _diggable_ahead():
 				pass                              # 面前有石头：按住空格挖（在每帧里处理）
 			elif sp == "pit":
-				_open("descend")
-				menu_sel = 1                      # 默认"先不下去"，免得手滑
+				_open("descend")                  # 默认选"下去"
 			elif sp == "chest":
 				_open_crate()
 			elif mn.on_entrance():
@@ -384,14 +377,6 @@ func _ascend() -> void:
 		m.play("coin" if int(res["coins"]) > 0 else "click")
 		m.game.dirty = true
 		say("回到地面：" + ("  ".join(parts) if not parts.is_empty() else "空手而归"))
-
-func _take_perk(i: int) -> void:
-	var id: String = m.game.mine.choose_perk(i)
-	if id != "":
-		var pd: Dictionary = m.game.mine.perk_def(id)
-		say("%s：%s" % [str(pd.get("name", id)), str(pd.get("desc", ""))])
-		m.play("buy")
-		m.game.dirty = true
 
 func _menu_rows() -> int:
 	match menu:
@@ -1041,11 +1026,15 @@ func _draw_mine(view: Vector2, t: int) -> void:
 				var shake := Vector2.ZERO
 				if Vector2i(x, y) == dt and f > 0.0:
 					shake = Vector2(roundf(sin(float(t) / 35.0) * (0.5 + f)), 0)
-				m.tex_frame("mine_tiles", pos + shake, TILE.get(b, 0), MINE_FRAMES)
+				var vr: int = absi(hash([x, y, mn.floor_n()])) % 3                 # 石头的形状（和里面有没有矿无关）
+				m.tex_frame("mine_tiles", pos + shake, TILE.get(b if vr == 0 or b == "granite" else b + str(vr), 0), MINE_FRAMES)
+				# 矿不再明显标出来：只有一部分矿石会有一点点反光，也有几块普通石头会反光（迷惑）
 				var o: String = mn.ore(x, y) if b != "granite" else ""
-				var seen := Vector2(x + 0.5 - fp.x, y + 0.5 - fp.y).length() <= R + 0.6
-				if o != "" and seen:
-					m.tex_frame("mine_tiles", pos + shake, TILE["stone_ore" if o == "stone" else o], MINE_FRAMES)
+				var seen := Vector2(x + 0.5 - fp.x, y + 0.5 - fp.y).length() <= R * 0.8
+				var gl: int = absi(hash([x, y, mn.floor_n(), "glint"])) % 100
+				if seen and ((o in ["gold", "metal"] and gl < 45) or (o == "" and b != "granite" and gl < 8)):
+					var gc: Color = Pal.L_Y if (o == "gold" or (o == "" and gl % 2 == 0)) else Pal.L_C
+					m.draw_rect(Rect2(pos + shake + Vector2(12 + gl % 7, 11 + gl % 5), Vector2(2, 2)), gc)
 				if f > 0.02:
 					m.tex_frame("mine_tiles", pos + shake, CRACK0 + clampi(int(f * 4.0), 0, 3), MINE_FRAMES)
 	# 放着的炸弹
@@ -1182,39 +1171,6 @@ func _draw_swing(cp: Vector2, flip: bool, dirv: Vector2i, t: int) -> void:
 	m.draw_rect(Rect2(tip - Vector2(1, 1), Vector2(3, 3)), Pal.L_A)
 	if ph > 0.7 and ph < 0.85:                               # 砸中：火花
 		m.draw_rect(Rect2(tip + v * 3.0 - Vector2(2, 2), Vector2(4, 4)), Pal.L_Y)
-
-func _draw_draft(view: Vector2) -> void:
-	var mn = m.game.mine
-	var d: Array = mn.draft()
-	m.draw_rect(Rect2(Vector2.ZERO, view), Color(0, 0, 0, 0.55))
-	var title := "选一个天赋（只在这一局有效）"
-	m.dyn_text(title, Vector2(view.x / 2.0 - m.dyn_text_width(title) / 2.0, 46), Pal.L_Y)
-	var cw := 98.0
-	var gap := 5.0
-	var x0 := view.x / 2.0 - (cw * d.size() + gap * (d.size() - 1)) / 2.0
-	for i in d.size():
-		var pd: Dictionary = mn.perk_def(str(d[i]))
-		var r := Rect2(x0 + i * (cw + gap), 62, cw, 84)
-		m.draw_rect(r.grow(1), Pal.L_Y if i == perk_sel else Pal.U_K)
-		m.draw_rect(r, Color("#3d3450") if i != perk_sel else Color("#5a4a6e"))
-		m.dyn_text("%d %s" % [i + 1, str(pd.get("name", ""))], r.position + Vector2(6, 6), Pal.L_W)
-		var have: int = mn.perk_count(str(d[i]))
-		if have > 0:
-			m.dyn_text("已有 ×%d" % have, r.position + Vector2(6, 20), Pal.L_C)
-		var ly := 38.0
-		var line := ""
-		for word in str(pd.get("desc", "")).split(" "):     # 按宽度换行
-			var tryl: String = word if line == "" else line + " " + word
-			if line != "" and m.dyn_text_width(tryl) > cw - 10.0:
-				m.dyn_text(line, r.position + Vector2(6, ly), Pal.L_A)
-				ly += 14.0
-				line = word
-			else:
-				line = tryl
-		if line != "":
-			m.dyn_text(line, r.position + Vector2(6, ly), Pal.L_A)
-	var foot := "←→选择  空格确定（或按 1 2 3）"
-	m.dyn_text(foot, Vector2(view.x / 2.0 - m.dyn_text_width(foot) / 2.0, 156), Pal.L_A)
 
 func _draw_overlay(view: Vector2, t: int) -> void:
 	if region in ["isle", "cave", "mine", "ride_in", "ride_back"]:

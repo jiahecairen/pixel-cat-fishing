@@ -245,3 +245,7 @@
 ## C167 v0.79
 - run_tests：ALL TESTS PASS（748 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：新 HUD、典当行界面、垃圾箱界面、岛上典当行与垃圾箱。
 - 未运行：Mac 上的实际手感（石头碰撞）、典当行/垃圾箱的键盘与鼠标操作、迷你窗口里的典当/垃圾界面、.app 启动。
+
+## C168 v0.80
+- run_tests：ALL TESTS PASS（749 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：石头形状与反光。
+- 未运行：Mac 上按住方向键同时按空格的实际效果、洞口确认菜单的手感、.app 启动。
