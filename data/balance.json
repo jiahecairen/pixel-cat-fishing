@@ -535,6 +535,7 @@
     "cooldown_min": 20,
     "console_off": 36
   },
+  "auto": {"sell_pct": 30, "fish_pct": 50, "idle_ms": 4000},
   "pots": {
     "max": 3,
     "cost": [["lamp_shell", 2], ["plank", 1]],

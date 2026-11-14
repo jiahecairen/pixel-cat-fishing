@@ -115,6 +115,10 @@ func remember_fish_spot() -> void:
 	if on_boat() and not boat_in_shoal():
 		_j["fish_x"] = boat_x()
 
+## 指定下次回去钓鱼的地方（迷你窗自动挂机时随机挑一片近处的水域）。
+func set_fish_spot(x: int) -> void:
+	_j["fish_x"] = x
+
 func fish_spot() -> int:
 	return int(_j.get("fish_x", -1))
 

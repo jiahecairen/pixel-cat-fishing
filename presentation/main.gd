@@ -479,6 +479,7 @@ func _update_camera(dt: float) -> void:
 
 
 ## 完整窗口里用方向键带着小猫在镇上走；松手一会儿后交还给自动流程。
+var _auto_next_t: int = 0            # 迷你窗自动挂机：下次判断的时刻
 var _stand_depart: bool = false     # 走到码头后上船回小镇
 var _stand_cast: bool = false      # 走到湖边钓位后自动甩竿
 var _stand_to: float = INF         # 和居民聊天时慢慢退到的位置
@@ -553,6 +554,11 @@ func _update_roam(dt: float) -> void:
 				_stand_cast = true
 		elif not game.at_island_dock():
 			game.state.effects["lake_resume"] = 0
+	if mini and dir == 0 and t >= _auto_next_t and t - _last_walk_input > int(game.auto_cfg().get("idle_ms", 4000)) \
+			and not panel_open() and _stand_to == INF and _auto_x == INF and _queued_x == INF and interior == "" \
+			and not game.pomodoro.is_break():
+		_auto_next_t = t + 1500
+		_auto_policy()
 	if _queued_x != INF:
 		var qa: int = j.activity()
 		if dir != 0 or not (qa == Journey.Activity.WALK_TO_BOAT or qa == Journey.Activity.SAIL_OUT or qa == Journey.Activity.SAIL_BACK or game.can_steer()):
@@ -641,7 +647,7 @@ func _update_roam(dt: float) -> void:
 		pass                                 # 迷你窗里也留在岛上当前的位置（在钓位就继续钓）
 	elif j.activity() == Journey.Activity.ROAM and mini:
 		# 玩家接管后小猫就一直听玩家的，不会自己走开；只有切到迷你悬浮窗才交还给自动流程
-		_end_roam_auto(float(j.roam_x()))
+		_end_roam_auto(float(j.roam_x()), true)
 
 
 ## 自动航行：加速到巡航速度，进港前平滑减速，到了就停。
@@ -687,9 +693,9 @@ func start_auto_sail(x: float) -> bool:
 	return true
 
 
-func _end_roam_auto(x: float) -> void:
+func _end_roam_auto(x: float, by_policy: bool = false) -> void:
 	world.route_behind_start = world.roam_behind
-	game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x))
+	game.end_roam(world.frac_to_stall(x), world.frac_to_boat(x), by_policy)
 
 
 ## ` 键（中文输入法下是"·"）：开发者模式，随便换形象，不花钱。
@@ -2118,6 +2124,35 @@ func _pixel_line(a: Vector2, b: Vector2, color: Color) -> void:
 		if e2 <= dx:
 			err += dx; y0 += sy
 
+
+## 迷你窗挂机：在海上/湖边鱼篓不到 50% 就自动钓（钓不了就去附近水域），到了 50% 自动回镇卖；
+## 卖完回来，鱼篓不到 30% 就去随机的近水域钓鱼，到 30% 就继续去摊位卖鱼（这一条在 game.end_roam）。
+func _auto_policy() -> void:
+	var j: Journey = game.journey
+	var pct: int = game.economy.basket_percent(game.state)
+	var has_fish: bool = not game.state.basket.is_empty()
+	var fish_pct: int = int(game.auto_cfg().get("fish_pct", 50))
+	match j.activity():
+		Journey.Activity.FISHING:
+			if has_fish and pct >= fish_pct:
+				_go_to_town()
+			elif game.fishing_blocked():
+				start_auto_sail(game.auto_fish_x())
+			elif not game.line_out():
+				world.face_left = false
+				if game.cast_line():
+					play("cast")
+		Journey.Activity.ISLAND:
+			if game.at_lake_spot():
+				if has_fish and pct >= fish_pct:
+					_town_button()
+				elif not game.line_out():
+					world.roam_flip = true
+					if game.cast_line():
+						play("cast")
+		Journey.Activity.SOLD_OUT:
+			game.journey.set_fish_spot(game.pick_water_x())
+			_go_fishing()
 
 ## 岛上此刻站的位置能做什么，作为屏幕底部的提示文字。
 func _island_hint(ix: float) -> String:

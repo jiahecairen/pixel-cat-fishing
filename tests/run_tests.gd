@@ -59,6 +59,7 @@ func _init() -> void:
 		test_v054(balance, fish)
 		test_v055(balance, fish)
 		test_v056(balance, fish)
+		test_v059(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -1483,6 +1484,36 @@ func test_v056(balance: Dictionary, fish: Array) -> void:
 	var cr := g.open_west_chest()
 	check(not cr.is_empty() and g.state.wallet_gold == gold1 + 600 and g.west_chest_open() and g.open_west_chest().is_empty(), "西岸木箱只能开一次")
 	check(not g.at_lake_spot(), "走到西边就不再是钓位")
+
+func test_v059(balance: Dictionary, fish: Array) -> void:
+	print("v059: 迷你窗自动挂机规则、顶掉物品只腾够格子")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(151))
+	for i in 30:
+		var x := g.pick_water_x()
+		check(x >= 122 and x <= 412, "随机近水域在能钓鱼的范围内")
+		if x < 122 or x > 412:
+			break
+	# 回镇后：鱼篓不够 30% 就去钓鱼（随机水域），够了才去摊位
+	g.journey.set_fish_spot(-1)
+	g.economy.add_catch(g.state, "c1", "bass", false)
+	check(g.economy.basket_percent(g.state) < 30, "一条鱼低于 30%")
+	g.journey._enter(Journey.Activity.ROAM, 0, 0)
+	g.end_roam(0.5, 0.5, true)
+	check(g.journey.activity() == Journey.Activity.WALK_TO_BOAT and g.journey.fish_spot() >= 122, "鱼篓低于 30%：直接回船去随机水域钓鱼")
+	var g2 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(152))
+	for i in 5:
+		g2.economy.add_catch(g2.state, "c%d" % i, "bass", false)
+	check(g2.economy.basket_percent(g2.state) >= 30, "五条鱼不低于 30%")
+	g2.journey._enter(Journey.Activity.ROAM, 0, 0)
+	g2.end_roam(0.5, 0.5, true)
+	check(g2.journey.activity() == Journey.Activity.WALK_TO_STALL, "鱼篓不低于 30%：继续去摊位卖鱼")
+	# 顶掉物品：只拿走刚好够用的格子
+	var g3 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(153))
+	g3.state.bag_slots = 3
+	g3.state.inventory = {"bell": 20, "pearl": 1}
+	var used := g3.inventory.slots_used(g3.state)
+	check(used == 3, "先把格子占满：铃铛 20 个占 2 格 + 珍珠 1 格")
+	check(g3.give("plank") == "replaced" and g3.inventory.count(g3.state, "bell") == 10 and g3.inventory.count(g3.state, "plank") == 1, "木板顶掉一格铃铛（10 个），不是整堆 20 个")
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

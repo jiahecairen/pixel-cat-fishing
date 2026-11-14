@@ -260,8 +260,30 @@ func begin_roam(x: float) -> bool:
 	return false
 
 ## 松手后交还给自动流程：有鱼就走去摊位，没鱼就回码头。fraction 为剩余路程比例。
-func end_roam(fraction_to_stall: float, fraction_to_boat: float) -> void:
+## 迷你窗自动挂机的规则（数值在 balance.auto）。
+func auto_cfg() -> Dictionary:
+	return _cfg.get("auto", {})
+
+## 小镇一侧的近水域里随机挑一处能钓鱼的位置（避开浪区和码头浅滩）。
+func pick_water_x() -> int:
+	var lo := int(_water.get("wave_x", 92)) + 30
+	var hi := int(journey.cfg_dock_x()) - int(_cfg.get("town", {}).get("dock_no_fish", 70)) - 30
+	return _rng.randi_range(lo, maxi(lo, hi))
+
+## 船现在停的地方钓不了鱼时，自动挑一处附近能钓的水域（岛边浅滩就挑岛外的深水，镇边浅滩就挑镇外的水）。
+func auto_fish_x() -> float:
+	if at_island_shoal():
+		var x0 := island_x() + float(island_info().get("no_fish", 70)) + 60.0
+		return x0 + float(_rng.randi_range(0, 340))
+	return float(pick_water_x())
+
+## 回镇后自动安排：鱼篓够 30% 去摊位卖鱼，不够就随机挑近处水域去钓鱼。
+func end_roam(fraction_to_stall: float, fraction_to_boat: float, by_policy: bool = false) -> void:
 	var to_stall := not state.basket.is_empty()
+	if by_policy and to_stall and economy.basket_percent(state) < int(auto_cfg().get("sell_pct", 30)):
+		to_stall = false
+	if by_policy and not to_stall:
+		journey.set_fish_spot(pick_water_x())
 	if journey.end_roam(to_stall, fraction_to_stall if to_stall else fraction_to_boat, _clock.now_ms()):
 		dirty = true
 
@@ -1204,7 +1226,13 @@ func give(id: String, n: int = 1, events: Array = []) -> String:
 					best = w
 					victim = str(k)
 		if victim != "":
-			state.inventory.erase(victim)
+			# 只腾出刚好够用的格子：从被顶掉的那种物品里拿走最后几格，而不是整堆都扔
+			var need := maxi(1, inventory.slots_of(id, inventory.count(state, id) + left) - inventory.slots_of(id, inventory.count(state, id)))
+			var vleft := int(state.inventory[victim]) - need * inventory.stack_cap(victim)
+			if vleft > 0:
+				state.inventory[victim] = vleft
+			else:
+				state.inventory.erase(victim)
 			inventory.add(state, id, left)
 			state.revision += 1
 			events.append({"type": "replaced", "item": id, "dropped": victim})

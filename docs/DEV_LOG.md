@@ -387,3 +387,8 @@
 ## v0.58：岛上按钮与摊位图标
 - `generate.py` BTN["town"] 改摊位；`main.gd`：岛上不显示 btn_fish；`_stand_depart`（走到码头再上船）；迷你窗不再自动走回钓位；`_stand_to` 行走时自动收竿、朝向。
 - 测试 486 项 ALL TESTS PASS、SIM PASS。版本号 0.58。
+
+## v0.59：迷你窗自动挂机、顶掉物品只腾一格
+- `game.gd`：`auto_cfg / pick_water_x / auto_fish_x / end_roam(by_policy)`；`journey.set_fish_spot`；`give()` 顶掉物品只拿走够用的格子。
+- `main.gd`：`_auto_policy`（每 1.5 秒判断一次，迷你窗、非休息、4 秒没操作）；ROAM 自动流程走 policy。
+- 数据 `balance.auto`；测试 522 项 ALL TESTS PASS、SIM PASS；新增 `test_v059`。版本号 0.59。
