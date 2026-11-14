@@ -379,6 +379,7 @@ func fast_forward(real_dt_ms: float) -> void:
 func _advance_deadlines(delta_ms: int) -> void:
 	if int(state.pomodoro["phase_end_ms"]) > 0:
 		state.pomodoro["phase_end_ms"] = int(state.pomodoro["phase_end_ms"]) + delta_ms
+	mine.shift(delta_ms)
 	if int(state.journey["paused_at_ms"]) != 0:
 		return                                   # 休息中：旅程和钓鱼整体暂停，不跟着走
 	journey.shift(delta_ms)
@@ -645,7 +646,7 @@ func signal_finish(good: int, perfect: int) -> Dictionary:
 	var gold := good * int(cfg.get("gold_good", 6)) + perfect * int(cfg.get("gold_perfect", 14))
 	if works.is_done("lamp"):
 		gold = int(round(float(gold) * 1.5))
-	var shell := good >= int(cfg.get("shell_hits", 4))
+	var shell := good >= int(cfg.get("shell_hits", 4)) and item_wanted("lamp_shell")     # 任务不需要就不再给（避免超额获取）
 	if gold > 0:
 		economy.grant_gold(state, state.new_id("g"), gold)
 	if shell:
@@ -1305,9 +1306,11 @@ func gear_stat(id: String) -> Array:
 ## 卖一个物品（背包里的普通物品；关键物品、装备不能卖）。返回得到的铜币，卖不了返回 0。
 func sell_price(id: String) -> int:
 	var d: Dictionary = inventory.by_id.get(id, {})
-	if d.is_empty() or bool(d.get("important", false)) or str(d.get("use", "")) == "gear":
+	if d.is_empty() or str(d.get("use", "")) == "gear":
 		return 0
-	return int(d.get("sell", 0))
+	if bool(d.get("important", false)) and not bool(d.get("sell_ok", false)):      # 任务物品、关键物品不能卖
+		return 0
+	return maxi(0, int(d.get("sell", 0)))
 
 func sell_item(id: String) -> int:
 	var price := sell_price(id)
@@ -1319,6 +1322,17 @@ func sell_item(id: String) -> int:
 	_clamp_wallet()
 	dirty = true
 	return price
+
+## 整堆卖掉身上这种物品（工坊回收用）。返回得到的铜币。
+func sell_stack(id: String) -> int:
+	var total := 0
+	var n := inventory.count(state, id)
+	for i in n:
+		var got := sell_item(id)
+		if got <= 0:
+			break
+		total += got
+	return total
 
 ## 一次性的礼物（balance.gift）：每个礼物 id 只发一次，存档里用 effects["gift_<id>"] 记着。返回是否发了。
 func apply_gift() -> bool:
@@ -1338,7 +1352,7 @@ func apply_gift() -> bool:
 	return true
 
 ## 只在有任务需要时才会出现的物品：没有任务要它，就不会捡到、钓到、收到。
-const QUEST_ONLY := ["bottle", "diary_page"]
+const QUEST_ONLY := ["bottle", "diary_page", "lamp_shell", "lamp_scale"]
 
 func item_wanted(id: String) -> bool:
 	if not QUEST_ONLY.has(id):

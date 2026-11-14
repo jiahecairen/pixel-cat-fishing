@@ -466,6 +466,8 @@
     {
       "id": "rope",
       "important": true,
+      "sell": 10,
+      "sell_ok": true,
       "name": "绳子",
       "desc": "矿山岛工具店的绳子，能做梯子",
       "sprite": "item_rope",
@@ -476,6 +478,8 @@
     {
       "id": "ladder",
       "important": true,
+      "sell": 40,
+      "sell_ok": true,
       "name": "梯子",
       "desc": "下矿用，每架让梯子长 3 格",
       "sprite": "item_ladder",

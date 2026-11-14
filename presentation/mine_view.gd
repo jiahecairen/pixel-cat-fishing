@@ -48,6 +48,10 @@ var _mcam := Vector2.ZERO
 func _init(main) -> void:
 	m = main
 
+## 过场动画走了多久（加速时按倍数）。
+func _el(t: int) -> float:
+	return float(t - t0) * m.game.move_speed()
+
 func active() -> bool:
 	return region != ""
 
@@ -104,7 +108,7 @@ func process(dt: float, dx: int, dy: int) -> void:
 	var t := Time.get_ticks_msec()
 	match region:
 		"cross_out":
-			if t - t0 >= CROSS_MS:
+			if _el(t) >= CROSS_MS:
 				go("isle")
 				isle_x = SPOT["dock"] - 16.0
 				isle_flip = true
@@ -112,18 +116,24 @@ func process(dt: float, dx: int, dy: int) -> void:
 					m.game.state.islands.append("mine")
 				say("到了矿山岛！岛上住着鼹鼠")
 		"cross_back":
-			if t - t0 >= CROSS_MS:
+			if _el(t) >= CROSS_MS:
 				go("")
 		"ride_in":
-			if t - t0 >= RIDE_MS:
-				if m.game.mine.begin_run(ride_shaft, m.game.now_ms()):
+			if _el(t) >= RIDE_MS:
+				var mn2 = m.game.mine
+				if mn2.in_run():                  # 上次没结束的一局（中途离开过）：接着挖
+					perk_sel = 0
+					go("mine")
+					_asked_at = -1
+				elif mn2.begin_run(ride_shaft, m.game.now_ms()):
 					perk_sel = 0
 					go("mine")
 					_asked_at = -1
 				else:
 					go("cave")
+					say("矿车出了点问题，再试一次")
 		"ride_back":
-			if t - t0 >= RIDE_MS:
+			if _el(t) >= RIDE_MS:
 				go("cave")
 				cave_x = CAVE["cart"] - 16.0
 		"isle":
@@ -163,7 +173,7 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 	# 前面是空的就走过去（挖完一格后按住方向键会接着往前走）
 	if not mn.digging() and _step_cd <= 0.0:
 		if mn.move(dx, dy, now):
-			_step_cd = STEP_S
+			_step_cd = STEP_S / m.game.move_speed()
 			if mn.at_ladder_end() and mn.can_extend() and _asked_at != mn.ladder():
 				ask_ladder = true
 				_asked_at = mn.ladder()
@@ -453,7 +463,7 @@ func hint() -> String:
 
 ## ================= 绘制 =================
 func _draw_cross(view: Vector2, t: int) -> void:
-	var k := clampf(float(t - t0) / float(CROSS_MS), 0.0, 1.0)
+	var k := clampf(_el(t) / float(CROSS_MS), 0.0, 1.0)
 	var cam := Vector2(0, 180.0 - view.y)
 	m.draw_set_transform(-cam)
 	m.world._draw_sky(cam, view, t)
@@ -604,7 +614,7 @@ func _draw_menu(view: Vector2) -> void:
 			var foot := ("已备好：%s" % waiting) if waiting != "" else ("鱼篓里有 %d 条鱼" % m.game.state.basket.size())
 			_panel(view, "鼹鼠饭店  下一次下井生效", _wallet_text(), rows2, foot + "   空格点菜  Esc离开", 20.0 + rows2.size() * 28.0 + 20.0)
 		"cart":
-			_panel(view, "矿车", "", [["1 号井", "铁路畅通，直达"], ["2 号井", "铁路坏了"]], "↑↓选择  空格出发  Esc离开", 96.0)
+			_panel(view, "矿车", "", [["1 号井", "接着上次的一局往下挖" if m.game.mine.in_run() else "铁路畅通，直达"], ["2 号井", "铁路坏了"]], "↑↓选择  空格出发  Esc离开", 96.0)
 		"repair":
 			var need: Dictionary = mn.cfg().get("repair2", {})
 			var inv = m.game.inventory
@@ -620,7 +630,7 @@ func _draw_menu(view: Vector2) -> void:
 
 ## ---- 洞穴大厅 ----
 func _cart_world_x(t: int) -> float:
-	var k := clampf(float(t - t0) / float(RIDE_MS), 0.0, 1.0)
+	var k := clampf(_el(t) / float(RIDE_MS), 0.0, 1.0)
 	k = k * k * (3.0 - 2.0 * k)
 	match region:
 		"ride_in": return lerpf(CAVE["cart"], CAVE["shaft1"] - 26.0, k)

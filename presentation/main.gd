@@ -361,6 +361,11 @@ func _apply_debug_env() -> void:
 		bag.sel = OS.get_environment("CATFISH_BAGSEL").to_int()
 	if OS.has_environment("CATFISH_WALLET"):      # 调试：钱包铜币数
 		st.wallet_gold = OS.get_environment("CATFISH_WALLET").to_int()
+	if OS.has_environment("CATFISH_SELLMODE"):    # 调试：工坊回收界面（给几样杂物）
+		for id in ["boot", "bait_worm", "rope", "ladder", "stone", "lamp_shell"]:
+			game.give(id, 3)
+		bag.open_sell()
+		bag.sel = OS.get_environment("CATFISH_SELLMODE").to_int()
 	if OS.has_environment("CATFISH_ADMIN"):       # 调试：直接打开后台，钱包给点钱
 		st.wallet_gold = 23456
 		st.piggy = 12345
@@ -778,6 +783,7 @@ func _toggle_dev_mode() -> void:
 	else:
 		menu.open = false
 		bag.open = false
+		bag.sell_mode = false
 		book.open = false
 		outfit_shop.close()
 		shipyard_panel.close()
@@ -867,6 +873,47 @@ func _open_works(md: String) -> void:
 	works_panel.open_panel(md)
 	on_panel_toggled()
 
+## 测试用：直接传送到小镇 / 雾灯岛 / 矿山岛 / 矿洞大厅 / 矿井（正式版不需要）。
+func debug_teleport(dest: String) -> void:
+	if mine_view.active():
+		mine_view.leave()
+	game.mine.ensure(game.now_ms())
+	game.mine.m()["at"] = ""
+	var j: Journey = game.journey
+	if dest == "town":
+		if j.on_island():
+			game.leave_island()
+		game.go_to_town(true)
+	else:
+		if not j.on_island():
+			game.steer_to(game.island_x())
+			if not game.land_on_island():
+				_toast("现在去不了", "休息中或正在赶路")
+				play("deny")
+				return
+		if dest == "island":
+			j.set_roam_x(game.island_land_x() + 40.0)
+		else:
+			game.state.effects["bridge"] = 1
+			if not game.state.islands.has("mine"):
+				game.state.islands.append("mine")
+			match dest:
+				"isle":
+					mine_view.go("isle")
+					mine_view.isle_x = mine_view.SPOT["dock"] - 16.0
+				"cave":
+					mine_view.go("cave")
+					mine_view.cave_x = mine_view.CAVE["cart"] - 16.0
+				"mine":
+					if not game.mine.in_run():
+						game.mine.begin_run(1, game.now_ms())
+					mine_view.go("mine")
+	game.dirty = true
+	play("click")
+	admin.open = false
+	on_panel_toggled()
+
+
 ## 对话结束后要接着做的事（对话节点的 action）。
 func _after_dialog() -> void:
 	var a := dialog.last_action
@@ -879,6 +926,9 @@ func _after_dialog() -> void:
 			_open_works("tavern")
 		"open_repair":
 			_open_works("repair")
+		"open_sell":
+			bag.open_sell()
+			on_panel_toggled()
 		"give_pick":
 			game.mine.ensure(game.now_ms())
 			if game.mine.give_first_pick():
@@ -1026,6 +1076,9 @@ func _interact_inside() -> void:
 			shipyard_panel.open_panel()
 		"talk":
 			play("click")
+			if interior == "workshop" and not mini:
+				_talk("workshop_menu")
+				return
 			var lines: Array = game.shop_chat(interior)
 			if lines.size() >= 2:
 				_toast(str(lines[randi() % lines.size()]), str(lines[randi() % lines.size()]))
@@ -1422,6 +1475,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				if not admin.open:
 					menu.open = false
 					bag.open = false
+					bag.sell_mode = false
 					book.open = false
 				admin.toggle()             # F9 后台
 			elif dialog.open:
@@ -1453,6 +1507,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif bag.open:
 				if event.keycode == KEY_ESCAPE:
 					bag.open = false
+					bag.sell_mode = false
 					_update_polygon()
 				else:
 					bag.key(event.keycode)     # 方向键选格子，空格使用
@@ -1539,6 +1594,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if wardrobe.open:
 			wardrobe.close()
 		bag.open = false
+		bag.sell_mode = false
 		book.open = false
 		if menu.open:
 			menu.open = false
@@ -1553,6 +1609,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif game.journey.on_boat():
 			menu.open = false
 			bag.open = false
+			bag.sell_mode = false
 			book.open = false
 			dest_panel.open_panel()
 		else:
@@ -1605,6 +1662,7 @@ func toggle_status() -> void:
 	signal_panel.close()
 	works_panel.close()
 	bag.open = false
+	bag.sell_mode = false
 	if menu.open and menu.tab == 4:
 		menu.open = false
 	else:
@@ -1619,6 +1677,7 @@ func open_book(page: int) -> void:
 		return
 	menu.open = false
 	bag.open = false
+	bag.sell_mode = false
 	if wardrobe.open:
 		wardrobe.close()
 	outfit_shop.close()

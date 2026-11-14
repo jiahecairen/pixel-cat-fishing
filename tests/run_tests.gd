@@ -64,6 +64,7 @@ func _init() -> void:
 		test_v062(balance, fish)
 		test_v064(balance, fish)
 		test_v067(balance, fish)
+		test_v068_sell(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -1383,6 +1384,8 @@ func test_v054(balance: Dictionary, fish: Array) -> void:
 	check(g.at_lake_spot() and not g.fishing_blocked() and g.cast_line() and g.line_out(), "站到湖边可以甩竿")
 	var junk := {}
 	var fish_seen := {}
+	g.state.quests["lighthouse"] = "done"
+	g.state.quests["lighthouse2"] = "active"        # 任务要雾灯贝，湖里才会钓到
 	for e in _run(g, c, 900.0):
 		if e["type"] == "junk":
 			junk[e["item"]] = true
@@ -1430,7 +1433,13 @@ func test_v055(balance: Dictionary, fish: Array) -> void:
 	check(g.lighthouse_lit() and g.signal_ready(), "灯塔修好后信号台可用")
 	var before := g.state.wallet_gold
 	var r := g.signal_finish(5, 2)
-	check(r["gold"] == 5 * 6 + 2 * 14 and r["shell"] and g.state.wallet_gold == before + 58 and g.inventory.count(g.state, "lamp_shell") == 1, "结算：铜币 + 命中够多送雾灯贝")
+	check(r["gold"] == 5 * 6 + 2 * 14 and not r["shell"] and g.state.wallet_gold == before + 58 and g.inventory.count(g.state, "lamp_shell") == 0, "结算：铜币到账；任务不要雾灯贝就不再给（不超额）")
+	g.state.quests["lighthouse2"] = "active"
+	g._clock.t += 21 * 60000
+	var r2 := g.signal_finish(5, 2)
+	check(r2["shell"] and g.inventory.count(g.state, "lamp_shell") == 1, "任务正要雾灯贝时命中够多才送")
+	g.state.quests["lighthouse2"] = "done"
+	g.inventory.remove(g.state, "lamp_shell", 1)
 	check(not g.signal_ready() and g.signal_wait_s() > 0, "结算后冷却")
 	g._clock.t += 21 * 60000
 	check(g.signal_ready(), "冷却结束可再玩")
@@ -1689,6 +1698,32 @@ func test_v046(balance: Dictionary, fish: Array) -> void:
 	var mb: float = float(sums["big"]) / maxf(1.0, float(ns["big"]))
 	check(ns["small"] >= 100 and ns["big"] >= 100 and ms < mb * 0.8, "小鱼上钩更快：平均等待 小 %d ms / 大 %d ms" % [int(ms), int(mb)])
 
+
+func test_v068_sell(balance: Dictionary, fish: Array) -> void:
+	print("v0.68: 工坊出售、任务物品、加速对矿井生效")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(68))
+	check(g.sell_price("lamp_shell") == 0 and g.sell_price("stone") == 0 and g.sell_price("metal") == 0 and g.sell_price("pearl") == 0, "任务物品、关键物品不能卖")
+	check(g.sell_price("rod_0") == 0, "装备不能卖")
+	check(g.sell_price("boot") > 0 and g.sell_price("rope") > 0 and g.sell_price("ladder") > 0, "杂物、绳子、梯子能卖")
+	g.inventory.add(g.state, "boot", 5)
+	var w0 := g.state.wallet_gold
+	var got := g.sell_stack("boot")
+	check(got == 5 * g.sell_price("boot") and g.inventory.count(g.state, "boot") == 0 and g.state.wallet_gold == w0 + got, "整堆卖：5 只靴子一次卖完")
+	check(g.sell_stack("boot") == 0 and g.sell_stack("lamp_shell") == 0, "没有的、不能卖的整堆卖不动")
+	# 任务物品不会超额获取：没有任务要雾灯贝就不会发
+	check(not g.item_wanted("lamp_shell") and not g.item_wanted("lamp_scale"), "没有任务时不再给雾灯贝、雾灯鳞")
+	# 加速：挖掘截止时刻跟着前移
+	var mn = g.mine
+	mn.ensure(clock.t)
+	check(mn.begin_run(1, clock.t), "下井")
+	mn.give_first_pick()
+	mn.start_dig(0, 1, clock.t)
+	var t1_before := int(mn.run()["dig"]["t1"])
+	g._advance_deadlines(-1000)
+	check(int(mn.run()["dig"]["t1"]) == t1_before - 1000, "加速会把挖掘进度也往前推")
+	# 没结束的一局下次坐矿车直接接着挖
+	check(mn.in_run() and not mn.begin_run(1, clock.t), "已经有一局时不能再开一局（界面会接着这一局）")
 
 func test_v067(balance: Dictionary, fish: Array) -> void:
 	print("v0.68: 矿井（洞穴大厅、主动挖掘、天赋、做菜）")

@@ -11,6 +11,7 @@ var m
 const BUTTONS := [
 	["+1铜", "c1"], ["+1银", "s1"], ["+1金", "g1"], ["+10金", "g10"], ["钱清零", "zero"],
 	["任务全完成", "q_done"], ["重置任务", "q_reset"], ["格子加四", "slots"], ["存钱罐加钱", "piggy"], ["加一个", "mode"],
+	["去小镇", "tp_town"], ["去雾灯岛", "tp_island"], ["去矿山岛", "tp_isle"], ["去矿洞", "tp_cave"], ["去矿井", "tp_mine"],
 ]
 
 func _init(main) -> void:
@@ -32,7 +33,7 @@ func _btn_rect(i: int) -> Rect2:
 func _cell_rect(i: int) -> Rect2:
 	var r := rect()
 	var cols := maxi(1, int((r.size.x - 12.0) / 20.0))
-	return Rect2(r.position.x + 6 + (i % cols) * 20, r.position.y + 48 + (i / cols) * 20, 18, 18)
+	return Rect2(r.position.x + 6 + (i % cols) * 20, r.position.y + 62 + (i / cols) * 20, 18, 18)
 
 func toggle() -> void:
 	open = not open
@@ -78,6 +79,8 @@ func _press(id: String) -> void:
 			for q in g._quest_cfg_list():
 				g.state.quests[str(q["id"])] = "done"
 		"q_reset": g.state.quests = {}
+		"tp_town", "tp_island", "tp_isle", "tp_cave", "tp_mine":
+			m.debug_teleport(id.substr(3))      # 测试用：直接传送
 		"mode":
 			take_mode = not take_mode
 	g.state.revision += 1

@@ -5,6 +5,7 @@ extends RefCounted
 const Pal := preload("res://presentation/palette.gd")
 
 var open: bool = false
+var sell_mode: bool = false   # 在工坊里选了"出售"打开的
 var wh: bool = false      # 在家里仓库打开的：多了"身上 / 仓库"两页，按钮变成存入 / 取出
 var tab: int = 0          # 仓库模式下：0 = 身上，1 = 仓库
 var sel: int = 0          # 选中的是"手里有的物品"列表里的第几个
@@ -55,6 +56,25 @@ func _sell_rect() -> Rect2:
 	var u := _use_rect()
 	return Rect2(u.position.x - (u.size.x + 3), u.position.y, u.size.x, u.size.y)
 
+func _sell_all_rect() -> Rect2:
+	var sr := _sell_rect()
+	return Rect2(sr.position.x - (sr.size.x + 3), sr.position.y, sr.size.x, sr.size.y)
+
+func sell_stack_selected() -> void:
+	var owned := _owned()
+	if sel >= owned.size():
+		m.play("deny")
+		return
+	var got: int = m.game.sell_stack(str(owned[sel]))
+	if got <= 0:
+		m.play("deny")
+		return
+	m.play("coin")
+	gain_text = "+%d" % int(Money.tier(got)[1])
+	gain_icon = Money.icon(got)
+	gain_t0 = Time.get_ticks_msec()
+	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
+
 func _sellable() -> bool:
 	var owned := _owned()
 	return not wh and sel < owned.size() and m.game.sell_price(str(owned[sel])) > 0
@@ -99,6 +119,13 @@ func _wh_use_rect() -> Rect2:
 	var a := _all_rect()
 	return Rect2(a.position.x - a.size.x - 3, a.position.y, a.size.x, a.size.y)
 
+## 工坊回收：和平时一样的物品栏，但多一个"全部卖"（整堆卖掉）。
+func open_sell() -> void:
+	open = true
+	wh = false
+	sell_mode = true
+	sel = 0
+
 func open_warehouse() -> void:
 	open = true
 	wh = true
@@ -138,6 +165,7 @@ func click(p: Vector2) -> bool:
 	if _close_rect().has_point(p):
 		open = false
 		wh = false
+		sell_mode = false
 		m.play("click")
 		m.on_panel_toggled()
 		return true
@@ -160,6 +188,8 @@ func click(p: Vector2) -> bool:
 			move_selected(true)
 		elif _wh_use_rect().has_point(p):
 			use_selected()
+	elif _sellable() and sell_mode and _sell_all_rect().has_point(p):
+		sell_stack_selected()
 	elif _sellable() and _sell_rect().has_point(p):
 		sell_selected()
 	elif _use_rect().has_point(p):
@@ -186,6 +216,9 @@ func key(keycode: int) -> bool:
 		KEY_X:
 			if _sellable():
 				sell_selected()
+		KEY_Z:
+			if _sellable() and sell_mode:
+				sell_stack_selected()
 		KEY_SPACE, KEY_ENTER, KEY_E:
 			if wh:
 				move_selected(false)
@@ -262,8 +295,8 @@ func draw() -> void:
 		m.draw_rect(r, Pal.U_A)
 		m.draw_rect(r.grow(-1), Pal.U_K)
 	if not m.mini:
-		m.label("仓库" if wh else "物品栏", r.position + Vector2(5, 3), Pal.L_W)
-		m.draw_rect(Rect2(r.position.x + 5, r.position.y + 14, 29, 1), Pal.L_Y if wh else Pal.L_R)
+		m.label("仓库" if wh else ("工坊回收" if sell_mode else "物品栏"), r.position + Vector2(5, 3), Pal.L_W)
+		m.draw_rect(Rect2(r.position.x + 5, r.position.y + 14, 49 if sell_mode else 29, 1), Pal.L_Y if wh else Pal.L_R)
 	if wh:
 		for i in 2:
 			var tr := _tab_rect(i)
@@ -276,7 +309,7 @@ func draw() -> void:
 	if not (wh and tab == 1):
 		cells = mini(cells, g.state.bag_slots)             # 身上只有这么多格；仓库不限
 		if not m.mini:
-			m.text("%d/%d" % [g.inventory.slots_used(g.state), g.state.bag_slots], r.position + Vector2(118 if wh else 42, 6), Pal.L_Y if wh else Pal.L_A)
+			m.text("%d/%d" % [g.inventory.slots_used(g.state), g.state.bag_slots], r.position + Vector2(118 if wh else (62 if sell_mode else 42), 6), Pal.L_Y if wh else Pal.L_A)
 	for i in cells:
 		var p := _slot_pos(i)
 		# 格子：选中的描金边
@@ -349,8 +382,13 @@ func draw() -> void:
 			m.draw_rect(sr, Pal.L_Y)
 			m.draw_rect(Rect2(sr.position.x, sr.end.y - 2, sr.size.x, 2), Pal.U_H)
 			m.label_centered("卖出", sr.position.x + sr.size.x / 2, sr.position.y + (0 if m.mini else 1), Pal.U_K)
+			if sell_mode:
+				var ar := _sell_all_rect()
+				m.draw_rect(ar, Pal.L_Y)
+				m.draw_rect(Rect2(ar.position.x, ar.end.y - 2, ar.size.x, 2), Pal.U_H)
+				m.label_centered("全部卖", ar.position.x + ar.size.x / 2, ar.position.y + (0 if m.mini else 1), Pal.U_K)
 			if not m.mini:
-				m.draw_money(g.sell_price(id), Vector2(sr.position.x - 24, sr.position.y + 2), Pal.L_Y)
+				m.draw_money(g.sell_price(id), Vector2(sr.position.x - (24 + (sr.size.x + 3 if sell_mode else 0)), sr.position.y + 2), Pal.L_Y)
 	var t := Time.get_ticks_msec()
 	if t - gain_t0 < 1800 and gain_text != "":
 		var gp := Vector2(_use_rect().position.x - 4 - gain_text.length() * 4 - 10, _use_rect().position.y + 2 - (t - gain_t0) / 300)

@@ -317,6 +317,15 @@ func stop_dig(now_ms: int) -> void:
 	run()["dig"] = {}
 	run()["dir"] = [0, 0]
 
+## 加速（测试用）：把挖掘的截止时刻和绳子补货的计时平移 delta_ms（负数 = 往前拉）。
+func shift(delta_ms: int) -> void:
+	var d: Dictionary = run().get("dig", {})
+	if not d.is_empty():
+		d["t0"] = int(d["t0"]) + delta_ms
+		d["t1"] = int(d["t1"]) + delta_ms
+	if m().has("rope_ms"):
+		m()["rope_ms"] = int(m()["rope_ms"]) + delta_ms
+
 ## 走进相邻的空格：横走任意行；上下只能在竖井里、且在梯子范围内。
 func move(dx: int, dy: int, now_ms: int = 0) -> bool:
 	var p := pos()

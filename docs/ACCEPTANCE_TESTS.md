@@ -196,3 +196,9 @@
 - 自动：run_tests（674 项）ALL TESTS PASS；sim_long_run SIM PASS；无 SCRIPT ERROR。云端 Linux 无头运行。
 - 截图目检（Linux 模拟画面）：洞穴大厅、矿车菜单、天赋三选一、挖掘裂痕、饭店做菜、工具店。
 - 真实 macOS：未运行（主动挖掘按键手感、矿车过场、天赋选择、做菜、重启后回到大厅/矿里、.app 启动）。
+
+## C157 v0.69 修 1 号井、工坊出售、任务物品、加速、传送
+- 自动：run_tests（684 项）ALL TESTS PASS；sim_long_run SIM PASS；无 SCRIPT ERROR（日志里的 Parse JSON ERROR 是坏配置测试预期的输出）。
+- 截图目检（Linux 模拟画面）：工坊对话、工坊回收物品栏、F9 传送按钮。
+- 1 号井进不去：我推断是"上一局没结束，再开新局被拒"，用 v0.67 存档在模拟里能正常下井，但没能在真实环境复现原问题。
+- 真实 macOS：未运行（工坊出售的点击和快捷键 X/Z、传送按钮、加速时矿里的手感、矿车接着上一局）。
