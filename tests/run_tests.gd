@@ -54,6 +54,7 @@ func _init() -> void:
 		test_v047(balance, fish)
 		test_v048(balance, fish)
 		test_v050(balance, fish)
+		test_v051(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -1300,6 +1301,33 @@ func test_v050(balance: Dictionary, fish: Array) -> void:
 	old.erase("basket_sizes")
 	var st4 := GameState.new()
 	check(st4.from_dict(old) and st4.basket_sizes.size() == st4.basket.size(), "旧存档补齐尺寸")
+
+func test_v051(balance: Dictionary, fish: Array) -> void:
+	print("v051: 海流、起名、回小镇停在码头")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(101))
+	check(g.current_mult(300.0, -1.0) == 1.0 and g.current_mult(300.0, 1.0) == 1.0, "浪区外没有海流")
+	check(is_equal_approx(g.current_mult(0.0, -1.0), 0.8) and is_equal_approx(g.current_mult(0.0, 1.0), 1.2), "海流：逆流 ×0.8，顺流 ×1.2")
+	check(is_equal_approx(g.current_mult(-2000.0, -1.0), 0.8), "海流一直延伸到远海")
+	check(g.current_mult(g.island_x() + 40.0, -1.0) > 0.95, "靠近小岛海流消失")
+	check(g.set_cat_name("  小花小花小花小花  ") == "小花小花小花小" .substr(0, 6) and g.state.cat_name.length() == 6, "名字最多 6 个字")
+	check(g.set_cat_name("   ") == Game.DEFAULT_NAMES[0], "空名字用默认名")
+	var st := GameState.new()
+	check(st.from_dict(g.state.to_dict()) and st.cat_name == g.state.cat_name, "名字随存档保存")
+	check(g.town_name() == "潮声镇", "小镇有名字")
+	# 回小镇（目的地面板）：到码头后停下自己逛，不去摊位卖鱼
+	var g2 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(102))
+	g2.economy.add_catch(g2.state, "q1", "bass", false, 30)
+	g2.steer_to(300.0)
+	check(g2.go_to_town(true), "出发回小镇")
+	var c2: FakeClock = g2._clock
+	_run(g2, c2, 120.0)
+	check(g2.journey.activity() == Journey.Activity.ROAM and not g2.state.basket.is_empty(), "到了码头：停下来自己逛，鱼还在篓里")
+	var g3 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(103))
+	g3.economy.add_catch(g3.state, "q1", "bass", false, 30)
+	g3.steer_to(300.0)
+	g3.go_to_town(false)
+	_run(g3, g3._clock, 120.0)
+	check(g3.journey.activity() != Journey.Activity.ROAM, "普通回小镇仍然自动去摊位")
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

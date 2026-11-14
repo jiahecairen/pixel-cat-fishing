@@ -275,15 +275,17 @@ func can_go_to_town() -> bool:
 	return journey.can_depart() and not pomodoro.is_break()
 
 ## 让小猫出发去小镇（随时可以，鱼篓空着也行；休息时整个循环暂停，所以休息时不行）。
-func go_to_town() -> bool:
+func go_to_town(stop_at_dock: bool = false) -> bool:
 	if not can_go_to_town():
 		return false
+	state.journey["dock_stop"] = 1 if stop_at_dock else 0
 	var now: int = _clock.now_ms()
 	fishing.stop(now)
 	state.journey["line_out"] = 1
 	journey.depart(now)
-	if journey.activity() == Journey.Activity.WALK_TO_STALL and state.basket.is_empty():
-		journey.begin_roam(journey.dock_roam_x(), now)      # 空篓子贴着码头上岸：直接让玩家自己逛
+	if journey.activity() == Journey.Activity.WALK_TO_STALL and (state.basket.is_empty() or stop_at_dock):
+		state.journey["dock_stop"] = 0
+		journey.begin_roam(journey.dock_roam_x(), now)      # 空篓子（或从目的地面板回小镇）贴着码头上岸：直接让玩家自己逛
 	_cancel_bird()
 	dirty = true
 	return true
@@ -388,6 +390,22 @@ func boat_limits() -> Vector2:
 		lo = float(island_info()["x"])       # 能穿过浪区的船，可以一直划到小岛
 	return Vector2(lo, float(_water.get("boat_max_x", 440)))
 
+## ---- 小猫的名字（最多 6 个字，空的用默认名）----
+const NAME_MAX := 6
+const DEFAULT_NAMES := ["小橘", "团子", "年糕", "麻薯", "布丁", "汤圆", "豆沙", "芝麻"]
+
+func set_cat_name(n: String) -> String:
+	var v := n.strip_edges().substr(0, NAME_MAX)
+	if v == "":
+		v = DEFAULT_NAMES[0]
+	state.cat_name = v
+	state.revision += 1
+	dirty = true
+	return v
+
+func town_name() -> String:
+	return str(_cfg.get("town", {}).get("name", "小镇"))
+
 ## ---- 小岛 ----
 func island_info() -> Dictionary:
 	return _water.get("island", {})
@@ -408,6 +426,11 @@ func at_island_dock() -> bool:
 
 ## 第一次靠近小岛：记下来并给界面一个"发现小岛"事件。
 func _check_island(events: Array) -> void:
+	if not ("town" in state.islands) and journey.in_town():        # 第一次踏上小镇：也弹一次标题
+		state.islands.append("town")
+		state.revision += 1
+		dirty = true
+		events.append({"type": "island_found", "id": "town", "name": town_name()})
 	if island_info().is_empty() or island_visited() or not journey.on_boat():
 		return
 	if float(journey.boat_x()) <= island_x() + 120.0:
@@ -420,6 +443,23 @@ func _check_island(events: Array) -> void:
 ## （以后升级船只才能出得更远）。返回 Vector2(wave_x, wave_stop)。
 func wave_zone() -> Vector2:
 	return Vector2(float(_water.get("wave_x", 92)), float(_water.get("wave_stop", 56)))
+
+## 海流：浪区往西一直到小岛附近都有向东（回小镇方向）的海流。顺流划船加速 20%，逆流减速 20%。
+## 返回船在 x 处朝 dir（-1 向西 / +1 向东）划时的速度倍率；浪区以外是 1。
+func current_mult(x: float, dir: float) -> float:
+	var s := current_strength(x)
+	if s <= 0.0 or dir == 0.0:
+		return 1.0
+	var amt := float(_water.get("current_amount", 0.2))
+	return 1.0 + (amt if dir > 0.0 else -amt) * s
+
+func current_strength(x: float) -> float:
+	var wz := wave_zone()
+	var s := clampf((wz.x - x) / 30.0, 0.0, 1.0)          # 浪区入口处从 0 慢慢加到 1
+	if not island_info().is_empty():
+		var tail := island_x() + float(island_info().get("current_end", 160))
+		s = minf(s, clampf((x - tail) / 150.0, 0.0, 1.0))   # 靠近小岛慢慢消失
+	return s
 
 ## 当前的船能不能穿过浪区（升级后浪还在，只是船不再被推回来；以后更大的浪要更高级的船）。
 func boat_passes_waves() -> bool:
@@ -707,7 +747,8 @@ func _tick_trip(now: int, events: Array) -> void:
 			else:
 				journey.schedule_next_sale(now)
 		"docked":
-			if state.basket.is_empty():       # 没鱼可卖：停在码头，让玩家自己逛
+			if state.basket.is_empty() or int(state.journey.get("dock_stop", 0)) == 1:       # 没鱼可卖 / 从目的地面板回来：停在码头，让玩家自己逛
+				state.journey["dock_stop"] = 0
 				journey.begin_roam(journey.dock_roam_x(), now)
 			events.append({"type": "docked"})
 		"open":

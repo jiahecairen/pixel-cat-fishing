@@ -338,3 +338,10 @@
 - 被偷/被吃：`economy.basket_sizes/last_removed_size`，`_show_loss`。
 - 取消普通水域，fish.json 的 zone_weights 并入 shallow；HUD 鱼篓图标左移 9 像素给准星按钮腾位置；版本号 0.50。
 - 测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR；新增 `test_v050`。
+
+## v0.51：海流、岛码头、起名、回小镇停码头
+- `Game.current_mult/current_strength`；自动航行 `_auto_step` 用 `BOAT_SPEED * current_mult`；`_draw_waves` 从浪区铺到小岛附近。
+- `_draw_island` 用 `draw_set_transform_matrix` 镜像小镇的 `_draw_shoal`、地面、码头、桩脚。
+- `GameState.cat_name`、`Game.set_cat_name/town_name`、起名框（`_begin_naming/_name_input/_draw_name_dialog`）、`dyn_text` 像素字体现画；生成脚本把字体复制到 `assets/fonts/pixel.woff`；`CATFISH_CATNAME` 调试变量。
+- `go_to_town(stop_at_dock)`、`journey.dock_stop`；目的地面板用它。
+- 测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR；新增 `test_v051`。版本号 0.51。

@@ -38,7 +38,7 @@ func act(i: int) -> void:
 		if g.can_go_to_town():
 			close()
 			m.on_panel_toggled()
-			m._go_to_town()
+			m._go_to_town(true)
 		else:
 			m.play("deny")
 	else:
@@ -76,7 +76,7 @@ func draw() -> void:
 	m.draw_rect(RECT.grow(-1), Pal.U_K)
 	m.label("目的地", Vector2(19, 31), Pal.L_W)
 	m.tex_frame("btn_close", CLOSE_RECT.position, 0, 2)
-	var names := ["小镇", _island_name()]
+	var names := [m.game.town_name(), _island_name()]
 	for i in 2:
 		var r := _row_rect(i)
 		if i == sel:

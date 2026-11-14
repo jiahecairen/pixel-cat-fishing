@@ -129,6 +129,7 @@
     ]
   },
   "town": {
+    "name": "潮声镇",
     "sail_ms": 30000,
     "dock_x": 512,
     "sail_ref_dist": 252,
@@ -393,6 +394,7 @@
     "wave_x": 92,
     "wave_stop": 56,
     "wave_need": 1,
+    "current_amount": 0.2,
     "boat_levels": [
       {"name": "小木船", "price": 0},
       {"name": "加固船", "price": 1200},
@@ -400,7 +402,7 @@
       {"name": "远洋船", "price": 12000}
     ],
     "boat_max_x": 512,
-    "island": {"id": "mist", "name": "雾灯岛", "x": -3900, "auto_speed": 150, "no_fish": 70},
+    "island": {"id": "mist", "name": "雾灯岛", "x": -3900, "no_fish": 70, "current_end": 160},
     "zones": [
       {
         "id": "deep",

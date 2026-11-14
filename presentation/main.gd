@@ -130,6 +130,11 @@ var _roam_fx: float = 0.0        # 自由走动的亚像素位置
 var _confirm_quit: bool = false   # 正在显示"确定要退出吗"
 var interior: String = ""        # 小猫所在的屋子（"" = 在室外）；不存档，重启后回到门口
 var _last_walk_input: int = -100000
+var _pix_font: FontFile            # 像素字体：只用来画玩家输入的名字（其余文字都是图集里的）
+var _naming: bool = false          # 正在给小猫起名
+var _name_buf: String = ""
+var _name_pick: int = 0
+var _ime_text: String = ""
 var _auto_x: float = INF         # 自动航行的目的地（INF = 没在自动航行）
 var _pending_cast_at: int = 0     # 转身结束后要甩竿的时刻（0 = 没有）
 var _row_ready_at: int = 0      # 收杆动作做完、可以开始划船的时刻
@@ -140,7 +145,6 @@ var _cam_snap: bool = true
 var _cam_fx: float = 0.0        # 完整窗口镜头的精确横坐标（画面上取整）
 const ZONE_LABEL := {"shallow": "浅水区", "deep": "深水区"}
 const CAM_MIN := -4700.0           # 镜头最左能看到小岛那边
-const AUTO_ACCEL := 120.0         # 自动航行的加速度
 const AUTO_DECEL := 90.0          # 自动航行进港前的减速度
 const BOAT_SPEED := 44.0         # 划船最高速度（像素/秒）
 const BOAT_ACCEL := 98.0         # 起桨加速度：约 0.45 秒加到最高速
@@ -193,6 +197,11 @@ func _ready() -> void:
 	outfit_shop = OutfitShop.new(self)
 	shipyard_panel = ShipyardPanel.new(self)
 	dest_panel = DestPanel.new(self)
+	_pix_font = load("res://assets/fonts/pixel.woff") as FontFile
+	if _pix_font != null:
+		_pix_font.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+		_pix_font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+		_pix_font.hinting = TextServer.HINTING_NONE
 	quest_panel = QuestPanel.new(self)
 	game.set_cat_cfg(cat_cfg)
 	bag = Bag.new(self)
@@ -277,6 +286,8 @@ func _apply_debug_env() -> void:
 		world.call_deferred("bird_start", bk, bi, Time.get_ticks_msec())
 	if OS.has_environment("CATFISH_CHEST"):       # 调试：每一竿都钓到宝箱
 		game.set_chest_chance(1.0)
+	if OS.has_environment("CATFISH_CATNAME"):      # 调试：直接给小猫起名（不弹起名框）
+		st.cat_name = OS.get_environment("CATFISH_CATNAME").substr(0, 6)
 	if OS.has_environment("CATFISH_BOATLV"):       # 调试：船的等级（0–3）
 		st.boat_level = OS.get_environment("CATFISH_BOATLV").to_int()
 	if OS.has_environment("CATFISH_BOATX"):        # 调试：船开局停在这个位置（512 = 贴着码头）
@@ -534,7 +545,7 @@ func _update_roam(dt: float) -> void:
 		_pending_cast_at = 0
 		_last_walk_input = t
 		if t >= _row_ready_at:
-			_boat_v = move_toward(_boat_v, float(dir) * BOAT_SPEED, BOAT_ACCEL * game.move_speed() * dt)
+			_boat_v = move_toward(_boat_v, float(dir) * BOAT_SPEED * game.current_mult(_boat_fx, float(dir)), BOAT_ACCEL * game.move_speed() * dt)
 			_apply_waves(dt, dir < 0)
 			_boat_fx = clampf(_boat_fx + _boat_v * game.move_speed() * dt, -20000.0, 9999.0)
 			game.steer_to(_boat_fx)
@@ -569,9 +580,9 @@ func _auto_step(dt: float) -> void:
 		_boat_fx = float(j.boat_x())
 	var remain := _auto_x - _boat_fx
 	var dirn := 1.0 if remain >= 0.0 else -1.0
-	var cruise: float = float(game.island_info().get("auto_speed", 150))
+	var cruise: float = BOAT_SPEED * game.current_mult(_boat_fx, dirn)       # 和手动划一样快（顺流快、逆流慢）
 	var cap := maxf(14.0, minf(cruise, sqrt(2.0 * AUTO_DECEL * absf(remain))))
-	_boat_v = move_toward(_boat_v, dirn * cap, AUTO_ACCEL * game.move_speed() * dt)
+	_boat_v = move_toward(_boat_v, dirn * cap, BOAT_ACCEL * game.move_speed() * dt)
 	_boat_fx += _boat_v * game.move_speed() * dt
 	game.steer_to(_boat_fx)
 	world.boat_dir = dirn
@@ -819,6 +830,8 @@ func _update_polygon() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_quit()
+	elif what == NOTIFICATION_OS_IME_UPDATE and _naming:
+		_ime_text = DisplayServer.ime_get_text()
 
 
 func _quit() -> void:
@@ -857,6 +870,8 @@ func _process(dt: float) -> void:
 	if _debug_speed > 1.0:
 		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
 	_update_power()
+	if not _naming and game.state.cat_name == "" and not wardrobe.open and bool(game.state.cat.get("created", false)) and not mini:
+		_begin_naming()                    # 捏完猫、还没有名字：先给小猫起名
 	game.fast_forward(dt * 1000.0)        # [ ] 全局加速：把所有截止时刻前移
 	if game.take_wallet_full():
 		_toast("钱包满了", "多的放进存钱罐")
@@ -1119,6 +1134,10 @@ func _sparkles(center: Vector2, count: int, spread: float, fall := false) -> voi
 func _unhandled_input(event: InputEvent) -> void:
 	if not _config_ok:
 		return
+	if _naming:
+		_name_input(event)
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey:
 		if event.pressed and not event.echo and not mini:
 			if _confirm_quit:
@@ -1275,7 +1294,7 @@ func _quit_button_visible() -> bool:
 
 ## 有任何面板（菜单、换形象、物品栏）开着。
 func panel_open() -> bool:
-	return menu.open or wardrobe.open or outfit_shop.open or shipyard_panel.open or dest_panel.open or quest_panel.open or bag.open or book.open or admin.open
+	return menu.open or _naming or wardrobe.open or outfit_shop.open or shipyard_panel.open or dest_panel.open or quest_panel.open or bag.open or book.open or admin.open
 
 
 ## 小猫状态页（菜单的第 5 页）：已经开着就关，否则打开。
@@ -1379,9 +1398,9 @@ func _bobber_in_water() -> bool:
 	return game.fishing.state in [Fishing.State.WAITING, Fishing.State.TWITCH, Fishing.State.HOOKED, Fishing.State.REELING, Fishing.State.SETTLEMENT]
 
 
-func _go_to_town() -> void:
+func _go_to_town(stop_at_dock: bool = false) -> void:
 	var had_line: bool = game.line_out() and game.fishing.is_active() and _bobber_in_water()
-	if game.go_to_town():
+	if game.go_to_town(stop_at_dock):
 		if had_line:
 			world.retract_t0 = Time.get_ticks_msec()      # 先收杆再开船
 		log.write("go_to_town", {"basket": game.state.basket.size()})
@@ -1464,6 +1483,7 @@ func _draw() -> void:
 	if _confirm_quit:
 		_draw_quit_confirm()
 	draw_set_transform(Vector2.ZERO)
+	_draw_name_dialog(t)
 	_draw_island_title()
 	if not mini or _mini_shown:       # 右下角的版本号
 		var ver: String = str(ProjectSettings.get_setting("application/config/version", ""))
@@ -1600,6 +1620,77 @@ func _show_loss(fish_id: String, size: int, suffix: String) -> void:
 const TITLE_IN := 1400
 const TITLE_HOLD := 2800
 const TITLE_OUT := 1800
+
+## 画玩家输入的文字（小猫的名字）：用像素字体现画，和图集里的字一样大（10 像素）。
+func dyn_text_width(s: String) -> float:
+	return _pix_font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x if _pix_font != null else float(s.length() * 10)
+
+
+func dyn_text(s: String, pos: Vector2, color: Color) -> void:
+	if _pix_font == null or s == "":
+		return
+	draw_string(_pix_font, pos + Vector2(0, _pix_font.get_ascent(10)), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, color)
+
+
+func cat_title() -> String:
+	return game.state.cat_name + "的家" if game.state.cat_name != "" else "小猫的家"
+
+
+func _begin_naming() -> void:
+	_naming = true
+	_name_buf = ""
+	_name_pick = 0
+	_ime_text = ""
+	DisplayServer.window_set_ime_active(true)
+	DisplayServer.window_set_ime_position(Vector2i(int(view.x * px_scale * 0.5), int(view.y * px_scale * 0.5)))
+	_update_polygon()
+
+
+func _finish_naming() -> void:
+	game.set_cat_name(_name_buf)
+	_naming = false
+	DisplayServer.window_set_ime_active(false)
+	play("buy")
+	log.write("name_cat", {"name": game.state.cat_name})
+	_update_polygon()
+
+
+func _name_input(event: InputEvent) -> void:
+	if not (event is InputEventKey) or not event.pressed:
+		return
+	var k: int = event.keycode
+	if k == KEY_ENTER or k == KEY_KP_ENTER:
+		_finish_naming()
+	elif k == KEY_BACKSPACE:
+		if _ime_text == "" and _name_buf.length() > 0:
+			_name_buf = _name_buf.substr(0, _name_buf.length() - 1)
+	elif k == KEY_TAB:
+		_name_pick = (_name_pick + 1) % Game.DEFAULT_NAMES.size()
+		_name_buf = Game.DEFAULT_NAMES[_name_pick]
+		play("click")
+	elif event.unicode >= 32 and event.unicode != 127 and _name_buf.length() < Game.NAME_MAX:
+		_name_buf += String.chr(event.unicode)
+
+
+func _draw_name_dialog(t: int) -> void:
+	if not _naming:
+		return
+	var r := Rect2(roundf(view.x / 2.0) - 60, roundf(view.y / 2.0) - 32, 120, 64)
+	draw_rect(Rect2(Vector2.ZERO, view), Color(Pal.U_K, 0.55))
+	draw_rect(r, Pal.U_A)
+	draw_rect(r.grow(-1), Pal.U_K)
+	label_centered("给小猫起个名字", r.position.x + 60, r.position.y + 4, Pal.L_W)
+	var box := Rect2(r.position.x + 16, r.position.y + 19, 88, 14)
+	draw_rect(box, Pal.U_A)
+	draw_rect(box.grow(-1), Pal.U_B)
+	var shown := _name_buf + _ime_text
+	dyn_text(shown, box.position + Vector2(2, 2), Pal.L_W)
+	if (t / 450) % 2 == 0:
+		draw_rect(Rect2(box.position.x + 2 + dyn_text_width(shown), box.position.y + 2, 1, 10), Pal.L_Y)
+	label("最多六个字", Vector2(r.position.x + 6, r.position.y + 37), Pal.L_A)
+	label("回车确认", Vector2(r.end.x - 6 - label_width("回车确认"), r.position.y + 37), Pal.L_G)
+	label("Tab键换一个", Vector2(r.position.x + 6, r.position.y + 49), Pal.L_A)
+
 
 func _draw_island_title() -> void:
 	var age := Time.get_ticks_msec() - _title_t0

@@ -10,6 +10,7 @@ var wallet_gold: int = 0          # 铜币数（显示时换算成金/银/铜，
 var islands: Array = []            # 已经到过的岛屿 id
 var boat_level: int = 0           # 船坞里升到第几级的船
 var basket_sizes: Array = []        # 和 basket 一一对应的尺寸（厘米），被偷/被吃时播报用
+var cat_name: String = ""           # 玩家给小猫起的名字（空 = 还没起）
 var piggy: int = 0                # 家里存钱罐里的铜币
 var basket_capacity: float = 10.0    # 鱼篓容量（单位，每种鱼占的单位不同，见 fish.json 的 units）
 var basket: Array = []            # 自由挂机钓到的鱼 id
@@ -51,7 +52,7 @@ func new_id(prefix: String) -> String:
 func to_dict() -> Dictionary:
 	return {
 		"save_version": save_version, "revision": revision,
-		"wallet_gold": wallet_gold, "piggy": piggy, "boat_level": boat_level, "islands": islands.duplicate(), "basket_capacity": basket_capacity,
+		"wallet_gold": wallet_gold, "piggy": piggy, "boat_level": boat_level, "cat_name": cat_name, "islands": islands.duplicate(), "basket_capacity": basket_capacity,
 		"journey": journey.duplicate(true), "inventory": inventory.duplicate(true), "warehouse": warehouse.duplicate(true), "effects": effects.duplicate(true), "fishing_checkpoint": fishing_checkpoint.duplicate(true),
 		"basket": basket.duplicate(), "basket_sizes": basket_sizes.duplicate(), "session_haul": session_haul.duplicate(),
 		"processed_catch_ids": processed_catch_ids.duplicate(),
@@ -70,6 +71,7 @@ func from_dict(d: Dictionary) -> bool:
 	wallet_gold = max(0, int(d.get("wallet_gold", 0)))
 	piggy = max(0, int(d.get("piggy", 0)))
 	islands = _str_array(d.get("islands"))
+	cat_name = str(d.get("cat_name", "")).strip_edges().substr(0, 6)
 	boat_level = clampi(int(d.get("boat_level", 0)), 0, 99)
 	basket_capacity = maxf(1.0, float(d.get("basket_capacity", 10.0)))
 	basket = _str_array(d.get("basket"))

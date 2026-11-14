@@ -468,13 +468,22 @@ func _draw_pier_feet(left: float, right: float, t: int) -> void:
 func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 	var ix: float = float(m.game.island_info().get("x", -3900))
 	var shore: float = ix - 64.0                    # 岛的海岸线：码头在它右边，陆地在它左边
-	if right < shore - 700.0 or left > ix + 60.0:
+	if right < shore - 760.0 or left > ix + 260.0:
 		return
-	var x0: float = maxf(left, shore - 760.0)
-	var x1: float = minf(right, shore)
-	if x0 < x1:
-		_tile_row("ground", 0, 1, GROUND_Y, x0, x1)
-		m.draw_rect(Rect2(x0, GROUND_Y + 16, x1 - x0, maxf(0, bottom - GROUND_Y - 16)), Pal.L_N)
+	# 海岸、浅滩、码头：把小镇那一套（沙滩渐变、桩脚、地面）左右镜像过来。
+	# 镜像公式 x_岛 = C - x_镇；C 取 ix + 576，让小镇的码头起点 576 正好落在船左端 ix 的左边。
+	var c: float = ix + 576.0
+	var tl: float = c - right
+	var tr: float = c - left
+	m.draw_set_transform_matrix(Transform2D(Vector2(-1, 0), Vector2(0, 1), Vector2(c - m.cam.x, -m.cam.y)))
+	_draw_shoal(tl, tr, bottom, t)
+	var gl: float = maxf(tl, SHORE_X)
+	if gl < tr:
+		_tile_row("ground", 0, 1, GROUND_Y, gl, tr)
+		m.draw_rect(Rect2(gl, GROUND_Y + 16, tr - gl, maxf(0, bottom - GROUND_Y - 16)), Pal.L_N)
+	m.draw_texture(m.tex["pier"], Vector2(PIER_X, GROUND_Y))
+	_draw_pier_feet(tl, tr, t)
+	m.draw_set_transform(-m.cam)
 	# 岛心湖：地面中间凹下去一块，里面是水，岸边有芦苇
 	var lx: float = shore - 420.0
 	var lw: float = 150.0
@@ -500,9 +509,6 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 			m.draw_rect(Rect2(lhx + 5, GROUND_Y - 53, 8, 3), Color(Pal.L_Y, 0.9))
 			m.draw_rect(Rect2(lhx - 4, GROUND_Y - 53, 5, 1), Color(Pal.L_Y, 0.45))
 			m.draw_rect(Rect2(lhx + 17, GROUND_Y - 53, 5, 1), Color(Pal.L_Y, 0.45))
-	# 码头：把右边的码头贴图左右翻转
-	var ptx: Texture2D = m.tex["pier"]
-	m.draw_texture_rect_region(ptx, Rect2(shore + 64.0, GROUND_Y, -64.0, ptx.get_height()), Rect2(0, 0, 64, ptx.get_height()))
 	var sign_x: float = shore - 24.0
 	if sign_x > left - 40 and sign_x < right + 10 and m.game.island_visited():
 		_plate(sign_x, GROUND_Y - 22, str(m.game.island_info().get("name", "")))
@@ -512,11 +518,17 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 func _draw_waves(left: float, right: float, bottom: float, t: int) -> void:
 	var wz: Vector2 = m.game.wave_zone()
 	var wend: float = wz.x + 18.0
-	if left >= wend:
+	# 浪区一直铺到小岛附近：越靠近小岛越淡
+	var wstart: float = -100000.0
+	var fade: float = 1.0
+	if not m.game.island_info().is_empty():
+		wstart = m.game.island_x() + float(m.game.island_info().get("current_end", 160))
+	if left >= wend or right <= wstart:
 		return
-	var x: float = floorf(maxf(left, 0.0) / 2.0) * 2.0
+	var x: float = floorf(maxf(left, wstart) / 2.0) * 2.0
 	while x < minf(right, wend):
-		var k: float = clampf((wend - x) / (wend - wz.y + 20.0), 0.0, 1.0)      # 越靠左 k 越大
+		var k: float = clampf((wend - x) / (wend - wz.y + 20.0), 0.0, 1.0)      # 越靠左 k 越大，到 wave_stop 之后保持 1
+		k *= clampf((x - wstart) / 150.0, 0.0, 1.0)                                # 靠近小岛慢慢消失
 		var ph: float = x * 0.11 - float(t) / 380.0          # 相位随时间减小：波形从左往右传
 		var h: float = roundf(k * (3.0 + 2.0 * sin(ph) + 1.0 * sin(ph * 2.3 + 1.0)))
 		if h > 0.0:
@@ -527,19 +539,20 @@ func _draw_waves(left: float, right: float, bottom: float, t: int) -> void:
 			if h > 2.0:
 				m.draw_rect(Rect2(x, WATER_Y + 5 - h, 2, 1), Pal.L_C)
 		x += 2.0
-	# 水面以下一排排白色的浪纹，会向右滚
+	# 水面以下一排排白色的浪纹，向右滚
 	for row in 4:
 		var wy: float = WATER_Y + 9.0 + float(row) * 8.0
 		var off: float = fposmod(float(t) / (90.0 + row * 25.0) + row * 7.0, 14.0)
-		var cx: float = off - 14.0
-		while cx < wend:
-			var kk: float = clampf((wend - cx) / (wend - wz.y + 20.0), 0.0, 1.0)
-			if cx + 8 > left and cx < right and kk > 0.05:
+		var cx: float = floorf((maxf(left, wstart) - off) / 14.0) * 14.0 + off
+		while cx < minf(right, wend):
+			var kk: float = clampf((wend - cx) / (wend - wz.y + 20.0), 0.0, 1.0) * clampf((cx - wstart) / 150.0, 0.0, 1.0)
+			if cx + 8 > left and kk > 0.05:
 				m.draw_rect(Rect2(cx, wy, 6, 1), Color(Pal.L_W, 0.35 + 0.45 * kk))
 				m.draw_rect(Rect2(cx + 1, wy - 1, 3, 1), Color(Pal.L_W, 0.25 + 0.35 * kk))
 			cx += 14.0
-	# 浪区深处整体压暗一点，看着更凶
-	m.draw_rect(Rect2(maxf(left, 0.0), WATER_Y + 6, minf(right, wz.y + 20.0) - maxf(left, 0.0), maxf(0.0, bottom - WATER_Y - 6)), Color(Pal.U_B, 0.12))
+	# 浪区深处整体压暗一点
+	var dx0: float = maxf(left, wstart)
+	m.draw_rect(Rect2(dx0, WATER_Y + 6, minf(right, wz.y + 20.0) - dx0, maxf(0.0, bottom - WATER_Y - 6)), Color(Pal.U_B, 0.12))
 
 
 ## 市场入口：拱门、招牌、彩旗。
@@ -637,13 +650,17 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	m.draw_texture(m.tex["pier"], Vector2(PIER_X, GROUND_Y))
 	_draw_pier_feet(left, right, t)
 
-	for d in DOORS:      # 门楣上的木招牌
-		var w: float = m.label_width(d[1]) + 5
+	for d in DOORS:      # 门楣上的木招牌（小猫的家用玩家起的名字，现画）
+		var is_home: bool = d[2] == "home"
+		var w: float = (m.dyn_text_width(m.cat_title()) if is_home else m.label_width(d[1])) + 5
 		var plate := Rect2(roundf(float(d[0]) - w / 2), GROUND_Y - 39, w, 12)
 		m.draw_rect(plate.grow(1), Pal.U_K)
 		m.draw_rect(plate, Pal.L_N)
 		m.draw_rect(Rect2(plate.position.x, plate.end.y - 2, plate.size.x, 2), Pal.L_O)
-		m.label(d[1], plate.position + Vector2(3, 0), Pal.U_K)
+		if is_home:
+			m.dyn_text(m.cat_title(), plate.position + Vector2(3, 0), Pal.U_K)
+		else:
+			m.label(d[1], plate.position + Vector2(3, 0), Pal.U_K)
 	# 摊位（后半）→ 摆摊的小猫 → 柜台 → 路过的居民、顾客、走动中的小猫（都在摊位前面）
 	_draw_market_gate(left, right)
 	_draw_market_stalls(t)
