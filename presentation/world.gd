@@ -232,6 +232,12 @@ func island_near_repair(x: float) -> bool:
 func island_near_tavern(x: float) -> bool:
 	return absf(x + 16.0 - m.game.tavern_x()) <= 22.0
 
+func island_near_pawn(x: float) -> bool:
+	return absf(x + 16.0 - m.game.pawn_x()) <= 18.0
+
+func island_near_trash(x: float) -> bool:
+	return absf(x + 16.0 - m.game.trash_x()) <= 10.0
+
 func island_near_chest(x: float) -> bool:
 	return m.game.bridge_built() and not m.game.west_chest_open() and absf(x + 16.0 - (m.game.west_chest_x() + 8.0)) <= 20.0
 
@@ -562,6 +568,33 @@ func _draw_island_buildings(left: float, right: float, t: int) -> void:
 			m.tex_frame("villager_%d" % ([1, 3, 2][k]), Vector2(wx, GROUND_Y - 21 - (1 if swing == 1 else 0)), swing if busy else 0, 2)
 			if busy and swing == 1:
 				m.tex_frame("sparkle", Vector2(wx - 4, GROUND_Y - 24), (t / 110) % 2, 2)
+	var px: float = g.pawn_x()
+	if px > left - 50 and px < right + 50:
+		# 典当行：砖红墙、绿色遮阳篷、门边挂着三个金球的招牌
+		var x2 := px - 18.0
+		var y2 := float(GROUND_Y) - 30.0
+		m.draw_rect(Rect2(x2 - 1, y2 + 5, 38, 26), Pal.U_K)
+		m.draw_rect(Rect2(x2, y2 + 6, 36, 24), Pal.U_R)
+		for k in range(0, 36, 6):
+			m.draw_rect(Rect2(x2 + k, y2 + 6, 1, 24), Pal.U_K)
+		m.draw_rect(Rect2(x2 - 2, y2 + 1, 40, 6), Pal.U_K)
+		for k in 7:
+			m.draw_rect(Rect2(x2 - 1 + k * 6, y2 + 2, 6, 4), Pal.L_G if k % 2 == 0 else Pal.L_W)
+		m.draw_rect(Rect2(px - 3, y2 + 16, 8, 14), Pal.U_O)
+		m.draw_rect(Rect2(x2 + 3, y2 + 13, 8, 7), Pal.L_Y if dark > 0.3 else Pal.L_C)
+		for k in 3:                                               # 三个金球
+			m.draw_rect(Rect2(x2 + 26 + (k % 2) * 6 - 3 * (k / 2), y2 + 10 + k * 4, 4, 3), Pal.L_Y)
+		_plate_at(px, GROUND_Y - 36.0 - 8.0, "典当行")
+	var trx: float = g.trash_x()
+	if trx > left - 30 and trx < right + 30:
+		# 垃圾箱：灰色铁桶，盖子半掀
+		m.draw_rect(Rect2(trx - 6, GROUND_Y - 15, 12, 15), Pal.U_K)
+		m.draw_rect(Rect2(trx - 5, GROUND_Y - 14, 10, 13), Pal.L_A)
+		m.draw_rect(Rect2(trx - 5, GROUND_Y - 14, 3, 13), Pal.L_W)
+		for k in range(0, 3):
+			m.draw_rect(Rect2(trx - 3 + k * 3, GROUND_Y - 12, 1, 9), Pal.U_A)
+		m.draw_rect(Rect2(trx - 7, GROUND_Y - 18, 14, 4), Pal.U_A)
+		m.draw_rect(Rect2(trx - 7, GROUND_Y - 18, 14, 1), Pal.L_W)
 	var tx: float = g.tavern_x()
 	if tx > left - 50 and tx < right + 50:
 		var x1 := tx - 20.0

@@ -241,3 +241,7 @@
 - run_tests：ALL TESTS PASS（738 项）；sim_long_run：SIM PASS（Linux 沙盒）。
 - 截图目检（Linux）：黑洞、木箱、下楼确认、旅店菜单、挥镐动画。
 - 未运行：macOS 上的实际手感（方向键+空格挖、挥镐观感）、音效、旅店/回家睡觉动画、.app 启动。
+
+## C167 v0.79
+- run_tests：ALL TESTS PASS（748 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：新 HUD、典当行界面、垃圾箱界面、岛上典当行与垃圾箱。
+- 未运行：Mac 上的实际手感（石头碰撞）、典当行/垃圾箱的键盘与鼠标操作、迷你窗口里的典当/垃圾界面、.app 启动。

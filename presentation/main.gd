@@ -421,8 +421,11 @@ func _apply_debug_env() -> void:
 	if OS.has_environment("CATFISH_SELLMODE"):    # 调试：工坊回收界面（给几样杂物）
 		for id in ["boot", "bait_worm", "rope", "ladder", "stone", "lamp_shell"]:
 			game.give(id, 3)
-		bag.open_sell()
+		bag.open_pawn()
 		bag.sel = OS.get_environment("CATFISH_SELLMODE").to_int()
+		if OS.get_environment("CATFISH_SELLMODE") == "trash":
+			bag.open_trash()
+			bag.sel = 0
 	if OS.has_environment("CATFISH_ADMIN"):       # 调试：直接打开后台，钱包给点钱
 		st.wallet_gold = 23456
 		st.piggy = 12345
@@ -486,6 +489,9 @@ func _apply_debug_env() -> void:
 		_debug_dir = OS.get_environment("CATFISH_ROAM").to_int()
 	if OS.has_environment("CATFISH_GO"):
 		game.go_to_town()
+	if OS.has_environment("CATFISH_PAWN"):        # 调试：去雾灯岛，站到典当行门口
+		debug_teleport("island")
+		game.journey.set_roam_x(game.pawn_x() - 16.0 + OS.get_environment("CATFISH_PAWN").to_float())
 	if OS.has_environment("CATFISH_MENU"):
 		wardrobe.open = false
 		outfit_shop.open = false
@@ -996,9 +1002,6 @@ func _after_dialog() -> void:
 			_open_works("tavern")
 		"open_repair":
 			_open_works("repair")
-		"open_sell":
-			bag.open_sell()
-			on_panel_toggled()
 		"give_pick":
 			game.mine.ensure(game.now_ms())
 			if game.mine.give_first_pick():
@@ -1024,6 +1027,14 @@ func _interact_island(x: float) -> void:
 		_talk("keeper_menu")
 	elif world.island_near_tavern(x):
 		_talk("tavern_menu")
+	elif world.island_near_pawn(x):
+		bag.open_pawn()
+		play("click")
+		on_panel_toggled()
+	elif world.island_near_trash(x):
+		bag.open_trash()
+		play("click")
+		on_panel_toggled()
 	elif world.island_near_repair(x):
 		_open_works("repair")
 	elif world.island_near_console(x):
@@ -2430,6 +2441,10 @@ func _island_hint(ix: float) -> String:
 		return "空格键看修理厂"
 	if world.island_near_tavern(ix):
 		return "空格键进酒馆"
+	if world.island_near_pawn(ix):
+		return "空格键进典当行"
+	if world.island_near_trash(ix):
+		return "空格键扔东西（垃圾箱）"
 	if world.island_near_chest(ix):
 		return "空格键打开木箱"
 	if world.island_near_drift(ix) >= 0:

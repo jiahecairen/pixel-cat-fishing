@@ -798,6 +798,7 @@ func test_stats_and_bait_shop(balance: Dictionary, fish: Array) -> void:
 	check(not g.can_buy_bait("bait_worm"), "钱不够不能买")
 	g.state.wallet_gold = 9999
 	g.inventory.add(g.state, "bait_worm", 98)
+	g.state.inventory["gold_ore"] = g.inventory.stack_cap("gold_ore")
 	g.state.bag_slots = g.inventory.slots_used(g.state)
 	check(not g.buy_bait("bait_worm") and g.inventory.count(g.state, "bait_worm") == 99, "鱼饵叠满 99 个、又没有空格子就不能再买")
 
@@ -967,7 +968,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 20 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "15 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 21 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "15 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -1821,6 +1822,35 @@ func test_v078(balance: Dictionary, fish: Array) -> void:
 	clock.t += 3000
 	g4.mine.rest_update(clock.t)
 	check(not g4.mine.resting() and g4.mine.stamina_f() >= float(g4.mine.stamina_max()) - 0.01, "读档后休息照常结束")
+	# v0.78b：石头碰撞盒变小、典当行、垃圾箱
+	mn.begin_run(1, clock.t + 50)
+	var nb2 := _stand_next_to_rock(mn)
+	var cell2: Vector2i = mn.pos()
+	var rockc: Vector2i = cell2 + nb2
+	for _i in 60:
+		mn.walk(float(nb2.x) * 0.05, float(nb2.y) * 0.05)
+	var dist: float = (mn.fpos() - (Vector2(rockc) + Vector2(0.5, 0.5))).length()
+	check(dist > 0.5 and dist < 0.62, "能一直走到离石头很近的地方才被挡住（距离 %.2f 格，以前要隔 0.8）" % dist)
+	check(mn.target(nb2.x, nb2.y) == rockc, "走到最近处，面前还是那块石头")
+	mn.end_run()
+	g.state.inventory.clear()
+	g.state.bag_slots = 8
+	g.state.wallet_gold = 0
+	g.state.inventory["boot"] = 2
+	g.state.inventory["rope"] = 1
+	var pv: int = g.pawn_value("boot")
+	check(pv >= 1 and g.pawn_sell("boot") == pv and g.state.wallet_gold == pv and g.pawn_count("boot") == 1 and g.inventory.count(g.state, "boot") == 1, "典当：旧靴子换钱，记在典当行里")
+	check(g.pawn_sell("rope") > 0 and g.pawn_count("rope") == 1, "任务物品也能当")
+	g.state.wallet_gold = 0
+	check(g.pawn_redeem("boot") == "gold", "赎回要钱，钱不够不行")
+	g.state.wallet_gold = pv * 2
+	check(g.pawn_redeem("boot") == "" and g.state.wallet_gold == 0 and g.inventory.count(g.state, "boot") == 2 and g.pawn_count("boot") == 0, "赎回价是当时的两倍")
+	check(g.pawn_redeem("boot") == "none", "没当过的赎不了")
+	var s5 := GameState.new()
+	check(s5.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict()))) and int(s5.story.get("pawn_rope", 0)) == 1, "典当记录随存档保存")
+	check(g.trash_item("rope") == 0 and g.trash_item("boot", true) == 2 and g.inventory.count(g.state, "boot") == 0, "垃圾箱：整堆扔掉")
+	g.state.inventory["rope"] = 1
+	check(g.trash_item("rope") == 1 and g.inventory.count(g.state, "rope") == 0, "垃圾箱：任务物品也能扔")
 
 func test_v068_sell(balance: Dictionary, fish: Array) -> void:
 	print("v0.68: 工坊出售、任务物品、加速对矿井生效")
@@ -2026,23 +2056,23 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 			break
 	check(gx > 0, "能找到金矿（第 %d 层）" % gf)
 	g.state.mine["run"]["floor"] = gf
+	g.state.inventory.clear()
+	g.state.bag_slots = 8
 	var w0: int = g.state.wallet_gold
 	var e: Dictionary = mn._break_cell(gx, gy)
-	check(int(e["gold"]) > 0 and g.state.wallet_gold == w0 and int(mn.bag()["coins"]) >= int(e["gold"]), "金矿先进背包：+%d，钱包还没动" % int(e["gold"]))
-	var cap: int = mn.bag_cap()
-	g.state.mine["run"]["bag"]["n"] = cap
+	check(int(e["gold"]) == 0 and g.state.wallet_gold == w0 and str(e["item"]) == "gold_ore" and g.inventory.count(g.state, "gold_ore") == 1, "金矿石直接进物品栏，不再产出钱")
+	g.state.inventory["gold_ore"] = g.inventory.stack_cap("gold_ore")
+	g.state.bag_slots = g.inventory.slots_used(g.state)
+	check(mn.bag_cap() == g.state.bag_slots and mn.bag_n() == g.inventory.slots_used(g.state), "背包容量就是物品栏的格子数")
 	var lost_e := {}
 	for yy in range(1, mn.height()):
 		for xx in range(1, mn.width() - 1):
 			if lost_e.is_empty() and mn.ore(xx, yy) == "stone" and mn.block(xx, yy) != "":
 				lost_e = mn._break_cell(xx, yy)
-	check(bool(lost_e.get("lost", false)) and mn.bag_n() == cap, "背包满了：挖到的带不走")
-	g.state.mine["run"]["bag"]["n"] = 3
-	g.state.mine["run"]["bag"]["metal"] = 2
-	g.state.mine["run"]["bag"]["coins"] = 100
-	var w1: int = g.state.wallet_gold
+	check(bool(lost_e.get("lost", false)) and mn.bag_full(), "物品栏满了：挖到的带不走")
+	g.state.bag_slots = 8
 	var res: Dictionary = mn.end_run()
-	check(res["coins"] == 100 and int(res["metal"]) == 2 and g.state.wallet_gold == w1 + 100 and g.inventory.count(g.state, "metal") >= 2 and not mn.in_run(), "回地面：背包换成钱和金属，这一局结束")
+	check(not mn.in_run() and int(res["coins"]) == 0, "回地面：这一局结束，东西本来就在物品栏里")
 	# 电梯存档点：到过第 5 层之后能直接从那里开始
 	mn.begin_run(1, clock.t + 1)
 	g.state.mine["run"]["floor"] = 4
@@ -2134,10 +2164,6 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	mn.end_run()
 	g.state.wallet_gold = 0
 	check(mn.cook("bento", g.economy) == "gold", "钱不够做不了")
-	# 背包升级
-	g.state.wallet_gold = 5000
-	var cap0: int = mn.bag_cap()
-	check(mn.buy_level("bag") == "" and mn.bag_cap() > cap0, "背包升级：%d 格 → %d 格" % [cap0, mn.bag_cap()])
 	# 2 号井：材料 + 酒馆里雇的工人
 	g.state.effects["workers"] = 0
 	g.state.inventory["metal"] = 40
@@ -2153,7 +2179,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	var s2 := GameState.new()
 	check(s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict()))) and int(s2.mine["shafts"]["1"]["cp"]) == 5 and s2.wallet_gold == 777, "矿井进度随存档保存")
 	var g2 := Game.new(balance, fish, s2, clock, _rng(68))
-	check(g2.mine.shaft_ok(1) and g2.mine.shaft_ok(2) and g2.mine.start_floors() == [1, 5] and g2.mine.bag_lv() == 1 and not g2.mine.in_run(), "读档后矿井的永久进度还在")
+	check(g2.mine.shaft_ok(1) and g2.mine.shaft_ok(2) and g2.mine.start_floors() == [1, 5] and not g2.mine.in_run(), "读档后矿井的永久进度还在")
 	# 中途存档：这一局接着玩（JSON 把数字读成小数，也要对得上）
 	g.mine.begin_run(1, clock.t + 21)
 	g.mine.give_first_pick()

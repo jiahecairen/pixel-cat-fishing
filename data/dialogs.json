@@ -304,13 +304,8 @@
     "nodes": {
       "root": {
         "who": "smith",
-        "text": "欢迎！有什么杂物要回收吗？",
+        "text": "欢迎！矿井里的事我知道一点。",
         "choices": [
-          {
-            "text": "我想出售东西。",
-            "next": "",
-            "action": "open_sell"
-          },
           {
             "text": "矿井里有什么门道？",
             "next": "mine_tips"

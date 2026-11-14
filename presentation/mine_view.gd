@@ -280,9 +280,7 @@ func _on_event(e: Dictionary) -> void:
 	var o := str(e["ore"])
 	if bool(e["lost"]):
 		_float(x, y, "背包满了", Pal.L_R)
-		_warn("背包满了，回地面卖掉再来")
-	elif int(e["gold"]) > 0:
-		_float(x, y, "+%s 入背包" % _price(int(e["gold"])), Pal.L_Y)
+		_warn("背包满了，带不走：回地面去典当行卖掉或扔掉")
 	if str(e["item"]) != "" and not bool(e["lost"]):
 		var nm: String = str(m.game.inventory.by_id.get(e["item"], {}).get("name", e["item"]))
 		_float(x, y - 1, "%s +%d" % [nm, int(e["n"])], Pal.L_W)
@@ -397,7 +395,7 @@ func _take_perk(i: int) -> void:
 
 func _menu_rows() -> int:
 	match menu:
-		"shop": return 4
+		"shop": return 3
 		"cook": return m.game.mine.dishes().size()
 		"cart": return m.game.mine.shaft_count()
 		"leave": return 2
@@ -547,13 +545,12 @@ func _buy(i: int) -> void:
 	match i:
 		0: why = mn.buy_level("pick")
 		1: why = mn.buy_level("lamp")
-		2: why = mn.buy_level("bag")
-		3: why = mn.buy_bomb()
+		2: why = mn.buy_bomb()
 	match why:
 		"":
 			m.play("buy")
 			m.game.dirty = true
-			say(["买到了：%s" % str(mn.pick_def().get("name", "")), "买到了：%s" % str(mn.lamp_def().get("name", "")), "背包变大了：%d 格" % mn.bag_cap(), "买到一颗炸弹（有 %d 颗）" % mn.bombs()][i])
+			say(["买到了：%s" % str(mn.pick_def().get("name", "")), "买到了：%s" % str(mn.lamp_def().get("name", "")), "买到一颗炸弹（有 %d 颗）" % mn.bombs()][i])
 		"gold": say("钱不够")
 		"mat": say("材料不够（石头和金属在矿里挖）")
 		"nopick": say("你还没有镐子，去找雾灯岛的老柯")
@@ -649,7 +646,7 @@ func hint() -> String:
 				return "空格键：打开木箱"
 			if mh.on_entrance():
 				return "空格键回地面（背包换钱）"
-			return "方向键走  空格挖  B 放炸弹（有 %d 颗）" % mh.bombs()
+			return "第 %d 层  方向键走  空格挖  B 放炸弹（有 %d 颗）" % [mh.floor_n(), mh.bombs()]
 	return ""
 
 ## ================= 绘制 =================
@@ -860,8 +857,6 @@ func _draw_menu(view: Vector2) -> void:
 				rows.append([pk, ("升级 %s：%s" % [str(mn.pick_def(mn.pick() + 1).get("name", "")), _cost_text(pc)]) if not pc.is_empty() else "已经最好"])
 			var lc: Dictionary = mn.next_cost("lamp")
 			rows.append(["灯：%s（光圈 %.1f 格）" % [str(mn.lamp_def().get("name", "")), mn.lamp_def().get("radius", 1.6)], ("升级 %s：%s" % [str(mn.lamp_def(mn.lamp() + 1).get("name", "")), _cost_text(lc)]) if not lc.is_empty() else "已经最好"])
-			var bc: Dictionary = mn.next_cost("bag")
-			rows.append(["背包：%d 格" % mn.bag_cap(), ("升级到 %d 格：%s" % [int((mn.cfg().get("bag", {}).get("sizes", []) as Array)[mn.bag_lv() + 1]), _cost_text(bc)]) if not bc.is_empty() else "已经最大"])
 			rows.append(["炸弹（有 %d/%d 颗）" % [mn.bombs(), mn.bomb_carry()], "%s 一颗，一次炸一片" % _price(mn.bomb_price())])
 			_panel(view, "鼹鼠工具店", _wallet_text(), rows, "↑↓选择  空格买  Esc离开", 20.0 + rows.size() * 28.0 + 20.0)
 		"cook":
@@ -905,13 +900,7 @@ func _draw_menu(view: Vector2) -> void:
 		"inn":
 			_draw_inn(view)
 		"leave":
-			var bgl: Dictionary = mn.bag()
-			var inl := "背包 %d 件：%s" % [mn.bag_n(), _price(int(bgl.get("coins", 0)))]
-			if int(bgl.get("stone", 0)) > 0:
-				inl += "  石头×%d" % int(bgl["stone"])
-			if int(bgl.get("metal", 0)) > 0:
-				inl += "  金属×%d" % int(bgl["metal"])
-			_panel(view, "回地面？", "", [["回地面", inl + "，这一局结束"], ["再挖一会儿", "继续待在第 %d 层" % mn.floor_n()]], "↑↓选择  空格确认  Esc取消", 20.0 + 2 * 28.0 + 20.0)
+			_panel(view, "回地面？", "", [["回地面", "这一局结束，挖到的东西都在物品栏里"], ["再挖一会儿", "继续待在第 %d 层" % mn.floor_n()]], "↑↓选择  空格确认  Esc取消", 20.0 + 2 * 28.0 + 20.0)
 
 ## ---- 洞穴大厅 ----
 func _cart_world_x(t: int) -> float:
@@ -1134,16 +1123,24 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		m.draw_rect(Rect2(0, view.y - e - 6, view.x, 6), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(e, 0, 6, view.y), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(view.x - e - 6, 0, 6, view.y), Color(0, 0, 0, a2))
-	# 信息（右下，两行）：第几层、炸弹、镐；背包里装的东西（回地面才换钱）
-	var info := "第 %d 层  体力 %d/%d  炸弹 %d  %s" % [mn.floor_n(), mn.stamina(), mn.stamina_max(), mn.bombs(), str(mn.pick_def().get("name", ""))]
-	var low: bool = float(mn.stamina()) <= float(mn.stamina_max()) * float(mn.cfg().get("stamina", {}).get("low", 0.25))
-	m.dyn_text(info, Vector2(view.x - 8 - m.dyn_text_width(info), view.y - 18), Pal.L_R if low else Pal.L_W)
-	var bg: Dictionary = mn.bag()
-	var bl := "背包 %d/%d  钱 %s" % [mn.bag_n(), mn.bag_cap(), _price(int(bg.get("coins", 0)))]
-	for it in ["stone", "metal"]:
-		if int(bg.get(it, 0)) > 0:
-			bl += "  %s %d" % [str(m.game.inventory.by_id.get(it, {}).get("name", it)), int(bg[it])]
-	m.dyn_text(bl, Vector2(view.x - 8 - m.dyn_text_width(bl), view.y - 30), Pal.L_R if mn.bag_full() else Pal.L_W)
+	# 右下角只有两样：体力条、背包容量（背包就是物品栏）
+	var mx: float = float(mn.stamina_max())
+	var stam: float = mn.stamina_f()
+	var low: bool = stam <= mx * float(mn.cfg().get("stamina", {}).get("low", 0.25))
+	var bw := 96.0
+	var bx := view.x - 8.0 - bw
+	var by := view.y - 18.0
+	m.draw_rect(Rect2(bx - 1, by - 1, bw + 2, 9), Pal.U_K)
+	m.draw_rect(Rect2(bx, by, bw, 7), Pal.U_A)
+	var capv: float = mx * float(mn.cfg().get("stamina", {}).get("cap_mult", 1.3))
+	m.draw_rect(Rect2(bx, by, bw * minf(stam, mx) / capv, 7), Pal.L_R if low else Pal.L_G)
+	if stam > mx:                                        # 旅店睡出来的超上限部分：金色
+		m.draw_rect(Rect2(bx + bw * mx / capv, by, bw * (stam - mx) / capv, 7), Pal.L_Y)
+	m.draw_rect(Rect2(bx + bw * mx / capv, by - 1, 1, 9), Pal.L_W)     # 上限的刻度
+	var st := "体力 %d/%d" % [mn.stamina(), mn.stamina_max()]
+	m.dyn_text(st, Vector2(bx - 4 - m.dyn_text_width(st), by - 2), Pal.L_R if low else Pal.L_W)
+	var bl := "背包 %d/%d" % [mn.bag_n(), mn.bag_cap()]
+	m.dyn_text(bl, Vector2(view.x - 8 - m.dyn_text_width(bl), by - 14), Pal.L_R if mn.bag_full() else Pal.L_W)
 	# 天赋和菜（左下，超过一行就往上折行，不盖住右边）
 	var words: Array = []
 	var dn: String = str(mn.dish_def().get("name", ""))

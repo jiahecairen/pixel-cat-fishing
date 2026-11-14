@@ -268,39 +268,22 @@ func luck_mul() -> float:
 func blast_radius() -> int:
 	return int(_c.get("bomb", {}).get("radius", 1)) + perk_count("boom")
 
-## ---- 背包（装满了回地面才换钱） ----
+## ---- 背包：就是物品栏（挖到的东西直接进物品栏，放不下就带不走） ----
 func bag_cap() -> int:
-	var sizes: Array = _c.get("bag", {}).get("sizes", [24])
-	return int(sizes[clampi(bag_lv(), 0, sizes.size() - 1)]) + int(perk_def("bigbag").get("v", 8)) * perk_count("bigbag")
-
-func bag() -> Dictionary:
-	return run().get("bag", {})
+	return _s.bag_slots
 
 func bag_n() -> int:
-	return int(bag().get("n", 0))
+	return _inv.slots_used(_s)
 
 func bag_full() -> bool:
-	return bag_n() >= bag_cap()
+	return _inv.room_for(_s, "stone", 1) < 1 and _inv.room_for(_s, "metal", 1) < 1 and _inv.room_for(_s, "gold_ore", 1) < 1
 
-## 把背包里的东西发出去。物品栏放不下的算丢掉。
+func bag() -> Dictionary:
+	return {}
+
+## 以前回地面才结算背包；现在东西直接进物品栏，这里什么都不用发。
 func cash_out() -> Dictionary:
-	var res := {"coins": 0, "stone": 0, "metal": 0, "lost": 0}
-	if not in_run():
-		return res
-	var b: Dictionary = bag()
-	var coins := int(b.get("coins", 0))
-	if coins > 0:
-		_s.wallet_gold = mini(MoneyC.WALLET_CAP, _s.wallet_gold + coins)
-	res["coins"] = coins
-	for id in ["stone", "metal"]:
-		var n := int(b.get(id, 0))
-		for _i in n:
-			if _inv.add(_s, id, 1):
-				res[id] = int(res[id]) + 1
-			else:
-				res["lost"] = int(res["lost"]) + 1
-	run()["bag"] = {"n": 0, "coins": 0, "stone": 0, "metal": 0}
-	return res
+	return {"coins": 0, "stone": 0, "metal": 0, "lost": 0}
 
 ## ---- 每层的地图（由种子和层数决定，不用存） ----
 func entrance(f: int) -> Vector2i:
@@ -590,10 +573,19 @@ func fpos() -> Vector2:
 			return f
 	return Vector2(x + 0.5, y + 0.5)
 
+## 石头只占格子正中一小块（比画出来的石头略小一点），木箱占大半格，洞口、岩壁占满一格。
+const ROCK_HALF := 0.26
+const CRATE_HALF := 0.4
 func _free_at(p: Vector2) -> bool:
 	for cy in range(int(floor(p.y - HB.y)), int(floor(p.y + HB.y)) + 1):
 		for cx in range(int(floor(p.x - HB.x)), int(floor(p.x + HB.x)) + 1):
-			if block(cx, cy) != "":
+			var b := block(cx, cy)
+			if b == "":
+				continue
+			if b in ["granite", "pit"]:
+				return false
+			var hf := CRATE_HALF if b == "chest" else ROCK_HALF
+			if absf(p.x - (float(cx) + 0.5)) < hf + HB.x and absf(p.y - (float(cy) + 0.5)) < hf + HB.y:
 				return false
 	return true
 
@@ -799,29 +791,19 @@ func _break_cell(x: int, y: int) -> Dictionary:
 		return e
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([seed_(), floor_n(), x, y, "g"])
-	var gold := 0
 	var item := ""
 	var cnt := 0
-	if od.has("gold"):
-		var g: Array = od["gold"]
-		gold = int(round(float(rng.randi_range(int(g[0]), int(g[1]))) * (1.0 + 0.12 * float(floor_n()))))
 	if od.has("item"):
 		item = str(od["item"])
 		cnt = 1
-		if perk_count("loot") > 0 and rng.randf() < float(perk_def("loot").get("v", 0.3)) * float(perk_count("loot")):
-			cnt = 2
-	if bag_full():
+	if item == "":
+		return e
+	if _inv.room_for(_s, item, cnt) < cnt:
 		e["lost"] = true
-		e["gold"] = gold
 		e["item"] = item
 		e["n"] = cnt
 		return e
-	var b: Dictionary = run()["bag"]
-	b["n"] = int(b["n"]) + 1
-	b["coins"] = int(b["coins"]) + gold
-	if item != "":
-		b[item] = int(b.get(item, 0)) + cnt
-	e["gold"] = gold
+	_inv.add(_s, item, cnt)
 	e["item"] = item
 	e["n"] = cnt
 	return e

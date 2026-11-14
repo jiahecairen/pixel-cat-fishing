@@ -525,6 +525,16 @@
       "stamina": 80,
       "max_stack": 20,
       "drop": ""
+    },
+    {
+      "id": "gold_ore",
+      "sell": 12,
+      "name": "金矿石",
+      "desc": "沉甸甸的金矿石，可以拿去典当行",
+      "sprite": "item_gold_ore",
+      "weight": 0,
+      "use": "",
+      "drop": ""
     }
   ],
   "water": {
@@ -1159,11 +1169,8 @@
         "min_y": 1,
         "chance": 0.1,
         "deep_bonus": 0.002,
-        "gold": [
-          6,
-          15
-        ],
-        "hard_mul": 1.4
+        "hard_mul": 1.4,
+        "item": "gold_ore"
       },
       {
         "id": "metal",

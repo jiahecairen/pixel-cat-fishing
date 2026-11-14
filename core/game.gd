@@ -526,6 +526,12 @@ func repair_x() -> float:
 func tavern_x() -> float:
 	return island_x() - 148.0
 
+func pawn_x() -> float:
+	return island_x() - 218.0
+
+func trash_x() -> float:
+	return island_x() - 186.0
+
 func island_keeper_x() -> float:
 	return island_x() - float(island_info().get("keeper_off", 196))
 
@@ -1332,6 +1338,82 @@ func sell_item(id: String) -> int:
 	_clamp_wallet()
 	dirty = true
 	return price
+
+## ---- 典当行（雾灯岛）：什么都能当，当掉的东西可以用两倍的价钱赎回 ----
+func pawn_value(id: String) -> int:
+	var d: Dictionary = inventory.by_id.get(id, {})
+	if d.is_empty():
+		return 0
+	return maxi(1, int(d.get("sell", 0)))
+
+func pawn_count(id: String) -> int:
+	return int(state.story.get("pawn_" + id, 0))
+
+## 当掉的东西 [[id, 个数], ...]，叠满的拆成几格（和物品栏的格子一样）。
+func pawn_cells() -> Array:
+	var out: Array = []
+	for d in inventory.defs:
+		var left := pawn_count(str(d["id"]))
+		var cap := inventory.stack_cap(str(d["id"]))
+		while left > 0:
+			out.append([d["id"], mini(left, cap)])
+			left -= cap
+	return out
+
+func pawn_sell(id: String) -> int:
+	var price := pawn_value(id)
+	if price <= 0 or inventory.count(state, id) <= 0:
+		return 0
+	if not inventory.remove(state, id, 1):
+		return 0
+	state.story["pawn_" + id] = pawn_count(id) + 1
+	economy.grant_gold(state, state.new_id("p"), price)
+	_clamp_wallet()
+	state.revision += 1
+	dirty = true
+	return price
+
+func pawn_sell_stack(id: String) -> int:
+	var total := 0
+	for i in inventory.count(state, id):
+		var got := pawn_sell(id)
+		if got <= 0:
+			break
+		total += got
+	return total
+
+## 赎回一个：价钱是当时的两倍。返回 ""=成功，"none"=没有，"gold"=钱不够，"room"=物品栏放不下。
+func pawn_redeem(id: String) -> String:
+	if pawn_count(id) <= 0:
+		return "none"
+	var cost := pawn_value(id) * 2
+	if state.wallet_gold < cost:
+		return "gold"
+	if inventory.room_for(state, id, 1) < 1:
+		return "room"
+	state.wallet_gold -= cost
+	inventory.add(state, id, 1)
+	var left := pawn_count(id) - 1
+	if left > 0:
+		state.story["pawn_" + id] = left
+	else:
+		state.story.erase("pawn_" + id)
+	state.revision += 1
+	dirty = true
+	return ""
+
+## 垃圾箱：任何东西都能扔（包括任务物品），扔掉就没了。返回扔了几个。
+func trash_item(id: String, all: bool = false) -> int:
+	var n := inventory.count(state, id)
+	if n <= 0:
+		return 0
+	if not all:
+		n = 1
+	if not inventory.remove(state, id, n):
+		return 0
+	state.revision += 1
+	dirty = true
+	return n
 
 ## 整堆卖掉身上这种物品（工坊回收用）。返回得到的铜币。
 func sell_stack(id: String) -> int:
