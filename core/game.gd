@@ -527,10 +527,10 @@ func tavern_x() -> float:
 	return island_x() - 148.0
 
 func pawn_x() -> float:
-	return island_x() - 218.0
+	return island_x() - 108.0
 
 func trash_x() -> float:
-	return island_x() - 186.0
+	return island_x() - 78.0
 
 func island_keeper_x() -> float:
 	return island_x() - float(island_info().get("keeper_off", 196))

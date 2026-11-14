@@ -71,7 +71,7 @@ func _sell_all_rect() -> Rect2:
 	var sr := _sell_rect()
 	return Rect2(sr.position.x - (sr.size.x + 3), sr.position.y, sr.size.x, sr.size.y)
 
-## 普通物品栏里的"丢弃"和"全部丢"（随时随地能扔东西）。
+## 普通物品栏里的"丢弃"和"丢这组"（随时随地能扔东西）。
 func _plain_trash_rect(all: bool) -> Rect2:
 	return _sell_all_rect() if all else _sell_rect()
 
@@ -138,7 +138,7 @@ func _wh_use_rect() -> Rect2:
 	var a := _all_rect()
 	return Rect2(a.position.x - a.size.x - 3, a.position.y, a.size.x, a.size.y)
 
-## 工坊回收：和平时一样的物品栏，但多一个"全部卖"（整堆卖掉）。
+## 工坊回收：和平时一样的物品栏，但多一个"卖这组"（整堆卖掉）。
 func open_ore() -> void:
 	open_pawn()
 	ore_mode = true
@@ -513,9 +513,14 @@ func draw() -> void:
 				m.text(s, Vector2(p.x + size - s.length() * 4 - 1, p.y + size - 6), Pal.L_W)
 	var dy := _detail_y()
 	if owned.is_empty():
-		m.label("空空如也", Vector2(r.position.x + 5, dy), Pal.L_A)
-		if not m.mini and not wh:
-			m.label("去钓宝箱吧", Vector2(r.position.x + 5, dy + 11), Pal.L_A)
+		if _redeem():
+			m.dyn_text("没有典当过的东西", Vector2(r.position.x + 5, dy), Pal.L_A)
+		elif sell_mode or trash_mode:
+			m.dyn_text("身上没有东西", Vector2(r.position.x + 5, dy), Pal.L_A)
+		else:
+			m.label("空空如也", Vector2(r.position.x + 5, dy), Pal.L_A)
+			if not m.mini and not wh:
+				m.label("去钓宝箱吧", Vector2(r.position.x + 5, dy + 11), Pal.L_A)
 		return
 	var id: String = owned[clampi(sel, 0, owned.size() - 1)]
 	var def: Dictionary = g.inventory.by_id[id]
@@ -559,7 +564,8 @@ func draw() -> void:
 			var br: Rect2 = b[0]
 			m.draw_rect(br, Pal.L_G)
 			m.draw_rect(Rect2(br.position.x, br.end.y - 2, br.size.x, 2), Pal.U_G)
-			m.label_centered(b[1], br.position.x + br.size.x / 2, br.position.y + (0 if m.mini else 1), Pal.U_K)
+			var bt: String = "这组" if b[1] == "全部" else str(b[1])
+			m.dyn_text(bt, Vector2(br.position.x + (br.size.x - m.dyn_text_width(bt)) / 2.0, br.position.y - 1 + (0 if m.mini else 1)), Pal.U_K)
 	else:
 		var show_use: bool = usable and not sell_mode and not trash_mode
 		if show_use:
@@ -570,13 +576,13 @@ func draw() -> void:
 		if not sell_mode and not trash_mode and sel < _owned().size():
 			var warn0: bool = g.is_important(id) and confirm_id.begins_with(id)
 			_btn(_plain_trash_rect(false), "再按确认" if warn0 else "丢弃", Pal.L_R, Pal.U_R)
-			_btn(_plain_trash_rect(true), "全部丢", Pal.L_R, Pal.U_R)
+			_btn(_plain_trash_rect(true), "丢这组", Pal.L_R, Pal.U_R)
 			if warn0 and not m.mini:
 				m.dyn_text("这是任务物品，丢了就没了", Vector2(tx, dy + 22), Pal.L_R)
 		if trash_mode:
 			var warn: bool = g.is_important(id) and confirm_id.begins_with(id)
 			_btn(_use_rect(), "再按确认" if warn else "丢弃", Pal.L_R, Pal.U_R)
-			_btn(_sell_rect(), "全部丢", Pal.L_R, Pal.U_R)
+			_btn(_sell_rect(), "丢这组", Pal.L_R, Pal.U_R)
 			if g.is_important(id) and not m.mini:
 				m.dyn_text("这是任务物品，丢了就没了", Vector2(tx, dy + 22), Pal.L_R)
 		elif _redeem():
@@ -585,7 +591,7 @@ func draw() -> void:
 				m.draw_money(g.pawn_value(id) * 2, Vector2(_use_rect().position.x - 24, _use_rect().position.y + 2), Pal.L_Y)
 		elif _sellable():
 			_btn(_sell_rect(), "卖出", Pal.L_Y, Pal.U_H)
-			_btn(_sell_all_rect(), "全部卖", Pal.L_Y, Pal.U_H)
+			_btn(_sell_all_rect(), "卖这组", Pal.L_Y, Pal.U_H)
 			if not m.mini:
 				m.draw_money(g.pawn_value(id), Vector2(_sell_all_rect().position.x - 24, _sell_rect().position.y + 2), Pal.L_Y)
 	var t := Time.get_ticks_msec()

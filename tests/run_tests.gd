@@ -69,6 +69,7 @@ func _init() -> void:
 		test_v082(balance, fish)
 		test_v083(balance, fish)
 		test_unstick(balance, fish)
+		test_island_layout(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -2412,3 +2413,17 @@ func test_unstick(balance: Dictionary, fish: Array) -> void:
 	mn.m()["run"]["y"] = en.y
 	mn.m()["run"].erase("fx")
 	check(mn.unstick() and mn.pos() != en and mn.block(mn.pos().x, mn.pos().y) == "", "站在梯子里也会被挪出来")
+
+func test_island_layout(balance: Dictionary, fish: Array) -> void:
+	print("v0.86: 雾灯岛上的建筑和 NPC 互不重叠")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(86))
+	var xs := {"修理厂": g.repair_x(), "信号台": g.signal_x() + 5.0, "看守": g.island_keeper_x() + 8.0, "典当行": g.pawn_x(), "垃圾箱": g.trash_x(), "酒馆": g.tavern_x()}
+	var names: Array = xs.keys()
+	var bad := ""
+	for i in names.size():
+		for j in range(i + 1, names.size()):
+			if absf(float(xs[names[i]]) - float(xs[names[j]])) < 22.0:
+				bad += "%s/%s " % [names[i], names[j]]
+	check(bad == "", "互相至少隔 22 像素（太近的：%s）" % bad)
+	check(g.trash_x() < g.island_land_x() - 20.0, "垃圾箱不在码头上")

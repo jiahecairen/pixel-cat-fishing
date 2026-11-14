@@ -236,7 +236,7 @@ func island_near_pawn(x: float) -> bool:
 	return absf(x + 16.0 - m.game.pawn_x()) <= 18.0
 
 func island_near_trash(x: float) -> bool:
-	return absf(x + 16.0 - m.game.trash_x()) <= 10.0
+	return absf(x + 16.0 - m.game.trash_x()) <= 9.0
 
 func island_near_chest(x: float) -> bool:
 	return m.game.bridge_built() and not m.game.west_chest_open() and absf(x + 16.0 - (m.game.west_chest_x() + 8.0)) <= 20.0
@@ -791,9 +791,9 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 			m.draw_rect(Rect2(kx + 6, by, 2, 5), Pal.L_Y)
 			m.draw_rect(Rect2(kx + 6, by + 6, 2, 1), Pal.L_Y)
 	_draw_island_extras(left, right, t)
-	var sign_x: float = shore - 24.0
+	var sign_x: float = shore - 6.0
 	if sign_x > left - 40 and sign_x < right + 10 and m.game.island_visited():
-		_plate(sign_x, GROUND_Y - 22, str(m.game.island_info().get("name", "")))
+		_plate(sign_x, GROUND_Y - 44, str(m.game.island_info().get("name", "")))
 
 
 ## 水域最左侧的浪区：浪头高出海面，越往左越高，白色的浪尖不停翻滚；小船划进去会被推回来。

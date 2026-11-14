@@ -271,3 +271,7 @@
 ## C173 v0.85
 - run_tests：ALL TESTS PASS（790 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：鱼篓视图、矿山岛山上的脚手架和小屋。
 - 未运行：迷你窗里旅店睡觉的画面（Linux 没有迷你窗，只确认脚本能加载）、旅店屋里睡觉的画面、背包满了的右上角提示、鱼篓按钮在 Mac 上的手感、.app 启动。
+\n
+## C174 v0.86
+- run_tests：ALL TESTS PASS（792 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：典当行、垃圾箱、老柯分开；典当行按钮。
+- 未运行：Mac 上走到垃圾箱和老柯面前互动的手感、赎回页空状态的画面、.app 启动。
