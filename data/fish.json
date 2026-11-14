@@ -118,6 +118,21 @@
       },
       "size_cm": [40, 80],
       "units": 1.8
+    },
+    {
+      "id": "lamp_fish",
+      "name": "雾灯鱼",
+      "sprite": "fish_lamp",
+      "price": 160,
+      "weight": 5,
+      "rarity": 2,
+      "gate": "lamp",
+      "drop_item": "lamp_scale",
+      "zone_weights": {
+        "lake": 14
+      },
+      "size_cm": [12, 30],
+      "units": 0.6
     }
   ]
 }

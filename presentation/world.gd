@@ -205,6 +205,12 @@ func island_near_pier(x: float) -> bool:
 func island_near_keeper(x: float) -> bool:
 	return absf(x + 16.0 - (m.game.island_keeper_x() + 8.0)) <= 26.0
 
+func island_near_console(x: float) -> bool:
+	return absf(x + 16.0 - (m.game.signal_x() + 5.0)) <= 20.0
+
+func island_near_drift(x: float) -> int:
+	return m.game.drift_near(x + 16.0)
+
 func island_near_lake(x: float) -> bool:
 	var lk: Vector2 = m.game.island_lake()
 	return x + 16.0 >= lk.x - 14.0 and x + 16.0 <= lk.y + 30.0
@@ -487,6 +493,41 @@ func _draw_pier_feet(left: float, right: float, t: int) -> void:
 		m.draw_rect(Rect2(px - 1 - rp, WATER_Y + 6, 5 + rp * 2, 1), Color(Pal.L_W, 0.7 - 0.2 * rp))
 
 
+## 岛上的信号台、草丛里的亮点、夜里灯塔的光束和发光的湖。
+func _draw_island_extras(left: float, right: float, t: int) -> void:
+	var g = m.game
+	var ix: float = g.island_x()
+	var lit: bool = g.lighthouse_lit()
+	var dark: float = float(g.sky()["dark"])
+	# 信号台：一根木桩顶着一盏小灯，灯塔修好后才会亮
+	var sx: float = g.signal_x()
+	if sx > left - 20 and sx < right + 10:
+		m.draw_rect(Rect2(sx + 3, GROUND_Y - 12, 3, 12), Pal.U_O)
+		m.draw_rect(Rect2(sx - 1, GROUND_Y - 13, 11, 3), Pal.L_O)
+		m.draw_rect(Rect2(sx, GROUND_Y - 21, 9, 8), Pal.U_K)
+		var on: bool = lit and g.signal_ready()
+		m.draw_rect(Rect2(sx + 1, GROUND_Y - 20, 7, 6), (Pal.L_Y if (t / 500) % 2 == 0 else Pal.L_W) if on else Pal.U_A)
+	# 草丛里的亮点：有东西可以拾
+	for i in g.drift_count():
+		var dx: float = g.drift_x(i)
+		if g.drift_ready(i) and dx > left - 10 and dx < right + 10:
+			m.tex_frame("sparkle", Vector2(dx - 4, GROUND_Y - 9 - float((t / 400 + i) % 2)), (t / 250 + i) % 2, 2)
+	# 夜里：灯塔修好后光束左右扫，岛心湖泛着微光
+	if lit and dark > 0.2:
+		var lk: Vector2 = g.island_lake()
+		if lk.y > left - 20 and lk.x < right + 20:
+			for k in 6:
+				var gx: float = lk.x + 12.0 + fposmod(float(k) * 27.0 + float(t) / 40.0, lk.y - lk.x - 24.0)
+				m.draw_rect(Rect2(gx, GROUND_Y + 3 + (k % 3) * 2, 2, 1), Color(Pal.L_Y, 0.5 * dark * (0.5 + 0.5 * sin(float(t) / 300.0 + float(k)))))
+		var lampx: float = ix - 64.0 - 90.0 + 9.0
+		var dir: float = sin(float(t) / 2600.0)
+		var sgn: float = 1.0 if dir > 0.0 else -1.0
+		for k in 44:
+			var bx: float = lampx + sgn * (6.0 + float(k) * 4.0) * absf(dir) ** 0.5
+			var hh: float = 3.0 + float(k) * 0.35
+			if bx > left - 10 and bx < right + 10:
+				m.draw_rect(Rect2(bx, GROUND_Y - 52 - hh / 2.0, 4, hh), Color(Pal.L_Y, 0.22 * dark * (1.0 - float(k) / 48.0)))
+
 ## 西边的小岛：一条左右镜像的码头、草地、岛心湖、树和一座雾灯塔。位置跟着 balance.json 的 water.island.x。
 func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 	var ix: float = float(m.game.island_info().get("x", -3900))
@@ -553,6 +594,7 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 			m.draw_rect(Rect2(kx + 5, by - 1, 4, 9), Pal.U_K)
 			m.draw_rect(Rect2(kx + 6, by, 2, 5), Pal.L_Y)
 			m.draw_rect(Rect2(kx + 6, by + 6, 2, 1), Pal.L_Y)
+	_draw_island_extras(left, right, t)
 	var sign_x: float = shore - 24.0
 	if sign_x > left - 40 and sign_x < right + 10 and m.game.island_visited():
 		_plate(sign_x, GROUND_Y - 22, str(m.game.island_info().get("name", "")))
@@ -895,15 +937,24 @@ var _fx_dip_up: bool = false
 var _fx_wait_ring_at: int = 0
 var _fx_retract_t: int = -1
 
+## 浮漂处的水面高度；岛上是湖面，而且画面是镜像的（小猫朝西），x 要翻回来。
+func _fx_y() -> float:
+	return float(GROUND_Y) if m.game.journey.on_island() else float(WATER_Y)
+
+func _fx_x(x: float) -> float:
+	return 2.0 * (cat_pos.x + 16.0) - x if (_mirror and m.game.journey.on_island()) else x
+
 func _bobber_ring(x: float, t: int, span: float, w: float, delay: int = 0, life: int = 1500) -> void:
+	x = _fx_x(x)
 	for side in [-1.0, 1.0]:
-		_ripples.append({"k": "ring", "x": x, "y": float(WATER_Y + 1), "t0": t + delay, "life": life, "side": side, "span": span, "w": w})
+		_ripples.append({"k": "ring", "x": x, "y": _fx_y() + 1.0, "t0": t + delay, "life": life, "side": side, "span": span, "w": w})
 
 func _bobber_drops(p: Vector2, n: int, power: float, t: int) -> void:
+	p = Vector2(_fx_x(p.x), _fx_y())
 	for i in n:
 		var ang := randf_range(-PI * 0.88, -PI * 0.12)
 		var v := Vector2(cos(ang), sin(ang)) * power * randf_range(0.45, 1.0)
-		_drops.append({"p": p + Vector2(randf_range(-2.0, 2.0), 0), "v": v, "t0": t, "big": randf() < 0.35})
+		_drops.append({"p": p + Vector2(randf_range(-2.0, 2.0), 0), "v": v, "t0": t, "big": randf() < 0.35, "wy": _fx_y()})
 
 func _draw_drops(t: int) -> void:
 	var keep: Array = []
@@ -913,7 +964,7 @@ func _draw_drops(t: int) -> void:
 			keep.append(d)
 			continue
 		var pos: Vector2 = d["p"] + d["v"] * age + Vector2(0, 0.5 * 190.0 * age * age)
-		if pos.y > WATER_Y + 1 or age > 1.2:
+		if pos.y > float(d.get("wy", float(WATER_Y))) + 1.0 or age > 1.2:
 			continue
 		keep.append(d)
 		var col: Color = Pal.L_W if int(age * 20.0) % 3 != 0 else Pal.L_C
@@ -923,7 +974,7 @@ func _draw_drops(t: int) -> void:
 ## 浮漂水面上的各种动静：落水、漂动、咬钩、拉鱼、空军收线时的涟漪和水花。
 func _bobber_fx(fs: int, rest: Vector2, t: int) -> void:
 	var cx := rest.x + 2.0
-	var at := Vector2(cx, float(WATER_Y))
+	var at := Vector2(cx, _fx_y())
 	if fs != _fx_prev_fs:
 		match fs:
 			Fishing.State.WAITING:

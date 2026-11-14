@@ -366,3 +366,9 @@
 - `world.gd`：`_draw_lake_fishing`（镜像画坐姿钓鱼）、去掉木桥换小木牌；`main.gd`：空格走到钓位/甩竿/收竿、走动自动收竿、提示文字。
 - 数据：鱼加 `zone_weights.lake`、`lamp_shell` 物品、`lighthouse2` 任务、`lake_junk`；素材 `item_lamp_shell`；`coin_copper` 变深。
 - 测试 458 项 ALL TESTS PASS、SIM PASS；新增 `test_v054`。版本号 0.54。
+
+## v0.55：雾灯岛玩法扩充
+- 修：上船途中选岛排队（`main._queued_x`）；朝左钓鱼的涟漪/水珠镜像并落在湖面（`world._fx_x/_fx_y`）。
+- 新玩法：草丛拾取（`game.drift_*`，effects.drift_0..2）、信号台小游戏（`core/signal_game.gd`、`presentation/signal_panel.gd`，`game.signal_*`）、任务 lighthouse3（日记残页）/lighthouse4（雾灯鳞）、`reward_gold`、鱼表 `gate` / `drop_item`、雾灯鱼（夜里+灯塔修好）。
+- 画面：夜里灯塔光束、湖面微光、信号台、草丛亮点；素材 item_diary_page / item_lamp_scale / fish_lamp。
+- 测试 472 项 ALL TESTS PASS、SIM PASS；新增 `test_v055`。版本号 0.55。

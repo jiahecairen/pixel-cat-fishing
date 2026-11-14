@@ -34,7 +34,7 @@ func _init() -> void:
 	var balance := ConfigLoader.load_balance()
 	var fish := ConfigLoader.load_fish()
 	check(not balance.is_empty(), "balance.json 可加载")
-	check(fish.size() == 9, "fish.json 有 9 种鱼")
+	check(fish.size() == 10, "fish.json 有 10 种鱼")
 	if _fails == 0:
 		test_economy(fish)
 		test_fishing(balance, fish)
@@ -57,6 +57,7 @@ func _init() -> void:
 		test_v051(balance, fish)
 		test_v052(balance, fish)
 		test_v054(balance, fish)
+		test_v055(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -958,7 +959,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 10 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "10 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝）+ 10 件装备，开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 12 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "12 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -1400,6 +1401,50 @@ func test_v054(balance: Dictionary, fish: Array) -> void:
 		if e["type"] == "catch":
 			fish_seen[e["fish_id"]] = true
 	check(not fish_seen.is_empty() and not fish_seen.has("arowana") and not fish_seen.has("catfish"), "湖里只有小鱼，没有深水大鱼")
+
+func test_v055(balance: Dictionary, fish: Array) -> void:
+	print("v055: 拾取、信号台、日记任务、雾灯鱼")
+	var SG = preload("res://core/signal_game.gd")
+	var rng := _rng(131)
+	var sg = SG.new(balance["signal"])
+	sg.start(1000, rng)
+	check(sg.marker(1000) == 0.0 and absf(sg.marker(1000 + int(sg.period_ms() / 2.0)) - 1.0) < 0.01, "光点从左端出发，半个周期到右端")
+	var t := 1000 + int(sg.period_ms() * (sg.target + 0.0) / 2.0)   # 光点第一次经过光斑中心的时刻
+	check(sg.press(t, rng) == 2 and sg.good == 1 and sg.perfect == 1, "正中光斑中心 = 正中")
+	var miss_t: int = sg.t0_ms + int(sg.period_ms() * (1.0 if sg.target < 0.5 else 0.0) * 0.0)
+	check(sg.press(sg.t0_ms, rng) in [0, 1], "按键会进入下一轮")
+	for i in 10:
+		sg.press(sg.t0_ms, rng)
+	check(sg.finished and sg.press(0, rng) == -1 and sg.round_i == sg.rounds(), "打完几轮就结束，再按无效")
+	# 游戏：灯没修好不能玩；修好后结算、冷却
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(132))
+	check(not g.signal_ready() and not g._fish_gate("lamp"), "灯塔没修好：信号台关着、没有雾灯鱼")
+	g.state.quests["lighthouse2"] = "done"
+	check(g.lighthouse_lit() and g.signal_ready(), "灯塔修好后信号台可用")
+	var before := g.state.wallet_gold
+	var r := g.signal_finish(5, 2)
+	check(r["gold"] == 5 * 6 + 2 * 14 and r["shell"] and g.state.wallet_gold == before + 58 and g.inventory.count(g.state, "lamp_shell") == 1, "结算：铜币 + 命中够多送雾灯贝")
+	check(not g.signal_ready() and g.signal_wait_s() > 0, "结算后冷却")
+	g._clock.t += 21 * 60000
+	check(g.signal_ready(), "冷却结束可再玩")
+	# 拾取
+	g.state.boat_level = 1
+	g.steer_to(g.island_x()); g.land_on_island()
+	check(g.drift_count() == 3 and g.drift_ready(0) and g.drift_near(g.drift_x(0)) == 0 and g.drift_near(g.drift_x(0) + 900.0) == -1, "岛上有三处可拾，离远了拾不到")
+	var got := g.pick_drift(0)
+	check(not got.is_empty() and not g.drift_ready(0) and g.pick_drift(0).is_empty(), "拾一次后这一格要等一会儿")
+	g._clock.t += 9 * 60000
+	check(g.drift_ready(0), "过一阵又有了")
+	# 日记任务链和奖励
+	g.state.quests["lighthouse"] = "done"
+	g.begin_talk_quest("lighthouse3")
+	g.inventory.add(g.state, "diary_page", 3)
+	var gold0 := g.state.wallet_gold
+	check(g.turn_in("lighthouse3") and g.state.wallet_gold == gold0 + 300, "交日记残页得 300 铜币")
+	g.begin_talk_quest("lighthouse4")
+	g.inventory.add(g.state, "lamp_scale", 1)
+	var slots0 := g.state.bag_slots
+	check(g.turn_in("lighthouse4") and g.state.bag_slots == slots0 + 2, "交雾灯鳞得背包格子")
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

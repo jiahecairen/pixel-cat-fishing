@@ -74,6 +74,7 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	_base_chest = float(_chest_cfg.get("chance", 0.0)) if not _chest_cfg.get("tiers", []).is_empty() else 0.0
 	fishing.chest_chance = _base_chest
 	fishing.junk_roller = Callable(self, "_roll_junk")
+	fishing.gate = Callable(self, "_fish_gate")
 	inventory = Inventory.new(balance.get("items", []))
 	inventory.stack_default = int(balance.get("bag", {}).get("stack", 10))
 	_init_gear()
@@ -487,6 +488,90 @@ func leave_island() -> bool:
 	dirty = true
 	return true
 
+## 带 gate 的鱼什么时候出现："lamp" = 灯塔修好了，而且是夜里。
+func _fish_gate(gate_id: String) -> bool:
+	match gate_id:
+		"lamp":
+			return lighthouse_lit() and float(sky()["dark"]) > 0.45
+	return true
+
+## 灯塔修好了没（第二个看守任务交付）。
+func lighthouse_lit() -> bool:
+	return quest_state("lighthouse2") == "done"
+
+# ------------------------------------------------------------------ 岛上拾取
+func drift_x(i: int) -> float:
+	var offs: Array = _cfg.get("drift", {}).get("offsets", [])
+	return island_x() + float(offs[i]) if i < offs.size() else INF
+
+func drift_count() -> int:
+	return _cfg.get("drift", {}).get("offsets", []).size()
+
+func drift_ready(i: int) -> bool:
+	return i < drift_count() and _clock.now_ms() >= int(state.effects.get("drift_%d" % i, 0))
+
+## 小猫（中心 x）脚边有没有能拾的东西：返回格子序号，没有返回 -1。
+func drift_near(x: float) -> int:
+	var reach := float(_cfg.get("drift", {}).get("reach", 20))
+	for i in drift_count():
+		if drift_ready(i) and absf(x - drift_x(i)) <= reach:
+			return i
+	return -1
+
+## 拾起来：随机一样东西（或几个铜币），这一格过一会儿才再有。返回 {"item","gold"}，不能拾返回空。
+func pick_drift(i: int) -> Dictionary:
+	if not journey.on_island() or not drift_ready(i) or pomodoro.is_break():
+		return {}
+	var cfg: Dictionary = _cfg.get("drift", {})
+	var total := 0.0
+	for e in cfg.get("pool", []):
+		total += float(e[1])
+	var r := _rng.randf() * total
+	var pick := "gold"
+	for e in cfg["pool"]:
+		r -= float(e[1])
+		if r < 0.0:
+			pick = str(e[0])
+			break
+	var out := {"item": "", "gold": 0}
+	if pick == "gold":
+		var gr: Array = cfg.get("gold", [10, 30])
+		out["gold"] = _rng.randi_range(int(gr[0]), int(gr[1]))
+		economy.grant_gold(state, state.new_id("d"), int(out["gold"]))
+	else:
+		out["item"] = pick
+		give(pick, 1)
+	state.effects["drift_%d" % i] = _clock.now_ms() + int(cfg.get("refill_min", 8)) * 60000
+	dirty = true
+	return out
+
+# ------------------------------------------------------------------ 信号台小游戏
+func signal_cfg() -> Dictionary:
+	return _cfg.get("signal", {})
+
+func signal_ready() -> bool:
+	return lighthouse_lit() and _clock.now_ms() >= int(state.effects.get("signal_ready_ms", 0)) and not pomodoro.is_break()
+
+func signal_wait_s() -> int:
+	return maxi(0, (int(state.effects.get("signal_ready_ms", 0)) - _clock.now_ms()) / 1000)
+
+func signal_x() -> float:
+	return island_keeper_x() - float(signal_cfg().get("console_off", 36))
+
+## 一局结束：good = 命中次数，perfect = 正中次数。发铜币，命中够多再送一枚雾灯贝，开始冷却。
+func signal_finish(good: int, perfect: int) -> Dictionary:
+	var cfg := signal_cfg()
+	var gold := good * int(cfg.get("gold_good", 6)) + perfect * int(cfg.get("gold_perfect", 14))
+	var shell := good >= int(cfg.get("shell_hits", 4))
+	if gold > 0:
+		economy.grant_gold(state, state.new_id("g"), gold)
+	if shell:
+		give("lamp_shell", 1)
+	state.effects["signal_ready_ms"] = _clock.now_ms() + int(cfg.get("cooldown_min", 20)) * 60000
+	state.stats["signal_plays"] = int(state.stats.get("signal_plays", 0)) + 1
+	dirty = true
+	return {"gold": gold, "shell": shell}
+
 ## 第一次靠近小岛：记下来并给界面一个"发现小岛"事件。
 func _check_island(events: Array) -> void:
 	if not ("town" in state.islands) and journey.in_town():        # 第一次踏上小镇：也弹一次标题
@@ -704,6 +789,9 @@ func _tick_fishing(now: int, events: Array) -> void:
 		dirty = true
 	elif fish_id != "" and economy.add_catch(state, state.new_id("c"), fish_id, focus, fishing.hooked_size):
 		var size := fishing.hooked_size
+		var drop_item := str(fish_by_id.get(fish_id, {}).get("drop_item", ""))
+		if drop_item != "":
+			give(drop_item, 1, events)
 		var best: Dictionary = state.stats["fish_best"]
 		if size > int(best.get(fish_id, 0)):
 			best[fish_id] = size
@@ -1217,6 +1305,8 @@ func turn_in(id: String) -> bool:
 		give(str(qc["reward_give"]), 1)
 	if int(qc.get("reward_slots", 0)) > 0:
 		state.bag_slots += int(qc["reward_slots"])
+	if int(qc.get("reward_gold", 0)) > 0:
+		economy.grant_gold(state, "q_" + id, int(qc["reward_gold"]))
 	_apply_upgrades()
 	state.revision += 1
 	dirty = true

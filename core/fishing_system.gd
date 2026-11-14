@@ -22,6 +22,7 @@ var baiting_started: bool = false   # 刚开始上饵：Game 读到后扣一个�
 var tangled_flag: bool = false      # 刚空军：Game 读到后记一笔并清掉
 var bait_bonus: float = 0.0         # 本竿所用鱼饵带来的稀有鱼加成（Game 在上饵时设置）
 var chest_chance: float = 0.0     # 每一竿钓到宝箱的概率（来自 balance.json 的 chest.chance）
+var gate: Callable = Callable()      # 有 gate 的鱼要通过它判断此刻能不能出现（夜里、任务完成等）
 var zone: String = ""               # 当前水域 id；鱼表里有 zone_weights 的鱼按它取权重
 var luck_mult: float = 1.0        # 专注时稀有鱼权重的倍数（Game 按番茄钟阶段设置；装备升级不影响稀有度）
 var gear_wait_mult: float = 1.0   # 鱼饵升级 / 鱼钩带来的咬钩等待倍率（只影响快慢，不影响稀有度和宝箱）
@@ -174,6 +175,8 @@ func _enter(s: int, now_ms: int, duration_ms: int) -> void:
 
 func _weight(f: Dictionary) -> float:
 	var base := float(f["weight"])
+	if str(f.get("gate", "")) != "" and gate.is_valid() and not bool(gate.call(str(f["gate"]))):
+		return 0.0
 	if f.has("zone_weights"):          # 这种鱼只在列出的水域出现
 		base = float(f["zone_weights"].get(zone, 0.0))
 	var w := base * (1.0 + (rarity_bonus + bait_bonus) * float(f.get("rarity", 0)))

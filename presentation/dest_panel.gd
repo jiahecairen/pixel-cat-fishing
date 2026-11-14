@@ -1,6 +1,7 @@
 extends RefCounted
 ## 目的地面板（准星按钮）：选一个地方，船自动航行过去。没去过的岛显示"未探索"。
 
+const Journey := preload("res://core/journey.gd")
 const Pal := preload("res://presentation/palette.gd")
 
 const RECT := Rect2(15, 28, 98, 42)
@@ -45,6 +46,12 @@ func act(i: int) -> void:
 		if g.at_island_dock():
 			m._toast("已经到了", "")
 			m.play("deny")
+		elif not g.can_steer() and m.game.journey.activity() in [Journey.Activity.WALK_TO_BOAT, Journey.Activity.SAIL_OUT, Journey.Activity.SAIL_BACK]:
+			m._queued_x = g.island_x() + 12.0          # 还在上船途中：先记下，能划船了自动出发
+			m._toast("上船后出发", "去" + _island_name())
+			m.play("click")
+			close()
+			m.on_panel_toggled()
 		elif m.start_auto_sail(g.island_x() + 12.0):
 			close()
 			m.on_panel_toggled()
