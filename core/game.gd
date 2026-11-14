@@ -1353,6 +1353,41 @@ func gear_stat(id: String) -> Array:
 			return ["暂无加成", ""]
 	return []
 
+## 卖一个物品（背包里的普通物品；关键物品、装备不能卖）。返回得到的铜币，卖不了返回 0。
+func sell_price(id: String) -> int:
+	var d: Dictionary = inventory.by_id.get(id, {})
+	if d.is_empty() or bool(d.get("important", false)) or str(d.get("use", "")) == "gear":
+		return 0
+	return int(d.get("sell", 0))
+
+func sell_item(id: String) -> int:
+	var price := sell_price(id)
+	if price <= 0 or inventory.count(state, id) <= 0:
+		return 0
+	if not inventory.remove(state, id, 1):
+		return 0
+	economy.grant_gold(state, state.new_id("s"), price)
+	_clamp_wallet()
+	dirty = true
+	return price
+
+## 一次性的礼物（balance.gift）：每个礼物 id 只发一次，存档里用 effects["gift_<id>"] 记着。返回是否发了。
+func apply_gift() -> bool:
+	var g: Dictionary = _cfg.get("gift", {})
+	var key := "gift_%s" % str(g.get("id", ""))
+	if g.is_empty() or not state.effects.has(key) or int(state.effects[key]) != 0:
+		return false
+	state.effects[key] = 1
+	economy.grant_gold(state, "gift_%s" % str(g["id"]), int(g.get("copper", 0)))
+	_clamp_wallet()
+	for id in g.get("items", {}):
+		var n := int(g["items"][id])
+		if give(str(id), n) == "":
+			pass
+	state.revision += 1
+	dirty = true
+	return true
+
 ## 只在有任务需要时才会出现的物品：没有任务要它，就不会捡到、钓到、收到。
 const QUEST_ONLY := ["bottle", "diary_page"]
 

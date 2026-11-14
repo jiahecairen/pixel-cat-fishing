@@ -62,6 +62,7 @@ func _init() -> void:
 		test_v059(balance, fish)
 		test_v061(balance, fish)
 		test_v062(balance, fish)
+		test_v064(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -1587,6 +1588,28 @@ func test_v062(balance: Dictionary, fish: Array) -> void:
 	g2.state.inventory["bottle"] = 1
 	var r: Dictionary = g2.use_item("bottle")
 	check(int(r["gold"]) == 0, "没有新任务的空瓶不给钱")
+
+func test_v064(balance: Dictionary, fish: Array) -> void:
+	print("v064: 卖道具、一次性礼物")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(181))
+	g.inventory.add(g.state, "boot", 2)
+	g.inventory.add(g.state, "pearl", 1)
+	g.inventory.add(g.state, "rod_1", 1)
+	check(g.sell_item("pearl") == 0 and g.inventory.count(g.state, "pearl") == 1, "关键物品不能卖")
+	check(g.sell_item("rod_1") == 0, "装备不能卖")
+	check(g.sell_item("bell") == 0, "没有的物品卖不了")
+	var w0 := g.state.wallet_gold
+	var got := g.sell_item("boot")
+	check(got == g.sell_price("boot") and got > 0 and g.state.wallet_gold == w0 + got and g.inventory.count(g.state, "boot") == 1, "卖一个旧靴子：少一个、多了钱")
+	var g2 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(182))
+	check(g2.apply_gift(), "礼物发了")
+	check(g2.state.wallet_gold == 80000 and g2.inventory.count(g2.state, "lamp_scale") == 1, "800 金 + 雾灯鳞")
+	check(not g2.apply_gift() and g2.state.wallet_gold == 80000, "礼物只发一次")
+	var d: Dictionary = g2.state.to_dict()
+	var s2 := GameState.new()
+	s2.from_dict(d)
+	var g3 := Game.new(balance.duplicate(true), fish, s2, FakeClock.new(), _rng(183))
+	check(not g3.apply_gift(), "存档读回来也不会再发")
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

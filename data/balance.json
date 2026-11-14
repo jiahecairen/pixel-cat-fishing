@@ -240,6 +240,7 @@
     },
     {
       "id": "lucky_bait",
+      "sell": 16,
       "name": "幸运鱼饵",
       "desc": "十分钟内更走运",
       "sprite": "item_lucky_bait",
@@ -252,6 +253,7 @@
     },
     {
       "id": "bell",
+      "sell": 24,
       "name": "招财铃",
       "desc": "接下来五单翻倍",
       "sprite": "item_bell",
@@ -286,6 +288,7 @@
     },
     {
       "id": "boot",
+      "sell": 3,
       "name": "旧靴子",
       "desc": "不知道是谁的",
       "sprite": "item_boot",
@@ -295,6 +298,7 @@
     },
     {
       "id": "bait_worm",
+      "sell": 7,
       "name": "蚯蚓",
       "desc": "稀有鱼更容易上钩",
       "sprite": "item_bait_worm",
@@ -307,6 +311,7 @@
     },
     {
       "id": "bait_shrimp",
+      "sell": 20,
       "name": "小虾",
       "desc": "稀有鱼很容易上钩",
       "sprite": "item_bait_shrimp",
@@ -536,6 +541,7 @@
     "cooldown_min": 20,
     "console_off": 36
   },
+  "gift": {"id": "g064", "copper": 80000, "items": {"lamp_scale": 1}},
   "auto": {"sell_pct": 30, "fish_pct": 80, "island_fish_pct": 80, "reach_s": 10, "walk_px_s": 70, "idle_ms": 4000},
   "pots": {
     "max": 3,

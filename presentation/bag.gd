@@ -50,6 +50,30 @@ func _use_rect() -> Rect2:
 		return Rect2(r.end.x - 31, _detail_y(), 28, 12)
 	return Rect2(r.end.x - 46, _detail_y() + 4, 38, 13)
 
+## "卖出"按钮：在"使用"按钮的左边（只有能卖的物品才有）。
+func _sell_rect() -> Rect2:
+	var u := _use_rect()
+	return Rect2(u.position.x - (u.size.x + 3), u.position.y, u.size.x, u.size.y)
+
+func _sellable() -> bool:
+	var owned := _owned()
+	return not wh and sel < owned.size() and m.game.sell_price(str(owned[sel])) > 0
+
+func sell_selected() -> void:
+	var owned := _owned()
+	if sel >= owned.size():
+		m.play("deny")
+		return
+	var got: int = m.game.sell_item(str(owned[sel]))
+	if got <= 0:
+		m.play("deny")
+		return
+	m.play("coin")
+	gain_text = "+%d" % int(Money.tier(got)[1])
+	gain_icon = Money.icon(got)
+	gain_t0 = Time.get_ticks_msec()
+	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
+
 ## 每一格的 [id, 个数]；叠满的物品占好几格。
 func _cells() -> Array:
 	return m.game.inventory.cells(m.game.state, wh and tab == 1)
@@ -136,6 +160,8 @@ func click(p: Vector2) -> bool:
 			move_selected(true)
 		elif _wh_use_rect().has_point(p):
 			use_selected()
+	elif _sellable() and _sell_rect().has_point(p):
+		sell_selected()
 	elif _use_rect().has_point(p):
 		use_selected()
 	return true
@@ -157,6 +183,9 @@ func key(keycode: int) -> bool:
 		KEY_U:
 			if wh:
 				use_selected()
+		KEY_X:
+			if _sellable():
+				sell_selected()
 		KEY_SPACE, KEY_ENTER, KEY_E:
 			if wh:
 				move_selected(false)
@@ -309,11 +338,19 @@ func draw() -> void:
 			m.draw_rect(br, Pal.L_G)
 			m.draw_rect(Rect2(br.position.x, br.end.y - 2, br.size.x, 2), Pal.U_G)
 			m.label_centered(b[1], br.position.x + br.size.x / 2, br.position.y + (0 if m.mini else 1), Pal.U_K)
-	elif usable:
-		var u := _use_rect()
-		m.draw_rect(u, Pal.L_G if can else Pal.U_A)
-		m.draw_rect(Rect2(u.position.x, u.end.y - 2, u.size.x, 2), Pal.U_G if can else Pal.U_K)
-		m.label_centered("装上" if str(g.inventory.by_id[id].get("use", "")) == "bait" else "使用", u.position.x + u.size.x / 2, u.position.y + (0 if m.mini else 1), Pal.U_K if can else Pal.L_A)
+	else:
+		if usable:
+			var u := _use_rect()
+			m.draw_rect(u, Pal.L_G if can else Pal.U_A)
+			m.draw_rect(Rect2(u.position.x, u.end.y - 2, u.size.x, 2), Pal.U_G if can else Pal.U_K)
+			m.label_centered("装上" if str(g.inventory.by_id[id].get("use", "")) == "bait" else "使用", u.position.x + u.size.x / 2, u.position.y + (0 if m.mini else 1), Pal.U_K if can else Pal.L_A)
+		if _sellable():
+			var sr := _sell_rect()
+			m.draw_rect(sr, Pal.L_Y)
+			m.draw_rect(Rect2(sr.position.x, sr.end.y - 2, sr.size.x, 2), Pal.U_H)
+			m.label_centered("卖出", sr.position.x + sr.size.x / 2, sr.position.y + (0 if m.mini else 1), Pal.U_K)
+			if not m.mini:
+				m.draw_money(g.sell_price(id), Vector2(sr.position.x - 24, sr.position.y + 2), Pal.L_Y)
 	var t := Time.get_ticks_msec()
 	if t - gain_t0 < 1800 and gain_text != "":
 		var gp := Vector2(_use_rect().position.x - 4 - gain_text.length() * 4 - 10, _use_rect().position.y + 2 - (t - gain_t0) / 300)

@@ -405,3 +405,6 @@
 
 ## v0.63：工坊与店铺门面
 - `presentation/shopfronts.gd`（新）：造船厂后院两条船+吊机+屋顶大锚、工坊巨齿轮/烟/铁砧火星/蒸汽、服装店大剪刀/彩旗/遮阳篷、渔具店屋顶大鱼/钓竿/灯笼。`house_4` 贴图、`ROOMS.workshop`、`DOORS`/`HOUSES` 增加；`balance.shop_chat.workshop`；树挪到 x=1010。测试 620 项 ALL TESTS PASS、SIM PASS。版本号 0.63。
+
+## v0.64：卖道具、一次性礼物
+- `game.sell_price/sell_item/apply_gift`，bag.gd “卖出”按钮，items 加 sell；`balance.gift`。测试 628 项 ALL TESTS PASS、SIM PASS。版本号 0.64。

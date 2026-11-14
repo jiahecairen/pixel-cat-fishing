@@ -195,6 +195,8 @@ func _ready() -> void:
 	clock = Clock.new()
 	_limits = balance.get("settings_limits", {})
 	game = Game.new(balance, fish, state, clock, rng)
+	if game.apply_gift():
+		call_deferred("_toast", "收到一份礼物", "金币和雾灯鳞")
 	menu = Menu.new(self)
 	wardrobe = Wardrobe.new(self)
 	outfit_shop = OutfitShop.new(self)
@@ -310,6 +312,8 @@ func _apply_debug_env() -> void:
 		quest_panel.open = false
 		signal_panel.close()
 		bag.open = true
+		if OS.has_environment("CATFISH_BAGSEL"):
+			bag.sel = OS.get_environment("CATFISH_BAGSEL").to_int()
 	if OS.has_environment("CATFISH_WH"):          # 调试：物品各给 N 个，一半存进仓库，并打开仓库面板
 		for d in game.inventory.defs:
 			game.inventory.add(st, d["id"], OS.get_environment("CATFISH_WH").to_int())
