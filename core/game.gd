@@ -15,6 +15,7 @@ const Pomodoro := preload("res://core/pomodoro.gd")
 const Upgrades := preload("res://core/upgrades.gd")
 const Journey := preload("res://core/journey.gd")
 const Inventory := preload("res://core/inventory.gd")
+const IslandWorks := preload("res://core/island_works.gd")
 
 const DURATION_KEYS := ["focus_min", "short_break_min", "long_break_min"]
 
@@ -25,6 +26,7 @@ var pomodoro: Pomodoro
 var upgrades: Upgrades
 var journey: Journey
 var inventory: Inventory
+var works: IslandWorks
 var fish_list: Array = []
 var fish_by_id: Dictionary = {}
 var _water: Dictionary = {}
@@ -76,6 +78,7 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	fishing.junk_roller = Callable(self, "_roll_junk")
 	fishing.gate = Callable(self, "_fish_gate")
 	inventory = Inventory.new(balance.get("items", []))
+	works = IslandWorks.new(state, balance.get("works", {}), inventory)
 	inventory.stack_default = int(balance.get("bag", {}).get("stack", 10))
 	_init_gear()
 	journey = Journey.new(state.journey, balance["town"], rng)
@@ -102,6 +105,10 @@ func in_focus() -> bool:
 
 func tick() -> Array:
 	var events := _tick()
+	for wid in works.update(_clock.now_ms()):
+		state.story["done_%s" % wid] = 1
+		events.append({"type": "repair_done", "id": wid, "name": str(works.project(wid).get("name", ""))})
+		dirty = true
 	_clamp_wallet()
 	# 钓鱼状态一变就更新断点（状态切换不频繁，不会造成频繁写盘）
 	if fishing.state != _last_cp_state:
@@ -504,6 +511,13 @@ func nearest_spot_x(cat_x: float) -> float:
 func at_lake_spot() -> bool:
 	return journey.on_island() and (absf(float(journey.roam_x()) - lake_spot_x()) <= 3.0 or at_bridge_spot())
 
+## 修理厂和酒馆的门（世界坐标）。
+func repair_x() -> float:
+	return island_x() - 282.0
+
+func tavern_x() -> float:
+	return island_x() - 148.0
+
 func island_keeper_x() -> float:
 	return island_x() - float(island_info().get("keeper_off", 196))
 
@@ -585,80 +599,8 @@ func pick_drift(i: int) -> Dictionary:
 	else:
 		out["item"] = pick
 		give(pick, 1)
-	state.effects["drift_%d" % i] = _clock.now_ms() + int(cfg.get("refill_min", 8)) * 60000
+	state.effects["drift_%d" % i] = _clock.now_ms() + int(round(float(cfg.get("refill_min", 8)) * (0.6 if works.is_done("pier") else 1.0))) * 60000
 	dirty = true
-	return out
-
-# ------------------------------------------------------------------ 工作台与蟹笼
-func pots_cfg() -> Dictionary:
-	return _cfg.get("pots", {})
-
-func bench_x() -> float:
-	return island_keeper_x() + float(pots_cfg().get("bench_off", -66))
-
-func pot_count() -> int:
-	var n := 0
-	for i in int(pots_cfg().get("max", 3)):
-		if int(state.effects.get("pot_%d" % i, 0)) > 0:
-			n += 1
-	return n
-
-func has_pot_recipe() -> bool:
-	return inventory.count(state, "crab_recipe") > 0
-
-func pot_materials_ok() -> bool:
-	for c in pots_cfg().get("cost", []):
-		if inventory.count(state, str(c[0])) < int(c[1]):
-			return false
-	return true
-
-## 在工作台做一个蟹笼（要配方和材料），自动放进岛心湖。成功返回 true。
-func craft_pot() -> bool:
-	if not journey.on_island() or not has_pot_recipe() or not pot_materials_ok():
-		return false
-	if pot_count() >= int(pots_cfg().get("max", 3)):
-		return false
-	for c in pots_cfg().get("cost", []):
-		inventory.remove(state, str(c[0]), int(c[1]))
-	for i in int(pots_cfg().get("max", 3)):
-		if int(state.effects.get("pot_%d" % i, 0)) == 0:
-			state.effects["pot_%d" % i] = _clock.now_ms() + int(pots_cfg().get("ready_min", 25)) * 60000
-			break
-	dirty = true
-	return true
-
-func pot_ready(i: int) -> bool:
-	var v := int(state.effects.get("pot_%d" % i, 0))
-	return v > 0 and _clock.now_ms() >= v
-
-func pots_ready() -> int:
-	var n := 0
-	for i in int(pots_cfg().get("max", 3)):
-		if pot_ready(i):
-			n += 1
-	return n
-
-## 在湖边收蟹笼：每个好了的笼子给一点铜币，有机会带出别的东西；笼子自动重新下好。返回 {"gold","items":{id:n}}。
-func collect_pots() -> Dictionary:
-	var out := {"gold": 0, "items": {}}
-	if not at_lake_spot() or pomodoro.is_break():
-		return out
-	var cfg := pots_cfg()
-	for i in int(cfg.get("max", 3)):
-		if not pot_ready(i):
-			continue
-		var gr: Array = cfg.get("gold", [10, 30])
-		var gold := _rng.randi_range(int(gr[0]), int(gr[1]))
-		economy.grant_gold(state, state.new_id("p"), gold)
-		out["gold"] = int(out["gold"]) + gold
-		if _rng.randf() < float(cfg.get("item_chance", 0.4)):
-			var got := _pick_pool(cfg.get("pool", []))
-			if got != "":
-				give(got, 1)
-				out["items"][got] = int(out["items"].get(got, 0)) + 1
-		state.effects["pot_%d" % i] = _clock.now_ms() + int(cfg.get("ready_min", 25)) * 60000
-	if int(out["gold"]) > 0:
-		dirty = true
 	return out
 
 # ------------------------------------------------------------------ 西岸旧营地的木箱
@@ -698,6 +640,8 @@ func signal_x() -> float:
 func signal_finish(good: int, perfect: int) -> Dictionary:
 	var cfg := signal_cfg()
 	var gold := good * int(cfg.get("gold_good", 6)) + perfect * int(cfg.get("gold_perfect", 14))
+	if works.is_done("lamp"):
+		gold = int(round(float(gold) * 1.5))
 	var shell := good >= int(cfg.get("shell_hits", 4))
 	if gold > 0:
 		economy.grant_gold(state, state.new_id("g"), gold)
@@ -1065,6 +1009,8 @@ var _last_junk: String = ""
 func _roll_junk() -> String:
 	_last_junk = ""
 	var cfg: Dictionary = _cfg.get("lake_junk" if journey.on_island() else "junk", {})
+	if not journey.on_island() and journey.on_boat() and float(journey.boat_x()) <= island_x() + float(_cfg.get("wreck", {}).get("sea_range", 700)):
+		cfg = {"chance": float(_cfg.get("junk", {}).get("chance", 0.1)) * 2.5, "pool": _cfg.get("wreck", {}).get("pool", [])}      # 雾灯岛附近海上：沉船碎片多
 	if cfg.is_empty() or _rng.randf() >= float(cfg.get("chance", 0.0)):
 		return ""
 	_last_junk = _pick_pool(cfg.get("pool", []))

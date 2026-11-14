@@ -1,0 +1,71 @@
+{
+  "island_arrive": {
+    "mode": "think",
+    "left": "cat",
+    "start": "a1",
+    "names": {"cat": ""},
+    "nodes": {
+      "a1": {"who": "cat", "text": "灯塔黑漆漆的，一点光都没有……", "scene": "scene_wreck", "next": "a2", "set": {"arrived": 1}},
+      "a2": {"who": "cat", "text": ["海边散落着好多断裂的木片，", "像是被海浪冲上岸的船的碎片。"], "scene": "scene_wreck", "next": "a3"},
+      "a3": {"who": "cat", "text": "岸边好像有个人影在忙活。去看看吧。", "scene": "scene_wreck", "next": ""}
+    }
+  },
+  "keeper_menu": {
+    "mode": "talk",
+    "place": "雾灯岛",
+    "left": "cat",
+    "right": "keeper",
+    "faces": {"keeper": 3, "tavern": 1},
+    "names": {"keeper": "老柯", "tavern": "老桶"},
+    "start": "root",
+    "nodes": {
+      "root": {
+        "who": "keeper",
+        "text": "哦，是你。有什么事吗？",
+        "choices": [
+          {"text": "这座灯塔怎么了？", "next": "lamp1", "if": ["!lamp_heard"]},
+          {"text": "再听听灯塔的事。", "next": "lamp1", "if": ["lamp_heard"]},
+          {"text": "海边怎么这么多碎木头？", "next": "wreck1", "if": ["lamp_heard"]},
+          {"text": "你一直住在这里吗？", "next": "self1"},
+          {"text": "我想帮你把岛修好。", "next": "help1", "if": ["lamp_heard", "wreck_heard", "!help_ok"]},
+          {"text": "修理的事……", "next": "help2", "if": ["help_ok"]},
+          {"text": "桥修好了！", "next": "bridge1", "if": ["done_bridge", "!bridge_told"]},
+          {"text": "你托付的东西我带来了。", "next": "", "action": "open_quest"},
+          {"text": "没什么，随便看看。", "next": "bye"}
+        ]
+      },
+      "lamp1": {"who": "keeper", "text": ["我是这座灯塔的负责人。", "几年前一场风暴打碎了灯室的透镜，灯就再也没亮起来过。", "可远处的船不知道……它们记得这里一直亮着，一头就撞上了浅滩。"], "set": {"lamp_heard": 1}, "next": "root"},
+      "wreck1": {"who": "keeper", "text": ["那些碎木头，都是撞毁的船留下的。", "我每天捡一点，堆在岸边，总觉得该为它们做点什么。", "你在海上钓到木片也别丢，也许有用。"], "set": {"wreck_heard": 1}, "next": "root"},
+      "self1": {"who": "keeper", "text": ["我叫老柯，一个人守了二十年灯。", "小时候我爹带着我爬灯塔，他说——灯不是为自己亮的。", "……所以它灭了，我才会这么难受。"], "set": {"self_heard": 1}, "next": "root"},
+      "help1": {"who": "cat", "text": "我可以帮你修。", "next": "help1b"},
+      "help1b": {"who": "keeper", "text": ["……你愿意？", "那得一样一样来：先修湖上的桥，再整栈桥，最后加固灯室。", "木板从海里的碎片里来；石头和金属，得去更远的矿山岛。", "修理厂在湖那边。干活要人手——酒馆里的岛民也许肯来。"], "set": {"help_ok": 1}, "next": "root"},
+      "help2": {"who": "keeper", "text": ["修理厂在湖那边，工人去酒馆找老桶雇。", "木板够了就先开工，别一次想全修完。"], "next": "root"},
+      "bridge1": {"who": "keeper", "text": ["桥通了……真的通了。", "桥那头有个旧营地，是我年轻时放东西的地方。", "还有，听说往更远的海上有座矿山岛，鼹鼠们在那里挖矿。", "那里的浪大，得有结实一点的船才去得了。"], "set": {"bridge_told": 1}, "next": "root"},
+      "bye": {"who": "keeper", "text": "好，有需要再来。", "next": ""}
+    }
+  },
+  "tavern_menu": {
+    "mode": "talk",
+    "place": "酒馆",
+    "left": "cat",
+    "right": "tavern",
+    "faces": {"tavern": 1},
+    "names": {"tavern": "老桶"},
+    "start": "root",
+    "nodes": {
+      "root": {
+        "who": "tavern",
+        "text": "欢迎光临！来点什么？",
+        "choices": [
+          {"text": "我想雇几个人。", "next": "", "action": "open_tavern"},
+          {"text": "打听打听这岛上的事。", "next": "rumor1"},
+          {"text": "矿山岛是怎么回事？", "next": "rumor2", "if": ["bridge_told"]},
+          {"text": "不用了。", "next": "bye"}
+        ]
+      },
+      "rumor1": {"who": "tavern", "text": ["岛上的人以前都靠灯塔吃饭——引船、送货、修船。", "灯一灭，船不来了，大家也就散了。", "能凑齐人手，说不定还能把日子过回来。"], "set": {"tavern_rumor": 1}, "next": "root"},
+      "rumor2": {"who": "tavern", "text": ["矿山岛啊，全岛都是鼹鼠，挖了一辈子矿。", "那边挖出来的石头和金属，正是修灯塔缺的东西。", "不过往下挖得越深，工具越要换好的，绳子梯子也得备足。"], "set": {"mine_rumor": 1}, "next": "root"},
+      "bye": {"who": "tavern", "text": "慢走，下次带条大鱼来！", "next": ""}
+    }
+  }
+}

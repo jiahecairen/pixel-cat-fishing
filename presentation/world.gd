@@ -226,8 +226,11 @@ func island_near_pier(x: float) -> bool:
 func island_near_keeper(x: float) -> bool:
 	return absf(x + 16.0 - (m.game.island_keeper_x() + 8.0)) <= 26.0
 
-func island_near_bench(x: float) -> bool:
-	return absf(x + 16.0 - (m.game.bench_x() + 8.0)) <= 20.0
+func island_near_repair(x: float) -> bool:
+	return absf(x + 16.0 - m.game.repair_x()) <= 22.0
+
+func island_near_tavern(x: float) -> bool:
+	return absf(x + 16.0 - m.game.tavern_x()) <= 22.0
 
 func island_near_chest(x: float) -> bool:
 	return m.game.bridge_built() and not m.game.west_chest_open() and absf(x + 16.0 - (m.game.west_chest_x() + 8.0)) <= 20.0
@@ -520,6 +523,85 @@ func _draw_pier_feet(left: float, right: float, t: int) -> void:
 		m.draw_rect(Rect2(px - 1 - rp, WATER_Y + 6, 5 + rp * 2, 1), Color(Pal.L_W, 0.7 - 0.2 * rp))
 
 
+## 岛上的修理厂和酒馆。修理厂：木棚 + 木板堆，有项目在建时脚手架立起来、雇来的工人在敲敲打打；
+## 酒馆：红顶小屋，招牌是个啤酒杯，烟囱冒烟，夜里窗子亮着。
+func _draw_island_buildings(left: float, right: float, t: int) -> void:
+	var g = m.game
+	var dark: float = float(g.sky()["dark"])
+	var rx: float = g.repair_x()
+	if rx > left - 50 and rx < right + 50:
+		var x0 := rx - 20.0
+		var y0 := float(GROUND_Y) - 30.0
+		m.draw_rect(Rect2(x0 - 1, y0 + 5, 42, 26), Pal.U_K)
+		m.draw_rect(Rect2(x0, y0 + 6, 40, 24), Pal.L_N)
+		for k in range(0, 40, 6):
+			m.draw_rect(Rect2(x0 + k, y0 + 6, 1, 24), Pal.L_O)
+		m.draw_rect(Rect2(x0 - 3, y0, 46, 7), Pal.U_K)           # 单坡顶
+		m.draw_rect(Rect2(x0 - 2, y0 + 1, 44, 5), Pal.L_A)
+		m.draw_rect(Rect2(x0 - 2, y0 + 5, 44, 1), Pal.U_A)
+		m.draw_rect(Rect2(rx - 4, y0 + 15, 9, 15), Pal.U_O)      # 门
+		m.draw_rect(Rect2(x0 + 4, y0 + 12, 8, 7), Pal.L_C)       # 窗
+		m.draw_rect(Rect2(x0 + 4, y0 + 15, 8, 1), Pal.U_O)
+		m.draw_rect(Rect2(x0 + 28, y0 + 20, 11, 10), Pal.U_O)    # 门口的木板堆
+		for k in 3:
+			m.draw_rect(Rect2(x0 + 28, y0 + 22 + k * 3, 11, 2), Pal.L_O if k % 2 == 0 else Pal.L_N)
+		_plate_at(rx, GROUND_Y - 36.0 - 8.0, "修理厂")
+		var busy := false
+		for p in g.works.projects():
+			if g.works.status(str(p["id"])) == "building":
+				busy = true
+		if busy:
+			for k in 4:                                           # 脚手架
+				m.draw_rect(Rect2(x0 - 4 + k * 14, y0 - 10, 2, 40), Pal.U_O)
+			m.draw_rect(Rect2(x0 - 4, y0 - 10, 44, 2), Pal.U_O)
+			m.draw_rect(Rect2(x0 - 4, y0 + 2, 44, 2), Pal.L_O)
+		var nw: int = mini(g.works.workers(), 3)
+		for k in nw:                                              # 雇来的工人
+			var wx := rx - 30.0 - float(k) * 18.0 if k < 2 else rx + 30.0
+			var swing := (t / 220 + k) % 2 if busy else 0
+			m.tex_frame("villager_%d" % ([1, 3, 2][k]), Vector2(wx, GROUND_Y - 21 - (1 if swing == 1 else 0)), swing if busy else 0, 2)
+			if busy and swing == 1:
+				m.tex_frame("sparkle", Vector2(wx - 4, GROUND_Y - 24), (t / 110) % 2, 2)
+	var tx: float = g.tavern_x()
+	if tx > left - 50 and tx < right + 50:
+		var x1 := tx - 20.0
+		var y1 := float(GROUND_Y) - 34.0
+		m.draw_rect(Rect2(x1 + 28, y1 - 8, 6, 12), Pal.U_A)                           # 烟囱
+		m.draw_rect(Rect2(x1 - 1, y1 + 9, 42, 26), Pal.U_K)
+		m.draw_rect(Rect2(x1, y1 + 10, 40, 24), Pal.L_W if dark < 0.4 else Pal.L_N)
+		m.draw_rect(Rect2(x1, y1 + 28, 40, 6), Pal.U_O)
+		for k in 10:                                                                   # 红色屋顶
+			m.draw_rect(Rect2(x1 - 3 + k * 2, y1 + 8 - k, 46 - k * 4, 2), Pal.L_R if k % 3 != 2 else Pal.U_R)
+		m.draw_rect(Rect2(tx - 4, y1 + 19, 9, 15), Pal.U_O)
+		var win := Pal.L_Y if dark > 0.3 else Pal.L_C
+		m.draw_rect(Rect2(x1 + 4, y1 + 17, 8, 7), win)
+		m.draw_rect(Rect2(x1 + 28, y1 + 17, 8, 7), win)
+		if dark > 0.3:
+			m.draw_rect(Rect2(x1 + 2, y1 + 15, 12, 11), Color(Pal.L_Y, 0.15))
+			m.draw_rect(Rect2(x1 + 26, y1 + 15, 12, 11), Color(Pal.L_Y, 0.15))
+		m.draw_rect(Rect2(x1 + 31, y1 + 10, 1, 4), Pal.U_K)
+		_plate_at(tx, GROUND_Y - 42.0 - 8.0, "酒馆")
+		# 烟囱的烟
+		for k in 3:
+			var ph := fposmod(float(t) / 2600.0 + float(k) / 3.0, 1.0)
+			m.draw_rect(Rect2(x1 + 30 + sin(ph * 6.0) * 2.0, y1 - 10 - ph * 18.0, 3, 3), Color(Pal.L_W, 0.7 * (1.0 - ph)))
+	# 整修栈桥完工：码头边多了两盏灯
+	if g.works.is_done("pier"):
+		var lx: float = g.island_land_x()
+		if lx > left - 20 and lx < right + 20:
+			for ox in [-26.0, 12.0]:
+				m.draw_rect(Rect2(lx + ox, GROUND_Y - 16, 2, 16), Pal.U_O)
+				m.draw_rect(Rect2(lx + ox - 2, GROUND_Y - 22, 6, 6), Pal.U_K)
+				m.draw_rect(Rect2(lx + ox - 1, GROUND_Y - 21, 4, 4), Pal.L_Y if (dark > 0.3 or (t / 600) % 2 == 0) else Pal.L_L)
+
+func _plate_at(cx: float, y: float, label_text: String) -> void:
+	var w: float = m.label_width(label_text) + 5
+	var plate := Rect2(roundf(cx - w / 2), y, w, 12)
+	m.draw_rect(plate.grow(1), Pal.U_K)
+	m.draw_rect(plate, Pal.L_N)
+	m.draw_rect(Rect2(plate.position.x, plate.end.y - 2, plate.size.x, 2), Pal.L_O)
+	m.label(label_text, plate.position + Vector2(3, 0), Pal.U_K)
+
 ## 岛上的信号台、草丛里的亮点、夜里灯塔的光束和发光的湖。
 func _draw_island_extras(left: float, right: float, t: int) -> void:
 	var g = m.game
@@ -534,31 +616,8 @@ func _draw_island_extras(left: float, right: float, t: int) -> void:
 		m.draw_rect(Rect2(sx, GROUND_Y - 21, 9, 8), Pal.U_K)
 		var on: bool = lit and g.signal_ready()
 		m.draw_rect(Rect2(sx + 1, GROUND_Y - 20, 7, 6), (Pal.L_Y if (t / 500) % 2 == 0 else Pal.L_W) if on else Pal.U_A)
-	# 工作台：一块木板桌，上面摆着锯子和木料
-	var bnx: float = g.bench_x()
-	if bnx > left - 30 and bnx < right + 10:
-		m.draw_rect(Rect2(bnx, GROUND_Y - 9, 18, 3), Pal.L_O)
-		m.draw_rect(Rect2(bnx, GROUND_Y - 6, 18, 1), Pal.U_O)
-		m.draw_rect(Rect2(bnx + 1, GROUND_Y - 6, 2, 6), Pal.U_O)
-		m.draw_rect(Rect2(bnx + 15, GROUND_Y - 6, 2, 6), Pal.U_O)
-		m.draw_rect(Rect2(bnx + 3, GROUND_Y - 11, 7, 2), Pal.L_N)
-		m.draw_rect(Rect2(bnx + 12, GROUND_Y - 13, 2, 4), Pal.U_A)
-		if g.has_pot_recipe() and g.pot_materials_ok() and g.pot_count() < int(g.pots_cfg().get("max", 3)):
-			m.tex_frame("sparkle", Vector2(bnx + 6, GROUND_Y - 21 - float((t / 400) % 2)), (t / 250) % 2, 2)
-	# 湖里的蟹笼：浮在水面的小笼子，好了就冒亮点
+	_draw_island_buildings(left, right, t)
 	var lk0: Vector2 = g.island_lake()
-	if lk0.y > left - 20 and lk0.x < right + 20:
-		for i in int(g.pots_cfg().get("max", 3)):
-			if int(g.state.effects.get("pot_%d" % i, 0)) > 0:
-				var px0: float = lk0.x + 28.0 + float(i) * 42.0
-				var py0: float = GROUND_Y + 4.0 + float((t / 700 + i) % 2)
-				m.draw_rect(Rect2(px0, py0, 9, 6), Pal.U_O)
-				m.draw_rect(Rect2(px0 + 1, py0 + 1, 7, 4), Pal.L_N)
-				for kx in 3:
-					m.draw_rect(Rect2(px0 + 2 + kx * 2, py0 + 1, 1, 4), Pal.U_O)
-				m.draw_rect(Rect2(px0 + 4, py0 - 3, 1, 3), Pal.U_K)
-				if g.pot_ready(i):
-					m.tex_frame("sparkle", Vector2(px0 + 1, py0 - 9), (t / 250 + i) % 2, 2)
 	# 修好的拱桥：桥面中间高、两头落到岸上，下面立着几根桥墩，桥下的水是通的
 	if g.bridge_built() and lk0.y > left - 20 and lk0.x < right + 20:
 		var bx0 := int(lk0.x) - 6

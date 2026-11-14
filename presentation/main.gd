@@ -26,6 +26,8 @@ const ShipyardPanel := preload("res://presentation/shipyard_panel.gd")
 const DestPanel := preload("res://presentation/dest_panel.gd")
 const QuestPanel := preload("res://presentation/quest_panel.gd")
 const SignalPanel := preload("res://presentation/signal_panel.gd")
+const DialogBox := preload("res://presentation/dialog.gd")
+const WorksPanel := preload("res://presentation/works_panel.gd")
 const World := preload("res://presentation/world.gd")
 const Bag := preload("res://presentation/bag.gd")
 const Book := preload("res://presentation/book.gd")
@@ -40,7 +42,7 @@ const FPS_NORMAL := 30
 const FPS_DRAG := 60
 const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
-const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "house_4", "wall_clothes", "mannequin", "tree", "stall_back",
+const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "house_4", "scene_wreck", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_bag", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "villager_3", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
@@ -97,6 +99,8 @@ const CATCH_SHOW_MS := 4000
 const CATCH_FADE_MS := 1200
 var quest_panel: QuestPanel
 var signal_panel: SignalPanel
+var dialog: DialogBox
+var works_panel: WorksPanel
 var bag: Bag
 var book: Book
 var admin: Admin
@@ -209,6 +213,8 @@ func _ready() -> void:
 		_pix_font.hinting = TextServer.HINTING_NONE
 	quest_panel = QuestPanel.new(self)
 	signal_panel = SignalPanel.new(self)
+	dialog = DialogBox.new(self)
+	works_panel = WorksPanel.new(self)
 	game.set_cat_cfg(cat_cfg)
 	bag = Bag.new(self)
 	book = Book.new(self)
@@ -283,6 +289,7 @@ func _apply_debug_env() -> void:
 			dest_panel.close()
 			quest_panel.open = false
 			signal_panel.close()
+			works_panel.close()
 	if OS.has_environment("CATFISH_FILL"):
 		var ids: Array = game.fish_by_id.keys()
 		for i in OS.get_environment("CATFISH_FILL").to_int():
@@ -311,6 +318,7 @@ func _apply_debug_env() -> void:
 		dest_panel.close()
 		quest_panel.open = false
 		signal_panel.close()
+		works_panel.close()
 		bag.open = true
 		if OS.has_environment("CATFISH_BAGSEL"):
 			bag.sel = OS.get_environment("CATFISH_BAGSEL").to_int()
@@ -324,6 +332,7 @@ func _apply_debug_env() -> void:
 		dest_panel.close()
 		quest_panel.open = false
 		signal_panel.close()
+		works_panel.close()
 		bag.open_warehouse()
 	if OS.has_environment("CATFISH_QSTATE"):      # 调试：keeper,tailor 进行中、keeper2 已完成（也给一点材料）
 		st.quests = {"keeper": "active", "tailor": "active"}
@@ -363,9 +372,12 @@ func _apply_debug_env() -> void:
 		dest_panel.close()
 		quest_panel.open = false
 		signal_panel.close()
+		works_panel.close()
 		book.open_page(OS.get_environment("CATFISH_BOOK").to_int())
 	if OS.has_environment("CATFISH_AUTOFOCUS"):
 		game.start_focus()
+	if OS.has_environment("CATFISH_TALK"):        # 调试：启动后直接打开某段对话
+		call_deferred("_talk", OS.get_environment("CATFISH_TALK"))
 	if OS.has_environment("CATFISH_ACT_AT"):      # 调试：走到某帧时模拟按一次互动键
 		_debug_act_frame = OS.get_environment("CATFISH_ACT_AT").to_int()
 	if OS.has_environment("CATFISH_CLICK"):       # 调试：帧号:x,y  在该帧模拟点击界面坐标 (x,y)
@@ -398,6 +410,7 @@ func _apply_debug_env() -> void:
 		dest_panel.close()
 		quest_panel.open = false
 		signal_panel.close()
+		works_panel.close()
 		menu.open = true
 		menu.tab = OS.get_environment("CATFISH_MENU").to_int()
 		menu.shop_page = OS.get_environment("CATFISH_SHOP").to_int() if OS.has_environment("CATFISH_SHOP") else 0
@@ -546,7 +559,6 @@ func _update_roam(dt: float) -> void:
 				if _stand_cast:
 					_stand_cast = false
 					world.roam_flip = true
-					_collect_pots_fx()
 					if game.cast_line():
 						play("click")
 	if int(game.state.effects.get("lake_resume", 0)) == 1 and j.activity() == Journey.Activity.FISHING:
@@ -740,6 +752,7 @@ func _toggle_dev_mode() -> void:
 		dest_panel.close()
 		quest_panel.close()
 		signal_panel.close()
+		works_panel.close()
 		wardrobe.open = true
 		wardrobe.dev = true
 	play("click")
@@ -760,6 +773,8 @@ func _interact() -> void:
 				world.roam_flip = true
 				play("click")
 				log.write("land", {"island": game.island_info().get("id", "")})
+				if not mini and int(game.state.story.get("arrived", 0)) == 0:
+					_talk("island_arrive")
 		elif j.activity() == Journey.Activity.FISHING and game.fishing_blocked() and not game.pomodoro.is_break():
 			_toast("水太浅了", "不能钓鱼")
 			play("deny")
@@ -798,15 +813,49 @@ func _interact() -> void:
 			play("deny")
 
 
+## 打开一段对话（只在完整窗口里；迷你窗里提示放大）。
+func _talk(id: String) -> void:
+	if mini:
+		_toast("放大窗口", "再来聊天")
+		play("deny")
+		return
+	if dialog.start(id):
+		play("click")
+		on_panel_toggled()
+
+func _open_works(md: String) -> void:
+	if mini:
+		_toast("放大窗口", "再来看看")
+		play("deny")
+		return
+	play("click")
+	works_panel.open_panel(md)
+	on_panel_toggled()
+
+## 对话结束后要接着做的事（对话节点的 action）。
+func _after_dialog() -> void:
+	var a := dialog.last_action
+	dialog.last_action = ""
+	match a:
+		"open_quest":
+			quest_panel.open_talk(game.room_quest("lighthouse"))
+			on_panel_toggled()
+		"open_tavern":
+			_open_works("tavern")
+		"open_repair":
+			_open_works("repair")
+
 ## 小岛上的互动：码头尽头 = 回船；灯塔看守旁 = 聊天（接任务 / 交付）；湖边 = 看一眼。
 func _interact_island(x: float) -> void:
 	if world.island_near_pier(x):
 		if game.leave_island():
 			play("click")
 	elif world.island_near_keeper(x):
-		play("click")
-		quest_panel.open_talk(game.room_quest("lighthouse"))
-		on_panel_toggled()
+		_talk("keeper_menu")
+	elif world.island_near_tavern(x):
+		_talk("tavern_menu")
+	elif world.island_near_repair(x):
+		_open_works("repair")
 	elif world.island_near_console(x):
 		if not game.lighthouse_lit():
 			_toast("灯塔还没修好", "")
@@ -815,21 +864,6 @@ func _interact_island(x: float) -> void:
 			play("click")
 			signal_panel.open_panel()
 			on_panel_toggled()
-	elif world.island_near_bench(x):
-		if not game.has_pot_recipe():
-			_toast("需要蟹笼配方", "")
-			play("deny")
-		elif game.pot_count() >= int(game.pots_cfg().get("max", 3)):
-			_toast("蟹笼已满", "")
-			play("deny")
-		elif not game.pot_materials_ok():
-			_toast("材料不够", "雾灯贝和木板")
-			play("deny")
-		elif game.craft_pot():
-			_toast("蟹笼做好了", "已放进湖里")
-			play("catch")
-		else:
-			play("deny")
 	elif world.island_near_chest(x):
 		var cg: Dictionary = game.open_west_chest()
 		if cg.is_empty():
@@ -857,9 +891,7 @@ func _interact_island(x: float) -> void:
 				_float("+1", str(idef.get("sprite", "")), world.cat_pos + Vector2(34, 8))
 	elif world.island_near_lake(x):
 		if game.at_lake_spot():
-			if game.pots_ready() > 0:
-				_collect_pots_fx()
-			elif game.line_out():
+			if game.line_out():
 				game.reel_in()
 				play("click")
 			elif game.pomodoro.is_break():
@@ -1040,6 +1072,8 @@ func _update_power() -> void:
 func _process(dt: float) -> void:
 	if not _config_ok:
 		return
+	if not dialog.open and dialog.last_action != "":
+		_after_dialog()
 	if _debug_speed > 1.0:
 		clock.debug_offset_ms += dt * 1000.0 * (_debug_speed - 1.0)
 	_update_power()
@@ -1255,6 +1289,9 @@ func _on_event(e: Dictionary) -> void:
 			world.eat_t0 = t
 			world.eat_fish = e["fish_id"]
 			play("bite")
+		"repair_done":
+			play("rare")
+			_toast("修好了", str(e.get("name", "")))
 		"island_found":
 			_title_name = str(e.get("name", ""))
 			_title_t0 = t
@@ -1328,6 +1365,14 @@ func _unhandled_input(event: InputEvent) -> void:
 					bag.open = false
 					book.open = false
 				admin.toggle()             # F9 后台
+			elif dialog.open:
+				dialog.key(event.keycode)
+			elif works_panel.open:
+				if event.keycode == KEY_ESCAPE:
+					works_panel.close()
+					_update_polygon()
+				else:
+					works_panel.key(event.keycode)
 			elif admin.open:
 				if event.keycode == KEY_ESCAPE:
 					admin.open = false
@@ -1353,6 +1398,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif signal_panel.open:
 				if event.keycode == KEY_ESCAPE:
 					signal_panel.close()
+					works_panel.close()
 					_update_polygon()
 				else:
 					signal_panel.key(event.keycode)
@@ -1360,6 +1406,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				if event.keycode == KEY_ESCAPE:
 					quest_panel.close()
 					signal_panel.close()
+					works_panel.close()
 					_update_polygon()
 				else:
 					quest_panel.key(event.keycode)
@@ -1383,6 +1430,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					dest_panel.close()
 					quest_panel.close()
 					signal_panel.close()
+					works_panel.close()
 					_update_polygon()
 				else:
 					outfit_shop.key(event.keycode)     # 上下选货，空格买下 / 穿上
@@ -1414,6 +1462,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_confirm_quit = false
 			play("click")
+		return
+	if dialog.open:
+		dialog.click(p)
 		return
 	if BTN_MAIN.has_point(hp):
 		_pressed_btn = "main"
@@ -1459,7 +1510,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
-	elif admin.click(p) or book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or shipyard_panel.click(p) or dest_panel.click(p) or quest_panel.click(p) or signal_panel.click(p):
+	elif dialog.click(p) or works_panel.click(p) or admin.click(p) or book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or shipyard_panel.click(p) or dest_panel.click(p) or quest_panel.click(p) or signal_panel.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_town_button()
@@ -1477,7 +1528,7 @@ func _quit_button_visible() -> bool:
 
 ## 有任何面板（菜单、换形象、物品栏）开着。
 func panel_open() -> bool:
-	return menu.open or _naming or wardrobe.open or outfit_shop.open or shipyard_panel.open or dest_panel.open or quest_panel.open or signal_panel.open or bag.open or book.open or admin.open
+	return menu.open or _naming or wardrobe.open or outfit_shop.open or shipyard_panel.open or dest_panel.open or quest_panel.open or signal_panel.open or dialog.open or works_panel.open or bag.open or book.open or admin.open
 
 
 ## 小猫状态页（菜单的第 5 页）：已经开着就关，否则打开。
@@ -1491,6 +1542,7 @@ func toggle_status() -> void:
 	dest_panel.close()
 	quest_panel.close()
 	signal_panel.close()
+	works_panel.close()
 	bag.open = false
 	if menu.open and menu.tab == 4:
 		menu.open = false
@@ -1513,6 +1565,7 @@ func open_book(page: int) -> void:
 	dest_panel.close()
 	quest_panel.close()
 	signal_panel.close()
+	works_panel.close()
 	book.open_page(page)
 	_update_polygon()
 
@@ -1528,6 +1581,7 @@ func toggle_bag() -> void:
 	dest_panel.close()
 	quest_panel.close()
 	signal_panel.close()
+	works_panel.close()
 	bag.toggle()
 	_update_polygon()
 
@@ -1680,6 +1734,8 @@ func _draw() -> void:
 	dest_panel.draw()
 	quest_panel.draw()
 	signal_panel.draw()
+	works_panel.draw()
+	dialog.draw()
 	if Time.get_ticks_msec() - _toast_t0 < 3000:
 		label(_toast_l1, Vector2(17, 63), Pal.L_R)
 		label(_toast_l2, Vector2(17, 74), Pal.L_R)
@@ -1990,6 +2046,8 @@ func _draw_particles(t: int) -> void:
 
 
 ## 按存档里的形象分层画猫：毛色三层 + 花纹两层（白色蒙版乘上颜色）+ 固定层 + 帽子。
+var cat_tint: Color = Color.WHITE     # 对话框里没说话的人要灰蒙蒙的：给猫的每一层乘上这个颜色
+
 func draw_cat(pos: Vector2, frame: int, flip := false) -> void:
 	var look: Dictionary = game.state.cat
 	var furs: Array = cat_cfg["furs"]
@@ -2003,19 +2061,22 @@ func draw_cat(pos: Vector2, frame: int, flip := false) -> void:
 	var base: Color = Pal.BY_KEY.get(fur["base"], Pal.L_F)
 	var shade: Color = Pal.BY_KEY.get(fur["shade"], Pal.U_F)
 	var light: Color = Pal.BY_KEY.get(fur["light"], Pal.L_L)
+	base *= cat_tint
+	shade *= cat_tint
+	light *= cat_tint
 	_tex_frame("cat/fur_base", pos, frame, CAT_FRAMES, base, flip)
 	_tex_frame("cat/fur_shade", pos, frame, CAT_FRAMES, shade, flip)
 	_tex_frame("cat/fur_light", pos, frame, CAT_FRAMES, light, flip)
-	_tex_frame("cat/pat_white", pos, frame, CAT_FRAMES, Pal.L_W if pat.get("white", false) else light, flip)
+	_tex_frame("cat/pat_white", pos, frame, CAT_FRAMES, (Pal.L_W * cat_tint) if pat.get("white", false) else light, flip)
 	_tex_frame("cat/pat_stripe", pos, frame, CAT_FRAMES, shade if pat.get("stripes", false) else base, flip)
-	_tex_frame("cat/fixed", pos, frame, CAT_FRAMES, Color.WHITE, flip)
+	_tex_frame("cat/fixed", pos, frame, CAT_FRAMES, cat_tint, flip)
 	if outfit.get("sprite", "") != "" and not (game.is_raining() and interior == "" and not wardrobe.open):
-		_tex_frame("cat/" + outfit["sprite"], pos, frame, CAT_FRAMES, Color.WHITE, flip)
+		_tex_frame("cat/" + outfit["sprite"], pos, frame, CAT_FRAMES, cat_tint, flip)
 	if game.is_raining() and interior == "" and not wardrobe.open:
 		# 下雨天在室外：穿蓑衣、戴蓑衣帽（盖掉平时的帽子），进屋就脱掉
-		_tex_frame("cat/rain_gear", pos, frame, CAT_FRAMES, Color.WHITE, flip)
+		_tex_frame("cat/rain_gear", pos, frame, CAT_FRAMES, cat_tint, flip)
 	elif hat.get("sprite", "") != "":
-		_tex_frame("cat/" + hat["sprite"], pos, frame, CAT_FRAMES, Color.WHITE, flip)
+		_tex_frame("cat/" + hat["sprite"], pos, frame, CAT_FRAMES, cat_tint, flip)
 
 
 # ---- 给 world / menu / wardrobe 用的公开绘制接口 ----
@@ -2162,19 +2223,6 @@ func _auto_policy() -> void:
 					play("cast")
 		# 小镇上（卖完鱼）不再自己出发：等玩家点钓鱼
 
-## 在钓位上收好了的蟹笼：钱、物品飘字，不影响正在钓的鱼线。
-func _collect_pots_fx() -> void:
-	if game.pots_ready() <= 0:
-		return
-	var pc: Dictionary = game.collect_pots()
-	if int(pc["gold"]) <= 0:
-		return
-	play("catch")
-	_toast("收蟹笼", "有收获")
-	_float_money(int(pc["gold"]), world.cat_pos + Vector2(-24, 8))
-	for iid in pc["items"]:
-		_float("+%d" % int(pc["items"][iid]), str(game.inventory.by_id.get(iid, {}).get("sprite", "")), world.cat_pos + Vector2(-24, -6))
-
 ## 岛上此刻站的位置能做什么，作为屏幕底部的提示文字。
 func _island_hint(ix: float) -> String:
 	if world.island_near_pier(ix):
@@ -2183,18 +2231,18 @@ func _island_hint(ix: float) -> String:
 		return "空格键和看守聊聊"
 	if world.island_near_console(ix):
 		return "空格键开信号灯"
-	if world.island_near_bench(ix):
-		return "空格键做蟹笼"
+	if world.island_near_repair(ix):
+		return "空格键看修理厂"
+	if world.island_near_tavern(ix):
+		return "空格键进酒馆"
 	if world.island_near_chest(ix):
 		return "空格键打开木箱"
 	if world.island_near_drift(ix) >= 0:
 		return "空格键拾取"
 	if world.island_near_lake(ix):
 		if game.at_lake_spot():
-			if game.pots_ready() > 0:
-				return "空格键收蟹笼"
 			return "空格键收竿" if game.line_out() else "空格键钓鱼"
-		return "空格键收蟹笼" if game.pots_ready() > 0 else "空格键钓鱼"
+		return "空格键钓鱼"
 	if ix <= game.island_walk_min() + 2.0:
 		return "岛的最西边" if game.bridge_built() else "岛的西边还没开发"
 	return ""

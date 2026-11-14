@@ -25,7 +25,7 @@ var fishing_checkpoint: Dictionary = {"state": 0, "state_start_ms": 0, "deadline
 var inventory: Dictionary = {}
 var warehouse: Dictionary = {}      # 家里仓库：和物品栏一样 {物品 id: 数量}
 ## 物品效果：幸运鱼饵的到期时刻、招财铃剩余的单数
-var effects: Dictionary = {"lucky_until_ms": 0, "bell_sales": 0, "napped_end_ms": 0, "bird_next_ms": 0, "bird_act_ms": 0, "drift_0": 0, "drift_1": 0, "drift_2": 0, "signal_ready_ms": 0, "drift_3": 0, "drift_4": 0, "drift_5": 0, "pot_0": 0, "pot_1": 0, "pot_2": 0, "bridge": 0, "west_chest": 0, "lake_resume": 0, "gift_g064": 0}
+var effects: Dictionary = {"lucky_until_ms": 0, "bell_sales": 0, "napped_end_ms": 0, "bird_next_ms": 0, "bird_act_ms": 0, "drift_0": 0, "drift_1": 0, "drift_2": 0, "signal_ready_ms": 0, "drift_3": 0, "drift_4": 0, "drift_5": 0, "pot_0": 0, "pot_1": 0, "pot_2": 0, "bridge": 0, "west_chest": 0, "lake_resume": 0, "gift_g064": 0, "rp_bridge": 0, "rp_lamp": 0, "rp_pier": 0, "workers": 0}
 var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0, "next_eat_ms": 0, "paused_at_ms": 0, "sales": 0, "roam_x": 0, "walk_from": -1, "boat_x": 260, "line_out": 1}
 var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}, "chests": 0, "fish_best": {}, "empty_casts": 0, "focus_hours": {}}
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
@@ -38,6 +38,7 @@ var gear: Dictionary = {"rod": -1, "line": -1, "hook": -1}
 var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0, "hook": 0}
 ## 支线任务：{任务 id: "active" / "done"}
 var quests: Dictionary = {}
+var story: Dictionary = {}           # 剧情标记（对话里选过什么、聊过什么）：标记名 -> 整数
 ## 鱼钩上装的鱼饵（物品 id）；空字符串 = 面团（无限量，不占物品栏）
 var equipped_bait: String = ""
 ## 小猫形象：各项是 data/cat.json 里对应列表的下标；created=false 时首次启动会弹出捏猫面板
@@ -59,7 +60,7 @@ func to_dict() -> Dictionary:
 		"processed_sale_ids": processed_sale_ids.duplicate(),
 		"next_seq": next_seq, "pomodoro": pomodoro.duplicate(true),
 		"stats": stats.duplicate(true), "settings": settings.duplicate(true),
-		"upgrades": upgrades.duplicate(true), "quests": quests.duplicate(true), "bag_slots": bag_slots, "gear": gear.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
+		"upgrades": upgrades.duplicate(true), "quests": quests.duplicate(true), "story": story.duplicate(true), "bag_slots": bag_slots, "gear": gear.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
 		"window": window.duplicate(true),
 	}
 
@@ -110,6 +111,10 @@ func from_dict(d: Dictionary) -> bool:
 	_merge(cat, d.get("cat"))
 	bag_slots = clampi(int(d.get("bag_slots", 8)), 1, 99)
 	_merge(gear, d.get("gear"))
+	story.clear()
+	if d.get("story") is Dictionary:
+		for k in d["story"]:
+			story[str(k)] = int(d["story"][k])
 	quests.clear()
 	if d.get("quests") is Dictionary:
 		for k in d["quests"]:

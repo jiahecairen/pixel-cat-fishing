@@ -964,7 +964,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 13 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "13 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 15 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "15 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -1363,8 +1363,9 @@ func test_v052(balance: Dictionary, fish: Array) -> void:
 	check(g.quest_state("lighthouse") == "active" and not g.can_turn_in("lighthouse"), "聊一次就接下任务")
 	g.inventory.add(g.state, "bottle", 2)
 	g.inventory.add(g.state, "pearl", 1)
-	check(g.turn_in("lighthouse") and g.inventory.count(g.state, "crab_recipe") == 1 and g.inventory.count(g.state, "bottle") == 0, "交付后拿到蟹笼配方")
-	check(not g.turn_in("lighthouse") and g.inventory.count(g.state, "crab_recipe") == 1, "任务只能交一次")
+	var gold_q := g.state.wallet_gold
+	check(g.turn_in("lighthouse") and g.state.wallet_gold == gold_q + 100 and g.inventory.count(g.state, "bottle") == 0, "交付后拿到酬劳")
+	check(not g.turn_in("lighthouse") and g.state.wallet_gold == gold_q + 100, "任务只能交一次")
 	check(g.zone_id(g.island_x() + 100.0) == "shallow" and g.zone_id(g.island_x() + 800.0) == "deep", "岛边是浅水区")
 
 func test_v054(balance: Dictionary, fish: Array) -> void:
@@ -1458,29 +1459,22 @@ func test_v056(balance: Dictionary, fish: Array) -> void:
 	g.state.boat_level = 1
 	g.steer_to(g.island_x()); g.land_on_island()
 	check(not g.bridge_built() and g.island_walk_min() == g.lake_spot_x() and g.drift_count() == 3, "没修桥：最西到湖边，只有 3 处可拾")
-	check(not g.craft_pot(), "没有配方做不了蟹笼")
-	g.give("crab_recipe", 1)
-	check(not g.craft_pot(), "材料不够做不了")
-	g.inventory.add(g.state, "lamp_shell", 4)
-	g.inventory.add(g.state, "plank", 3)
-	check(g.craft_pot() and g.pot_count() == 1 and g.inventory.count(g.state, "lamp_shell") == 2 and g.inventory.count(g.state, "plank") == 2, "做一个蟹笼：扣材料、放进湖里")
-	check(g.craft_pot() and g.pot_count() == 2 and not g.craft_pot() or g.pot_count() >= 1, "再做一个")
-	check(g.pots_ready() == 0, "刚放下的笼子还没好")
-	g.journey.set_roam_x(g.lake_spot_x())
-	check(g.collect_pots()["gold"] == 0, "没好的笼子收不到东西")
-	c.t += 26 * 60000
-	var r := g.collect_pots()
-	var gold0 := g.state.wallet_gold
-	check(int(r["gold"]) >= 20 and g.pots_ready() == 0 and g.pot_count() == 2, "好了的笼子收一次：有铜币，笼子自动重新下好")
-	g.journey.set_roam_x(g.lake_spot_x() + 60.0)
-	c.t += 26 * 60000
-	check(g.collect_pots()["gold"] == 0 and g.state.wallet_gold == gold0, "不在湖边收不了")
-	# 修桥
+	# 修桥：酒馆雇一位工人 -> 修理厂投 12 块木板开工 -> 到点完工
 	g.state.quests["lighthouse"] = "done"; g.state.quests["lighthouse2"] = "done"; g.state.quests["lighthouse3"] = "done"; g.state.quests["lighthouse4"] = "done"
 	check(g.open_west_chest().is_empty(), "没修桥前西岸木箱打不开")
-	g.begin_talk_quest("lighthouse5")
-	g.inventory.add(g.state, "plank", 6)
-	check(g.turn_in("lighthouse5") and g.bridge_built(), "交 6 块木板：桥修好")
+	check(not g.works.can_start("bridge"), "没有工人、没有木板：开不了工")
+	g.state.wallet_gold = 1000
+	check(g.works.hire() and g.works.workers() == 1 and g.state.wallet_gold == 700, "雇了第一位工人，花 300 铜")
+	check(not g.works.can_start("bridge"), "有工人但木板不够")
+	g.inventory.add(g.state, "plank", 12)
+	check(g.works.start("bridge", g.now_ms()) and g.works.status("bridge") == "building" and g.inventory.count(g.state, "plank") == 0, "开工：扣木板")
+	check(not g.works.start("bridge", g.now_ms()), "已经在修了，不能再开")
+	c.t += 10 * 60000
+	g.tick()
+	check(g.works.status("bridge") == "building", "一个工人要 20/1.5≈13.3 分钟，10 分钟还没完")
+	c.t += 5 * 60000
+	var evs := g.tick()
+	check(g.bridge_built() and g.works.status("bridge") == "done" and int(g.state.story.get("done_bridge", 0)) == 1, "到点桥修好了，剧情标记也记上")
 	check(g.island_walk_min() < g.lake_spot_x() - 300.0 and g.drift_count() == 6, "修桥后能走到西边，多出 3 处可拾")
 	g.journey.set_roam_x(g.west_chest_x())
 	var gold1 := g.state.wallet_gold
@@ -1552,14 +1546,26 @@ func test_v061(balance: Dictionary, fish: Array) -> void:
 	g2.journey._enter(Journey.Activity.ROAM, 0, 0)
 	g2.end_roam(0.5, 0.5, true)
 	check((g2.journey.activity() == Journey.Activity.WALK_TO_BOAT) == want_fish, "鱼篓 %d%%：不超过 30%% 去钓鱼，超过去卖" % pct)
-	# 蟹笼：钓着鱼也能收
+	# 酒馆雇人、工程时间
 	var g3 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(163))
-	g3.journey._enter(Journey.Activity.ISLAND, 0, 0)
-	g3.journey.set_roam_x(int(g3.lake_spot_x()))
-	g3.state.effects["pot_0"] = 1
-	check(g3.pots_ready() >= 1, "蟹笼到时间了")
-	var got := g3.collect_pots()
-	check(int(got["gold"]) > 0 and g3.pots_ready() == 0, "收完蟹笼得到铜币，笼子重新下好")
+	check(g3.works.duration_min("bridge") == 20.0, "没有工人：20 分钟")
+	g3.state.wallet_gold = 5000
+	g3.inventory.add(g3.state, "stone", 3)
+	check(g3.works.hire() and g3.works.hire() == true and g3.works.workers() == 2, "第二位要 800 铜 + 3 石头")
+	check(absf(g3.works.duration_min("bridge") - 10.0) < 0.01, "两位工人：10 分钟")
+	check(g3.works.status("lamp") == "locked", "桥没修好，加固灯室还没解锁")
+	var dlg: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/dialogs.json"))
+	check(dlg is Dictionary and dlg.has("keeper_menu") and dlg.has("tavern_menu") and dlg.has("island_arrive"), "对话数据在")
+	var ok_nodes := true
+	for did in dlg:
+		for nid in dlg[did]["nodes"]:
+			var nd: Dictionary = dlg[did]["nodes"][nid]
+			if str(nd.get("next", "")) != "" and not dlg[did]["nodes"].has(str(nd["next"])):
+				ok_nodes = false
+			for ch in nd.get("choices", []):
+				if str(ch.get("next", "")) != "" and not dlg[did]["nodes"].has(str(ch["next"])):
+					ok_nodes = false
+	check(ok_nodes, "对话里每个 next 都指向真实的节点")
 
 func test_v062(balance: Dictionary, fish: Array) -> void:
 	print("v062: 漂流瓶/日记残页只在有任务需要时出现")

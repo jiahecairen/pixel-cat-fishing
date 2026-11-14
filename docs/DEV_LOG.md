@@ -408,3 +408,6 @@
 
 ## v0.64：卖道具、一次性礼物
 - `game.sell_price/sell_item/apply_gift`，bag.gd “卖出”按钮，items 加 sell；`balance.gift`。测试 628 项 ALL TESTS PASS、SIM PASS。版本号 0.64。
+
+## v0.65
+对话框系统、雾灯岛修理厂/酒馆/老柯剧情、蟹笼移除、沉船木片。矿山岛（v0.66+）未开始。调试变量 CATFISH_TALK=<对话id>。
