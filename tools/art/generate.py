@@ -1262,6 +1262,15 @@ def item_icon(kind):
         c.rows(3, 3, ["..rrrrr...", ".rrFFrrr..", "rrFrrrrrr.", "rr..rrFrrr", ".r...rrrr.", "......rr.r"])
         c.set(4, 5, "K"); c.pts([(2, 3), (1, 2)], "F")                                       # 眼睛和触须
         c.pts([(11, 8), (12, 9)], "F")
+    elif kind == "ration":                                   # 干粮：一块硬面饼
+        c.ellipse(8, 9, 6.5, 4.5, "n"); c.ellipse(8, 8, 5.5, 3.0, "o"); c.set(6, 8, "O"); c.set(9, 7, "O"); c.set(10, 9, "O")
+        c.pts([(5, 6), (6, 5)], "W"); c.outline()
+    elif kind == "jerky":                                    # 肉干：深红色的条
+        c.rect(3, 6, 12, 8, "R"); c.rect(5, 9, 13, 11, "R"); c.rect(3, 6, 12, 6, "H"); c.rect(5, 11, 13, 11, "O")
+        c.set(6, 7, "W"); c.set(9, 10, "W"); c.outline()
+    elif kind == "tonic":                                    # 补剂：圆肚小瓶，绿色药水
+        c.ellipse(8, 10, 4.6, 4.2, "c"); c.rect(6, 3, 9, 6, "c"); c.rect(6, 2, 9, 2, "o")
+        c.ellipse(8, 11, 3.4, 2.8, "G"); c.set(6, 9, "W"); c.outline()
     elif kind == "boot":
         c.rect(5, 2, 9, 10, "o"); c.rect(5, 2, 9, 3, "n")
         c.rect(5, 9, 13, 12, "o"); c.rect(5, 13, 13, 13, "O")
@@ -1781,12 +1790,36 @@ def mine_tile(kind):
         h.rect(6, 3, 9, 8, "y"); h.rows(3, 8, ["yyyyyyyy", ".yyyyyy.", "..yyyy..", "...yy..."])
         h.rect(7, 4, 8, 7, "W"); h.outline()
         c = _up2(h)
-    elif kind == "hole":                                      # 挖开的出口：黑洞和台阶
-        c.rect(0, 0, 31, 31, "K")
-        c.rect(4, 6, 27, 27, "S")
-        for i in range(5):
-            c.rect(6 + i * 2, 8 + i * 4, 25 - i * 2, 11 + i * 4, "A" if i % 2 == 0 else "a")
-        c.rect(4, 6, 27, 6, "W")
+    elif kind == "hole":                                      # 下一层的洞：地上一个黑色土坑，梯子从洞口伸进去
+        c.ellipse(16, 18, 15.0, 12.5, "K")                     # 坑口的暗边
+        c.ellipse(16, 18, 13.5, 11.0, "O")                     # 土坑边缘（泥土）
+        c.ellipse(16, 19, 11.5, 9.0, "K")                      # 黑洞
+        c.ellipse(16, 21, 9.0, 6.0, "K")
+        for x in range(5, 27):                                 # 洞口上沿一圈亮土
+            c.set(x, 9 if 8 < x < 24 else 11, "o")
+        c.rect(11, 12, 12, 29, "o"); c.rect(20, 12, 21, 29, "o")    # 梯子的两根边木（从洞口往下延伸）
+        c.rect(11, 12, 11, 29, "n"); c.rect(20, 12, 20, 29, "n")
+        for y in (13, 17, 21, 25):                             # 横档，越往里越暗
+            c.rect(11, y, 21, y + 1, "o" if y < 21 else "O")
+        c.rect(11, 12, 21, 12, "n")                            # 梯子搭在洞沿上
+    elif kind == "crate":                                     # 补给木箱：方正的木箱，有边框、木纹和钉子
+        c.rect(3, 6, 28, 29, "K")                              # 黑边
+        c.rect(4, 7, 27, 28, "n")                              # 箱面（浅木）
+        for y in (11, 15, 19, 23):                             # 横向木纹
+            c.rect(5, y, 26, y, "o")
+        for (x, y) in ((8, 13), (19, 17), (12, 21), (22, 25), (9, 26)):
+            c.set(x, y, "O"); c.set(x + 1, y, "O")             # 木节
+        c.rect(4, 7, 27, 9, "O")                               # 边框：四条深色木条
+        c.rect(4, 26, 27, 28, "O")
+        c.rect(4, 7, 6, 28, "O")
+        c.rect(25, 7, 27, 28, "O")
+        c.rect(4, 7, 27, 7, "o"); c.rect(4, 7, 4, 28, "o")     # 边框高光
+        for i in range(4, 28):                                 # 对角加固板
+            y = 8 + round((i - 4) * 18 / 23)
+            c.set(i, y, "O"); c.set(i, y + 1, "O")
+        for (x, y) in ((5, 8), (26, 8), (5, 27), (26, 27)):    # 四个角的钉子
+            c.set(x, y, "W")
+        c.rect(5, 29, 28, 30, "K")                              # 落在地上的阴影
     elif kind in ("gold", "metal", "stone_ore", "chest"):
         h = Canvas(16, 16)
         if kind == "gold":                                   # 金矿：黄色矿粒
@@ -1905,6 +1938,17 @@ def mine_building(kind):
         c.rect(30, 26, 45, 45, "O"); c.rect(30, 26, 45, 27, "o"); c.set(33, 36, "y")
         c.rect(9, 25, 23, 34, "y"); c.rect(9, 25, 23, 26, "W"); c.rect(16, 25, 16, 34, "o")
         c.ellipse(16, 40, 6, 2.6, "s"); c.rows(21, 38, ["S.", "SS", "S."]); c.set(12, 39, "K")   # 招牌上的鱼
+    elif kind == "inn":      # 旅店：白墙蓝瓦、窗里亮着灯、门口一块月亮招牌、屋顶冒着温泉的热气
+        c.rect(4, 18, 51, 45, "W"); c.rect(4, 18, 51, 19, "w")
+        c.rows(0, 8, ["......ssssssssssssssssssssssssssssssssssssssssss......",
+                      "....sssSsssSsssSsssSsssSsssSsssSsssSsssSsssSsssSss....",
+                      "..sssSsssSsssSsssSsssSsssSsssSsssSsssSsssSsssSsssSss..",
+                      "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"])
+        c.rect(0, 12, 55, 17, "S")
+        c.rect(8, 24, 20, 34, "y"); c.rect(8, 24, 20, 25, "W"); c.rect(14, 24, 14, 34, "o"); c.rect(8, 29, 20, 29, "o")
+        c.rect(36, 24, 48, 34, "y"); c.rect(36, 24, 48, 25, "W"); c.rect(42, 24, 42, 34, "o"); c.rect(36, 29, 48, 29, "o")
+        c.rect(24, 28, 32, 45, "O"); c.rect(24, 28, 32, 29, "o"); c.set(30, 38, "y")
+        c.ellipse(28, 3, 4.5, 3.5, "y"); c.ellipse(30, 3, 3.5, 3.0, "S")   # 屋顶上的月牙
     elif kind == "gate":     # 矿洞口：木框 + 黑洞 + 两盏灯 + 轨道
         c.ellipse(28, 34, 26, 26, "A"); c.ellipse(28, 34, 22, 22, "a")
         c.rect(10, 18, 45, 45, "K")
@@ -2048,7 +2092,7 @@ def build():
         "rug": save(rug(), "rug"),
         "labels": labels(),
     }
-    for k in ("bottle", "crab_recipe", "lucky_bait", "bell", "map_piece", "pearl", "lamp_shell", "diary_page", "lamp_scale", "stone", "metal", "plank", "rope", "ladder", "boot", "bait_worm", "bait_shrimp", "rod", "line", "hook"):
+    for k in ("bottle", "crab_recipe", "lucky_bait", "bell", "map_piece", "pearl", "lamp_shell", "diary_page", "lamp_scale", "stone", "metal", "plank", "rope", "ladder", "boot", "ration", "jerky", "tonic", "bait_worm", "bait_shrimp", "rod", "line", "hook"):
         made["item_" + k] = save(item_icon(k), "item_" + k)
     for k in ("fruit", "veg", "bread", "flower"):
         made["goods_" + k] = save(goods(k), "goods_" + k)
@@ -2058,12 +2102,12 @@ def build():
         made["villager_%d" % k] = save(sheet([villager(k, 0), villager(k, 1)]), "villager_%d" % k)
     for n in BTN:
         made["btn_" + n] = save(sheet([button(n), button(n, True)]), "btn_" + n)
-    tiles = ["dirt", "stone", "rock", "deep", "granite", "back", "ladder", "gold", "metal", "stone_ore", "chest", "crack1", "crack2", "crack3", "crack4", "tnt", "exit_mark", "hole", "floor", "wall", "walltop"]
+    tiles = ["dirt", "stone", "rock", "deep", "granite", "back", "ladder", "gold", "metal", "stone_ore", "chest", "crack1", "crack2", "crack3", "crack4", "tnt", "exit_mark", "hole", "floor", "wall", "walltop", "crate"]
     made["mine_tiles"] = save(sheet([mine_tile(k) for k in tiles]), "mine_tiles")
     for r in range(3):
         made["mole_%d" % r] = save(sheet([mole(r, 0), mole(r, 1)]), "mole_%d" % r)
     made["mole_miner"] = save(sheet([mole_miner(0), mole_miner(1)]), "mole_miner")
-    for k in ("shop", "rest", "gate"):
+    for k in ("shop", "rest", "gate", "inn"):
         made["mine_" + k] = save(mine_building(k), "mine_" + k)
     made["mine_mtn"] = save(mine_mountains(), "mine_mtn")
     made["mine_cart"] = save(mine_cart(), "mine_cart")

@@ -49,7 +49,7 @@ const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_dest", "lighthouse", "btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "noren_ship", "ship_model", "blueprint", "anchor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish",
-	"mine_tiles", "mine_cart", "mole_0", "mole_1", "mole_2", "mole_miner", "mine_shop", "mine_rest", "mine_gate", "mine_mtn", "item_rope", "item_ladder"]
+	"mine_tiles", "mine_cart", "mole_0", "mole_1", "mole_2", "mole_miner", "mine_shop", "mine_rest", "mine_gate", "mine_inn", "mine_mtn", "item_rope", "item_ladder"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 9
 
@@ -231,11 +231,56 @@ func _ready() -> void:
 		mine_view.go(OS.get_environment("CATFISH_REGION"))
 		if OS.has_environment("CATFISH_MINEMENU"):    # 调试：直接打开岛上/大厅的某个菜单
 			mine_view._open(OS.get_environment("CATFISH_MINEMENU"))
-		if OS.has_environment("CATFISH_PERK") and not game.mine.draft().is_empty():
-			mine_view._take_perk(OS.get_environment("CATFISH_PERK").to_int())
-			if OS.has_environment("CATFISH_DIG"):     # 调试：选完天赋后朝下开始挖
-				game.mine.m()["pick"] = maxi(game.mine.pick(), 1)
-				game.mine.start_dig(0, 1, game.now_ms())
+		if OS.has_environment("CATFISH_RUN"):     # 调试：直接开一局（给第一把镐），站在入口；CATFISH_DIG=朝下挖；CATFISH_AT="x,y"站到那格
+			game.mine.ensure(game.now_ms())
+			game.mine.give_first_pick()
+			if not game.mine.in_run():
+				game.mine.begin_run(1, game.now_ms())
+			var cr: Array = []
+			for cy in game.mine.height():
+				for cx in game.mine.width():
+					if game.mine.block(cx, cy) == "chest":
+						cr.append(Vector2i(cx, cy))
+			print("MINEDBG entrance=", game.mine.entrance(1), " exit=", game.mine.exit_pos(1), " crates=", cr)
+			if OS.get_environment("CATFISH_AT") in ["pit", "crate"]:    # 站到洞口/木箱旁边，面朝它
+				var tgt_c: Vector2i = game.mine.exit_pos(1)
+				if OS.get_environment("CATFISH_AT") == "crate" and not cr.is_empty():
+					tgt_c = cr[0]
+				var placed := false
+				for dv in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
+					var nc: Vector2i = tgt_c + dv
+					if not placed and game.mine.is_floor(nc.x, nc.y) and game.mine.block(nc.x, nc.y) in ["", "dirt", "stone", "rock", "deep"]:
+						placed = true
+						game.mine.m()["run"]["dug"][game.mine._key(nc.x, nc.y)] = 1
+						game.mine.m()["run"]["x"] = nc.x
+						game.mine.m()["run"]["y"] = nc.y
+						game.mine.m()["run"].erase("fx")
+						game.mine.m()["run"].erase("fy")
+						mine_view.face_v = -dv
+						game.mine.m()["lamp"] = 2
+			elif OS.get_environment("CATFISH_AT") == "rock":        # 站到一块石头旁边，朝它挖（看挥镐动画）
+				var done := false
+				for ry in range(2, game.mine.height() - 1):
+					for rx in range(2, game.mine.width() - 1):
+						if not done and game.mine.is_floor(rx, ry) and game.mine.block(rx, ry) == "" and game.mine.block(rx + 1, ry) in ["dirt", "stone", "rock", "deep"]:
+							done = true
+							game.mine.m()["run"]["x"] = rx
+							game.mine.m()["run"]["y"] = ry
+							game.mine.m()["run"].erase("fx")
+							game.mine.m()["run"].erase("fy")
+							mine_view.face_v = Vector2i(1, 0)
+							mine_view.face = 1
+							game.mine.start_dig(1, 0, game.now_ms())
+			elif OS.has_environment("CATFISH_AT"):
+				var at := OS.get_environment("CATFISH_AT").split(",")
+				game.mine.m()["run"]["x"] = at[0].to_int()
+				game.mine.m()["run"]["y"] = at[1].to_int()
+				game.mine.m()["run"].erase("fx")
+				game.mine.m()["run"].erase("fy")
+			if OS.has_environment("CATFISH_DIG"):
+				var dd := OS.get_environment("CATFISH_DIG").split(",")
+				mine_view.face_v = Vector2i(dd[0].to_int(), dd[1].to_int())
+				game.mine.start_dig(mine_view.face_v.x, mine_view.face_v.y, game.now_ms())
 		if OS.has_environment("CATFISH_KIT"):     # 调试：铁镐、油灯、5 颗炸弹，往下挖几格再放一颗炸弹
 			var mk = game.mine
 			mk.m()["pick"] = 2
@@ -1101,13 +1146,23 @@ func _interact_inside() -> void:
 		"bed":
 			if world.napping:
 				pass
-			elif game.nap():
-				play("break_end")
-				world.napping = true
-				_nap_until = Time.get_ticks_msec() + 2600
-				log.write("nap", {"lucky_until_ms": game.state.effects["lucky_until_ms"]})
 			else:
-				play("deny")
+				game.mine.ensure(game.now_ms())
+				var lucky: bool = game.nap()
+				var rs: String = game.mine.rest_start("home", game.now_ms())
+				if rs == "" or lucky:
+					play("break_end")
+					world.napping = true
+					var dur := 2600
+					if rs == "":
+						dur = maxi(dur, int(game.mine.rest_info()["t1"]) - int(game.mine.rest_info()["t0"]))
+						_toast("在家睡觉：体力会补满，但不会超过上限", "")
+					_nap_until = Time.get_ticks_msec() + dur
+					log.write("nap", {"lucky_until_ms": game.state.effects["lucky_until_ms"], "rest": rs == ""})
+				else:
+					if rs == "full":
+						_toast("体力是满的，睡不着", "")
+					play("deny")
 		_:
 			play("deny")
 	_update_polygon()

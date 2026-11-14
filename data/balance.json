@@ -486,6 +486,45 @@
       "weight": 0,
       "use": "",
       "drop": "quest"
+    },
+    {
+      "id": "ration",
+      "sell": 5,
+      "sell_ok": true,
+      "name": "干粮",
+      "desc": "硬邦邦的面饼，吃了恢复 20 体力",
+      "sprite": "item_ration",
+      "weight": 0,
+      "use": "food",
+      "stamina": 20,
+      "max_stack": 20,
+      "drop": ""
+    },
+    {
+      "id": "jerky",
+      "sell": 12,
+      "sell_ok": true,
+      "name": "肉干",
+      "desc": "咸香的肉干，恢复 40 体力",
+      "sprite": "item_jerky",
+      "weight": 0,
+      "use": "food",
+      "stamina": 40,
+      "max_stack": 20,
+      "drop": ""
+    },
+    {
+      "id": "tonic",
+      "sell": 30,
+      "sell_ok": true,
+      "name": "补剂",
+      "desc": "矿工的秘方药水，恢复 80 体力",
+      "sprite": "item_tonic",
+      "weight": 0,
+      "use": "food",
+      "stamina": 80,
+      "max_stack": 20,
+      "drop": ""
     }
   ],
   "water": {
@@ -1118,7 +1157,7 @@
       {
         "id": "gold",
         "min_y": 1,
-        "chance": 0.06,
+        "chance": 0.1,
         "deep_bonus": 0.002,
         "gold": [
           6,
@@ -1129,31 +1168,15 @@
       {
         "id": "metal",
         "min_y": 2,
-        "chance": 0.09,
+        "chance": 0.14,
         "deep_bonus": 0.003,
         "item": "metal",
         "hard_mul": 1.3
       },
       {
-        "id": "chest",
-        "min_y": 2,
-        "chance": 0.012,
-        "gold": [
-          30,
-          60
-        ],
-        "hard_mul": 0.6
-      },
-      {
-        "id": "tnt",
-        "min_y": 2,
-        "chance": 0.03,
-        "hard_mul": 0.5
-      },
-      {
         "id": "stone",
         "min_y": 1,
-        "chance": 0.15,
+        "chance": 0.22,
         "item": "stone",
         "hard_mul": 1.0
       }
@@ -1224,62 +1247,7 @@
         }
       }
     ],
-    "perks": [
-      {
-        "id": "swift",
-        "name": "疾风镐",
-        "desc": "挖得更快 +25%",
-        "v": 0.25
-      },
-      {
-        "id": "bright",
-        "name": "提灯",
-        "desc": "光圈 +1 格",
-        "v": 1.0
-      },
-      {
-        "id": "lucky",
-        "name": "矿脉感应",
-        "desc": "矿物更多 +50%",
-        "v": 0.5
-      },
-      {
-        "id": "loot",
-        "name": "双倍收获",
-        "desc": "石头金属 30% 多一份",
-        "v": 0.3
-      },
-      {
-        "id": "shock",
-        "name": "震波",
-        "desc": "挖开后前方那格先裂一小截",
-        "v": 0.15
-      },
-      {
-        "id": "bigbag",
-        "name": "大口袋",
-        "desc": "背包 +8 格",
-        "v": 8
-      },
-      {
-        "id": "boom",
-        "name": "大爆破",
-        "desc": "炸弹范围 +1",
-        "v": 1.0
-      },
-      {
-        "id": "scout",
-        "name": "探路",
-        "desc": "6 格内能看见出口",
-        "v": 1.0
-      },
-      {
-        "id": "tough",
-        "name": "结实",
-        "desc": "体力 +15",
-        "v": 15
-      }
-    ],
+    "perks": [],
     "dishes": [
       {
         "id": "skewer",
@@ -1342,20 +1310,100 @@
       "start": 0
     },
     "stamina": {
-      "start": 45,
-      "per_pick": 10,
-      "low": 0.25
+      "start": 60,
+      "per_pick": 15,
+      "low": 0.25,
+      "cap_mult": 1.3
     },
     "layout": {
       "rooms": [
         5,
         8
       ],
-      "rock": 0.1,
-      "rock_rich": 0.5,
-      "ore_scale": 0.4,
+      "rock": 0.16,
+      "rock_rich": 0.55,
+      "ore_scale": 0.55,
       "exit_far": 0.7
     },
-    "shafts": 5
+    "shafts": 5,
+    "chest_loot": [
+      {
+        "item": "ration",
+        "w": 6,
+        "n": [
+          1,
+          2
+        ]
+      },
+      {
+        "item": "jerky",
+        "w": 3,
+        "n": [
+          1,
+          2
+        ]
+      },
+      {
+        "item": "tonic",
+        "w": 1,
+        "n": [
+          1,
+          1
+        ]
+      },
+      {
+        "gold": [
+          20,
+          60
+        ],
+        "w": 3
+      }
+    ],
+    "recover": {
+      "fish": 0.4,
+      "buy": 0.6
+    },
+    "rest": {
+      "test_ms": 3000,
+      "home": {
+        "price": 0,
+        "mult": 1.0,
+        "minutes": 60
+      },
+      "rooms": [
+        {
+          "id": "dorm",
+          "name": "通铺",
+          "price": 40,
+          "mult": 1.0,
+          "minutes": 15,
+          "desc": "便宜，睡到满"
+        },
+        {
+          "id": "room",
+          "name": "单人间",
+          "price": 150,
+          "mult": 1.0,
+          "minutes": 8,
+          "desc": "睡得快，睡到满"
+        },
+        {
+          "id": "spa",
+          "name": "温泉房",
+          "price": 500,
+          "mult": 1.15,
+          "minutes": 6,
+          "desc": "泡温泉，体力到 115%"
+        },
+        {
+          "id": "suite",
+          "name": "总统套房",
+          "price": 1500,
+          "mult": 1.3,
+          "minutes": 4,
+          "desc": "最舒服的床，体力到 130%"
+        }
+      ]
+    }
   }
 }

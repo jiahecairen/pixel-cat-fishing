@@ -236,3 +236,8 @@
 ## C165（v0.77）
 - Linux 沙盒：run_tests 710 项通过，sim_long_run SIM PASS，无 SCRIPT ERROR；用调试变量 CATFISH_WALK 截图确认能走、会被石头挡住、面前石头有黄框。
 - macOS 真机：走路手感、转角是否卡、按住空格挖的手感——未运行。
+
+## C166 v0.78
+- run_tests：ALL TESTS PASS（738 项）；sim_long_run：SIM PASS（Linux 沙盒）。
+- 截图目检（Linux）：黑洞、木箱、下楼确认、旅店菜单、挥镐动画。
+- 未运行：macOS 上的实际手感（方向键+空格挖、挥镐观感）、音效、旅店/回家睡觉动画、.app 启动。

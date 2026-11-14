@@ -53,8 +53,10 @@ func ensure(now_ms: int) -> void:
 		d["bag_lv"] = 0
 	if in_run() and not run().has("floor"):       # 旧版（竖井梯子）留下的一局：作废
 		d["run"] = {}
-	if in_run() and not run().has("sta"):          # v0.72 的存档里没有体力：补满
-		run()["sta"] = stamina_max()
+	if not d.has("sta"):                           # 体力是跨局的：第一次进矿是满的
+		d["sta"] = float(stamina_max())
+	run().erase("sta")
+	run().erase("draft")
 	for sid in [1, 2]:
 		if not m()["shafts"].has(str(sid)):
 			m()["shafts"][str(sid)] = {"fixed": 0, "cp": 1, "best": 0}
@@ -178,13 +180,13 @@ func begin_run(id: int, now_ms: int, start_floor: int = 1) -> bool:
 		"shaft": id, "seed": 1 + absi(hash([now_ms, runs, _s.next_seq])) % 2000000000,
 		"floor": start_floor, "x": 0, "y": 0, "dug": {}, "partial": {}, "perks": {}, "dish": dish,
 		"dig": {}, "dir": [0, 0], "n": 0, "draft": [], "best": start_floor, "booms": [],
-		"bag": {"n": 0, "coins": 0, "stone": 0, "metal": 0}, "sta": 0,
+		"bag": {"n": 0, "coins": 0, "stone": 0, "metal": 0},
 	}
-	run()["sta"] = stamina_max()
+	if int(dish_by_id(dish).get("stamina", 0)) > 0:      # 出发前吃的菜：体力加成（可以超过上限）
+		m()["sta"] = minf(float(stamina_max()) * float(_c.get("stamina", {}).get("cap_mult", 1.3)), stamina_f() + float(dish_by_id(dish).get("stamina", 0)))
 	var en := entrance(start_floor)
 	run()["x"] = en.x
 	run()["y"] = en.y
-	_roll_draft()
 	return true
 
 ## 结束这一局：背包里的东西换成钱和材料。返回 {"coins","stone","metal","lost"}。
@@ -216,48 +218,39 @@ func perk_def(id: String) -> Dictionary:
 			return p
 	return {}
 
-func perk_count(id: String) -> int:
-	return int(run().get("perks", {}).get(id, 0))
+func perk_count(_id: String) -> int:
+	return 0
 
 ## 当前待选的 3 个天赋（没有就是空）。
 func draft() -> Array:
-	return run().get("draft", [])
+	return []                           # v0.78：取消了下井和宝箱的技能选择，不再有肉鸽技能
 
-func _roll_draft() -> void:
-	var r := run()
-	var n := int(r.get("n", 0))
-	r["n"] = n + 1
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([seed_(), n, "perk"])
-	var ids: Array = []
-	for p in _c.get("perks", []):
-		ids.append(str(p["id"]))
-	var out: Array = []
-	while out.size() < 3 and not ids.is_empty():
-		out.append(ids.pop_at(rng.randi() % ids.size()))
-	r["draft"] = out
-
-func choose_perk(i: int) -> String:
-	var d := draft()
-	if i < 0 or i >= d.size():
-		return ""
-	var id: String = d[i]
-	var perks: Dictionary = run()["perks"]
-	perks[id] = int(perks.get(id, 0)) + 1
-	if id == "tough":
-		run()["sta"] = stamina() + int(perk_def("tough").get("v", 15))
-	run()["draft"] = []
-	return id
-
-## 体力：每挖开一格（自己动手，炸弹不算）扣一点，越深越费；用完就挖不动了，只能走、放炸弹、回地面。
+## 体力（跨局保存）：挖的时候按时间一点点消耗，越深越费；用完就挖不动了，只能走、放炸弹、回地面。
+## 钓鱼、买东西只会非常慢地恢复；回家睡觉补满；旅店更快，高档房还能超过上限（最多 130%）。
 func stamina_max() -> int:
 	var sc: Dictionary = _c.get("stamina", {})
-	var v := int(sc.get("start", 45)) + int(sc.get("per_pick", 10)) * maxi(0, pick() - 1)
-	v += int(float(perk_def("tough").get("v", 15)) * float(perk_count("tough")))
-	return v + int(dish_def().get("stamina", 0))
+	return int(sc.get("start", 45)) + int(sc.get("per_pick", 10)) * maxi(0, pick() - 1)
+
+func stamina_f() -> float:
+	return float(m().get("sta", float(stamina_max())))
 
 func stamina() -> int:
-	return int(run().get("sta", 0))
+	return int(ceil(stamina_f() - 0.001))
+
+func stamina_cap() -> float:
+	return float(stamina_max()) * float(_c.get("stamina", {}).get("cap_mult", 1.3))
+
+## 缓慢恢复（钓鱼、买东西）：不会超过上限。
+func recover(n: float) -> void:
+	if stamina_f() < float(stamina_max()):
+		m()["sta"] = minf(float(stamina_max()), stamina_f() + n)
+
+## 吃东西：回体力，不超过上限。已经满了返回 false（不消耗）。
+func eat(n: float) -> bool:
+	if stamina_f() >= float(stamina_max()):
+		return false
+	m()["sta"] = minf(float(stamina_max()), stamina_f() + n)
+	return true
 
 func dig_cost(_x: int, _y: int) -> int:
 	return int(layer(floor_n()).get("cost", 1))
@@ -395,8 +388,27 @@ func _layout(f: int) -> Dictionary:
 			var pr := float(lc.get("rock_rich", 0.5)) if rich(x, y, f) else float(lc.get("rock", 0.1))
 			if rng.randf() < pr:
 				rk[y * W + x] = 1
-	rk[ex.y * W + ex.x] = 1
-	var out := {"floor": fl, "rock": rk, "exit": ex}
+	rk[ex.y * W + ex.x] = 0                                 # 出口是个洞，不是石头
+	for oy in range(-1, 2):                                  # 洞口一圈被石头堵着：到下一层至少要挖几块
+		for ox in range(-1, 2):
+			var gx := ex.x + ox
+			var gy := ex.y + oy
+			if (ox != 0 or oy != 0) and gx > 0 and gy > 0 and gx < W and gy < H and fl[gy * W + gx] == 1:
+				rk[gy * W + gx] = 1
+	# 补给木箱：地面上空着的地方，一层 1-3 个
+	var ck := PackedByteArray()
+	ck.resize(W * H)
+	var n_chest: int = 1 + rng.randi() % 3
+	var tries := 0
+	while n_chest > 0 and tries < 200:
+		tries += 1
+		var cx: int = 2 + rng.randi() % maxi(1, W - 4)
+		var cy: int = 6 + rng.randi() % maxi(1, H - 8)
+		var far_ex := absi(cx - ex.x) > 2 or absi(cy - ex.y) > 2
+		if fl[cy * W + cx] == 1 and rk[cy * W + cx] == 0 and far_ex and absi(cx - en.x) + cy > 8 and ck[cy * W + cx] == 0:
+			ck[cy * W + cx] = 1
+			n_chest -= 1
+	var out := {"floor": fl, "rock": rk, "exit": ex, "chest": ck}
 	_lay[key] = out
 	return out
 
@@ -430,7 +442,13 @@ func layer(f: int) -> Dictionary:
 func block(x: int, y: int) -> String:
 	if not in_map(x, y) or not is_floor(x, y):
 		return "granite"
-	if is_dug(x, y) or not has_rock(x, y):
+	if Vector2i(x, y) == exit_pos(floor_n()):
+		return "pit"
+	if is_dug(x, y):
+		return ""
+	if _layout(floor_n())["chest"][y * width() + x] == 1:
+		return "chest"
+	if not has_rock(x, y):
 		return ""
 	return str(layer(floor_n()).get("block", "deep"))
 
@@ -442,8 +460,6 @@ func rich(x: int, y: int, f: int = -1) -> bool:
 func ore(x: int, y: int) -> String:
 	if not in_map(x, y) or Vector2i(x, y) == entrance(floor_n()) or not has_rock(x, y):
 		return ""
-	if Vector2i(x, y) == exit_pos(floor_n()):
-		return "exit"
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([seed_(), floor_n(), x, y])
 	var r := rng.randf() * float(_c.get("layout", {}).get("ore_scale", 0.4))
@@ -453,7 +469,7 @@ func ore(x: int, y: int) -> String:
 		if floor_n() < int(o.get("min_y", 0)):
 			continue
 		var ch := float(o.get("chance", 0.0)) + float(o.get("deep_bonus", 0.0)) * float(floor_n())
-		acc += ch * (k if str(o["id"]) in ["gold", "metal", "chest"] else 1.0)
+		acc += ch * (k if str(o["id"]) in ["gold", "metal"] else 1.0)
 		if r < acc:
 			return str(o["id"])
 	return ""
@@ -474,21 +490,28 @@ func dig_ms(x: int, y: int) -> int:
 	var hard := float(layer(floor_n()).get("hard_s", 1.0)) * float(ore_def(ore(x, y)).get("hard_mul", 1.0))
 	return maxi(120, int(hard * 1000.0 / (p * speed_mul())))
 
-## 能不能朝 (dx, dy) 挖。""=可以，"open"=已经空了，"granite"=花岗岩，"notool"=没镐，"tool"=镐不够好。
+## 面朝 (dx, dy) 伸手够得到的那一格：从脚下往前探 REACH 格，落在哪一格就是哪一格（不要求对齐）。
+const REACH := 0.62
+func target(dx: int, dy: int) -> Vector2i:
+	var q := fpos() + Vector2(dx, dy) * REACH
+	return Vector2i(int(floor(q.x)), int(floor(q.y)))
+
+## 能不能朝 (dx, dy) 挖。""=可以，"open"=前面是空地，"granite"=岩壁，"pit"=下一层的洞，"chest"=补给箱（要打开不是挖），
+## "notool"=没镐，"tool"=镐不够好，"tired"=没体力。
 func dig_block_reason(dx: int, dy: int) -> String:
-	var p := pos()
-	var tx := p.x + dx
-	var ty := p.y + dy
+	var t := target(dx, dy)
+	var tx := t.x
+	var ty := t.y
 	var b := block(tx, ty)
 	if b == "":
 		return "open"
-	if b == "granite":
-		return "granite"
+	if b in ["granite", "pit", "chest"]:
+		return b
 	if pick() <= 0:
 		return "notool"
 	if pick() < need_tool(tx, ty):
 		return "tool"
-	if stamina() < dig_cost(tx, ty):
+	if stamina_f() <= 0.05:
 		return "tired"
 	return ""
 
@@ -514,16 +537,16 @@ func start_dig(dx: int, dy: int, now_ms: int) -> String:
 	var why := dig_block_reason(dx, dy)
 	if why != "":
 		return why
-	var p := pos()
-	var tx := p.x + dx
-	var ty := p.y + dy
+	var t := target(dx, dy)
+	var tx := t.x
+	var ty := t.y
 	if digging() and dig_target() == Vector2i(tx, ty):
 		return ""
 	stop_dig(now_ms)
 	var ms := dig_ms(tx, ty)
 	var done := float(run().get("partial", {}).get(_key(tx, ty), 0.0))
 	var t0 := now_ms - int(done * float(ms))
-	run()["dig"] = {"x": tx, "y": ty, "t0": t0, "t1": t0 + ms}
+	run()["dig"] = {"x": tx, "y": ty, "t0": t0, "t1": t0 + ms, "ts": now_ms}
 	run()["dir"] = [dx, dy]
 	return ""
 
@@ -545,8 +568,13 @@ func shift(delta_ms: int) -> void:
 	if not d.is_empty():
 		d["t0"] = int(d["t0"]) + delta_ms
 		d["t1"] = int(d["t1"]) + delta_ms
+		d["ts"] = int(d.get("ts", 0)) + delta_ms
 	for b in run().get("booms", []):
 		b["t1"] = int(b["t1"]) + delta_ms
+	var rs: Dictionary = m().get("rest", {})
+	if not rs.is_empty():
+		rs["t0"] = int(rs["t0"]) + delta_ms
+		rs["t1"] = int(rs["t1"]) + delta_ms
 
 ## ---- 顺滑走动：位置是小数（以格为单位，格子中心是 x+0.5），碰撞盒比一格小 ----
 const HB := Vector2(0.3, 0.28)
@@ -569,32 +597,16 @@ func _free_at(p: Vector2) -> bool:
 				return false
 	return true
 
-## 按方向走一小段（单位：格）。撞墙就停；差一点对齐时自动往格子中间挪，好钻进一格宽的路。
+## 按方向走一小段（单位：格）。撞墙就停；横竖分开处理，贴着墙能顺着滑（不会自动对齐到格子中间）。
 func walk(dx: float, dy: float) -> bool:
 	if not in_run():
 		return false
 	var p := fpos()
 	var p0 := p
-	if dx != 0.0:
-		var q := Vector2(p.x + dx, p.y)
-		if _free_at(q):
-			p = q
-		else:
-			var off: float = (floor(p.y) + 0.5) - p.y
-			if absf(off) < 0.4 and absf(off) > 0.001:
-				var q2 := Vector2(p.x, p.y + signf(off) * minf(absf(off), absf(dx)))
-				if _free_at(q2):
-					p = q2
-	if dy != 0.0:
-		var q := Vector2(p.x, p.y + dy)
-		if _free_at(q):
-			p = q
-		else:
-			var off: float = (floor(p.x) + 0.5) - p.x
-			if absf(off) < 0.4 and absf(off) > 0.001:
-				var q2 := Vector2(p.x + signf(off) * minf(absf(off), absf(dy)), p.y)
-				if _free_at(q2):
-					p = q2
+	if dx != 0.0 and _free_at(Vector2(p.x + dx, p.y)):
+		p.x += dx
+	if dy != 0.0 and _free_at(Vector2(p.x, p.y + dy)):
+		p.y += dy
 	if p == p0:
 		return false
 	var r := run()
@@ -623,15 +635,16 @@ func move(dx: int, dy: int, now_ms: int = 0) -> bool:
 func on_entrance() -> bool:
 	return in_run() and pos() == entrance(floor_n())
 
-func on_exit() -> bool:
-	return in_run() and pos() == exit_pos(floor_n()) and is_dug(pos().x, pos().y)
+## 面朝 (dx, dy) 够得到的是不是下一层的洞。
+func exit_ahead(dx: int, dy: int) -> bool:
+	return in_run() and target(dx, dy) == exit_pos(floor_n())
 
 func has_elevator() -> bool:
 	return floor_n() % checkpoint_every() == 0
 
-## 站在挖开的出口上：下一层。
-func descend() -> bool:
-	if not on_exit():
+## 面朝下一层的洞、确认后：下到下一层。
+func descend(dx: int = 0, dy: int = 0) -> bool:
+	if not exit_ahead(dx, dy):
 		return false
 	stop_dig(0)
 	var f := floor_n() + 1
@@ -683,11 +696,23 @@ func update(now_ms: int) -> Array:
 	if not in_run():
 		return ev
 	var d: Dictionary = run().get("dig", {})
+	if not d.is_empty():
+		# 体力按时间一点点扣：整块石头的体力 = 这一层的体力价 × 挖了的比例（挥空不扣）
+		var upto := mini(now_ms, int(d["t1"]))
+		var span := float(maxi(1, int(d["t1"]) - int(d["t0"])))
+		var drain := dig_cost(int(d["x"]), int(d["y"])) * float(maxi(0, upto - int(d.get("ts", upto)))) / span
+		d["ts"] = upto
+		if drain >= stamina_f():
+			m()["sta"] = 0.0
+			stop_dig(now_ms)
+			ev.append({"type": "tired"})
+			d = {}
+		else:
+			m()["sta"] = stamina_f() - drain
 	if not d.is_empty() and now_ms >= int(d["t1"]):
 		var x := int(d["x"])
 		var y := int(d["y"])
 		var dir: Array = run().get("dir", [0, 0])
-		run()["sta"] = maxi(0, stamina() - dig_cost(x, y))
 		_break_chain(x, y, int(dir[0]), int(dir[1]), ev, 0)
 		run()["dig"] = {}
 		run()["dir"] = [0, 0]
@@ -705,9 +730,9 @@ func update(now_ms: int) -> Array:
 
 func _breakable(x: int, y: int) -> bool:
 	var b := block(x, y)
-	return b != "" and b != "granite"
+	return b != "" and b not in ["granite", "pit", "chest"]
 
-## 炸弹爆炸：半径内的块全碎（镐等级最多高 1 级），炸药桶接着炸。
+## 炸弹爆炸：半径内的石头全碎（镐等级最多高 1 级）。
 func _detonate(f: int, bx: int, by: int, ev: Array) -> void:
 	if f != floor_n():
 		return                          # 不在这一层：算哑弹
@@ -727,12 +752,8 @@ func _break_chain(x: int, y: int, dx: int, dy: int, ev: Array, depth: int) -> vo
 		return
 	ev.append(e)
 	var o := str(e["ore"])
-	if o == "tnt":
-		ev.append({"type": "boom", "x": x, "y": y})
-		for oy in range(-1, 2):
-			for ox in range(-1, 2):
-				if (ox != 0 or oy != 0) and _breakable(x + ox, y + oy):
-					_break_chain(x + ox, y + oy, 0, 0, ev, depth + 1)
+	if false:
+		pass
 	elif o in CHAIN_ORES:
 		var group := _vein(x, y, o)
 		if group.size() + 1 >= int(_c.get("chain_min", 3)):
@@ -772,7 +793,7 @@ func _break_cell(x: int, y: int) -> Dictionary:
 	run()["dug"][key] = 1
 	run()["partial"].erase(key)
 	var o := ore(x, y)
-	var e := {"type": "dug", "x": x, "y": y, "ore": o, "gold": 0, "item": "", "n": 0, "lost": false, "chest": false, "tnt": o == "tnt", "chain": false}
+	var e := {"type": "dug", "x": x, "y": y, "ore": o, "gold": 0, "item": "", "n": 0, "lost": false, "chest": false, "tnt": false, "chain": false}
 	var od := ore_def(o)
 	if od.is_empty():
 		return e
@@ -789,10 +810,6 @@ func _break_cell(x: int, y: int) -> Dictionary:
 		cnt = 1
 		if perk_count("loot") > 0 and rng.randf() < float(perk_def("loot").get("v", 0.3)) * float(perk_count("loot")):
 			cnt = 2
-	if o == "chest":
-		e["chest"] = true
-		if draft().is_empty():
-			_roll_draft()
 	if bag_full():
 		e["lost"] = true
 		e["gold"] = gold
@@ -808,6 +825,101 @@ func _break_cell(x: int, y: int) -> Dictionary:
 	e["item"] = item
 	e["n"] = cnt
 	return e
+
+## ---- 补给木箱 ----
+## 面朝木箱按空格打开：里面是能吃的补给（进物品栏）或者一点钱。物品栏放不下就打不开。
+func open_chest(dx: int, dy: int) -> Dictionary:
+	var t := target(dx, dy)
+	if not in_run() or block(t.x, t.y) != "chest":
+		return {"ok": false, "why": "none"}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([seed_(), floor_n(), t.x, t.y, "box"])
+	var loot: Array = _c.get("chest_loot", [])
+	var total := 0
+	for l in loot:
+		total += int(l.get("w", 1))
+	var pick_i := rng.randi() % maxi(1, total)
+	var chosen: Dictionary = {}
+	for l in loot:
+		pick_i -= int(l.get("w", 1))
+		if pick_i < 0:
+			chosen = l
+			break
+	var res := {"ok": true, "item": "", "n": 0, "gold": 0}
+	if chosen.has("gold"):
+		var g: Array = chosen["gold"]
+		res["gold"] = int(round(float(rng.randi_range(int(g[0]), int(g[1]))) * (1.0 + 0.1 * float(floor_n()))))
+	else:
+		var n: int = int((chosen.get("n", [1, 1]) as Array)[0]) + rng.randi() % (int((chosen.get("n", [1, 1]) as Array)[1]) - int((chosen.get("n", [1, 1]) as Array)[0]) + 1)
+		if _inv.room_for(_s, str(chosen.get("item", "")), n) < n:
+			return {"ok": false, "why": "full"}
+		_inv.add(_s, str(chosen["item"]), n)
+		res["item"] = str(chosen["item"])
+		res["n"] = n
+	run()["dug"][_key(t.x, t.y)] = 1
+	if int(res["gold"]) > 0:
+		_s.wallet_gold = mini(MoneyC.WALLET_CAP, _s.wallet_gold + int(res["gold"]))
+	res["x"] = t.x
+	res["y"] = t.y
+	return res
+
+## ---- 休息：旅店 / 回家 ----
+## 设计时长在 balance.json 的 rest；测试期间 rest.test_ms > 0 时全部只要这么多毫秒。
+func inn_rooms() -> Array:
+	return _c.get("rest", {}).get("rooms", [])
+
+func rest_cfg() -> Dictionary:
+	return _c.get("rest", {})
+
+func resting() -> bool:
+	return not m().get("rest", {}).is_empty()
+
+func rest_info() -> Dictionary:
+	return m().get("rest", {})
+
+## kind："home" 或旅店房间 id。返回 ""=开始了，"gold"=钱不够，"busy"=已经在休息，"full"=已经满了（家里睡不会超过上限）。
+func rest_start(kind: String, now_ms: int) -> String:
+	if resting():
+		return "busy"
+	var room: Dictionary = {}
+	if kind == "home":
+		room = rest_cfg().get("home", {})
+	else:
+		for r in inn_rooms():
+			if str(r["id"]) == kind:
+				room = r
+	if room.is_empty():
+		return "none"
+	var to := float(stamina_max()) * float(room.get("mult", 1.0))
+	if stamina_f() >= to - 0.01:
+		return "full"
+	if _s.wallet_gold < int(room.get("price", 0)):
+		return "gold"
+	_s.wallet_gold -= int(room.get("price", 0))
+	var ms := int(rest_cfg().get("test_ms", 0))
+	if ms <= 0:
+		ms = int(float(room.get("minutes", 10)) * 60000.0)
+	m()["rest"] = {"kind": kind, "t0": now_ms, "t1": now_ms + ms, "from": stamina_f(), "to": to}
+	return ""
+
+func rest_progress(now_ms: int) -> float:
+	var r := rest_info()
+	if r.is_empty():
+		return 0.0
+	return clampf(float(now_ms - int(r["t0"])) / float(maxi(1, int(r["t1"]) - int(r["t0"]))), 0.0, 1.0)
+
+## 休息中体力一点点涨；到点结束，返回 true。
+func rest_update(now_ms: int) -> bool:
+	var r := rest_info()
+	if r.is_empty():
+		return false
+	var k := rest_progress(now_ms)
+	m()["sta"] = lerpf(float(r["from"]), float(r["to"]), k)
+	if now_ms >= int(r["t1"]):
+		m()["sta"] = float(r["to"])
+		m()["rest"] = {}
+		return true
+	return false
 
 ## ---- 工具店 ----
 ## 下一级要什么：{"gold": 铜币, "items": {id: n}}；已经最高级返回空。

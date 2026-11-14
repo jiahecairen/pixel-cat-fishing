@@ -65,6 +65,7 @@ func _init() -> void:
 		test_v064(balance, fish)
 		test_v067(balance, fish)
 		test_v068_sell(balance, fish)
+		test_v078(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -966,7 +967,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 17 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "15 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 20 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "15 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -1699,6 +1700,128 @@ func test_v046(balance: Dictionary, fish: Array) -> void:
 	check(ns["small"] >= 100 and ns["big"] >= 100 and ms < mb * 0.8, "小鱼上钩更快：平均等待 小 %d ms / 大 %d ms" % [int(ms), int(mb)])
 
 
+func test_v078(balance: Dictionary, fish: Array) -> void:
+	print("v0.78: 连续耗体力、面朝就能挖、黑洞下楼、补给木箱、体力跨局、旅店和回家休息")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(78))
+	var mn = g.mine
+	mn.ensure(clock.t)
+	mn.give_first_pick()
+	check(mn.begin_run(1, clock.t) and mn.stamina_f() == float(mn.stamina_max()), "第一次下井体力是满的")
+	# 找一块石头站在它旁边，不对齐也能挖
+	var nb := _stand_next_to_rock(mn)
+	check(nb != Vector2i.ZERO, "找到一块能挖的石头")
+	var cellp: Vector2i = mn.pos()
+	var tg: Vector2i = cellp + nb
+	g.state.mine["run"]["fx"] = float(cellp.x) + 0.5 + (0.2 if nb.y != 0 else 0.0)
+	g.state.mine["run"]["fy"] = float(cellp.y) + 0.5 + (0.2 if nb.x != 0 else 0.0)
+	check(mn.target(nb.x, nb.y) == tg, "没对齐（偏了 0.2 格）也能够到面前那块石头")
+	var f0: float = mn.fpos().x + mn.fpos().y
+	mn.walk(0.0, 0.0)
+	check(absf(mn.fpos().x + mn.fpos().y - f0) < 0.0001, "不会自动对齐到格子中间")
+	# 体力按时间连续消耗：挖到一半，已经扣了一半
+	g.state.mine["sta"] = 50.0
+	var ms: int = mn.dig_ms(tg.x, tg.y)
+	var cost: float = float(mn.dig_cost(tg.x, tg.y))
+	check(mn.start_dig(nb.x, nb.y, clock.t) == "", "开始挖")
+	clock.t += ms / 2
+	mn.update(clock.t)
+	var used: float = 50.0 - mn.stamina_f()
+	check(absf(used - cost * 0.5) < 0.05 and not mn.is_dug(tg.x, tg.y), "挖到一半：体力已经扣了一半（%.2f），石头还在" % used)
+	mn.stop_dig(clock.t)
+	var keep: float = mn.stamina_f()
+	clock.t += 5000
+	mn.update(clock.t)
+	check(mn.stamina_f() == keep, "松手后不再扣")
+	# 体力耗尽：挖到一半就停下，发出 tired
+	g.state.mine["sta"] = 0.1
+	mn.start_dig(nb.x, nb.y, clock.t)
+	clock.t += ms
+	var tev: Array = mn.update(clock.t)
+	var tired := false
+	for te in tev:
+		if te["type"] == "tired":
+			tired = true
+	check(tired and mn.stamina_f() == 0.0 and not mn.digging() and not mn.is_dug(tg.x, tg.y), "体力用完：挖到一半停手，石头没碎")
+	check(mn.dig_block_reason(nb.x, nb.y) == "tired", "没体力挖不动")
+	# 矿里不会自己恢复
+	clock.t += 600000
+	mn.update(clock.t)
+	check(mn.stamina_f() == 0.0, "在矿里体力不会自己恢复")
+	mn.end_run()
+	# 体力跨局
+	check(mn.begin_run(1, clock.t) and mn.stamina_f() == 0.0, "体力跨局保存：下一局还是 0")
+	mn.end_run()
+	# 钓鱼和买东西：非常缓慢地恢复，不会超过上限
+	var mx: float = float(mn.stamina_max())
+	g.state.mine["sta"] = 10.0
+	g.state.wallet_gold = 100000
+	g.buy_bait("bait_worm")
+	var after_buy: float = mn.stamina_f()
+	check(after_buy > 10.0 and after_buy < 11.5, "买东西只恢复一点点（+%.2f）" % (after_buy - 10.0))
+	mn.recover(1000.0)
+	check(mn.stamina_f() == mx, "缓慢恢复不会超过上限")
+	# 补给木箱
+	mn.begin_run(1, clock.t)
+	var crate := Vector2i(-1, -1)
+	for yy in mn.height():
+		for xx in mn.width():
+			if crate.x < 0 and mn.block(xx, yy) == "chest":
+				crate = Vector2i(xx, yy)
+	check(crate.x >= 0, "每层有补给木箱")
+	var cdir := Vector2i.ZERO
+	for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var nc: Vector2i = crate + dv
+		if cdir == Vector2i.ZERO and mn.is_floor(nc.x, nc.y) and mn.block(nc.x, nc.y) == "":
+			g.state.mine["run"]["x"] = nc.x
+			g.state.mine["run"]["y"] = nc.y
+			g.state.mine["run"].erase("fx")
+			g.state.mine["run"].erase("fy")
+			cdir = -dv
+	check(cdir != Vector2i.ZERO and mn.dig_block_reason(cdir.x, cdir.y) == "chest", "站在木箱旁边：面前是木箱，不是石头")
+	check(mn.start_dig(cdir.x, cdir.y, clock.t) != "", "木箱不能挖")
+	var inv_before: int = g.inventory.count(g.state, "ration") + g.inventory.count(g.state, "jerky") + g.inventory.count(g.state, "tonic")
+	var gold_before: int = g.state.wallet_gold
+	var oc: Dictionary = mn.open_chest(cdir.x, cdir.y)
+	var inv_after: int = g.inventory.count(g.state, "ration") + g.inventory.count(g.state, "jerky") + g.inventory.count(g.state, "tonic")
+	check(bool(oc["ok"]) and (inv_after > inv_before or g.state.wallet_gold > gold_before) and mn.block(crate.x, crate.y) == "", "打开木箱：补给进物品栏（或一点钱），木箱消失")
+	check(not bool(mn.open_chest(cdir.x, cdir.y)["ok"]), "同一个木箱不能开两次")
+	# 吃东西
+	g.state.mine["sta"] = 10.0
+	g.state.inventory["ration"] = 2
+	var r1: Dictionary = g.use_item("ration")
+	check(bool(r1["ok"]) and absf(mn.stamina_f() - 30.0) < 0.001 and g.inventory.count(g.state, "ration") == 1, "吃干粮：体力 +20，少一份")
+	g.state.mine["sta"] = mx
+	check(not bool(g.use_item("ration")["ok"]) and g.inventory.count(g.state, "ration") == 1, "体力是满的不浪费")
+	mn.end_run()
+	# 休息：家里只补到上限，旅店更快，高档房超过上限
+	g.state.mine["sta"] = 5.0
+	g.state.wallet_gold = 5000
+	check(mn.rest_start("home", clock.t) == "" and mn.resting() and mn.rest_start("suite", clock.t) == "busy", "在家睡觉开始")
+	clock.t += 1500
+	mn.rest_update(clock.t)
+	check(mn.stamina_f() > 5.0 and mn.stamina_f() < mx and mn.resting(), "睡到一半：体力在涨")
+	clock.t += 1500
+	check(mn.rest_update(clock.t) and absf(mn.stamina_f() - mx) < 0.001 and not mn.resting(), "家里 3 秒补满，不超过上限（%.0f）" % mx)
+	check(mn.rest_start("home", clock.t) == "full", "满了不用睡")
+	var gold0: int = g.state.wallet_gold
+	check(mn.rest_start("suite", clock.t) == "" and g.state.wallet_gold == gold0 - 1500, "总统套房收 1500 铜")
+	clock.t += 3000
+	mn.rest_update(clock.t)
+	check(absf(mn.stamina_f() - mx * 1.3) < 0.01, "总统套房：体力到 130%%（%.0f）" % mn.stamina_f())
+	g.state.wallet_gold = 10
+	g.state.mine["sta"] = 1.0
+	check(mn.rest_start("room", clock.t) == "gold", "钱不够住不了")
+	# 存档里带着休息中的状态
+	g.state.wallet_gold = 5000
+	mn.rest_start("dorm", clock.t)
+	var s4 := GameState.new()
+	check(s4.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict()))), "休息中也能存档")
+	var g4 := Game.new(balance, fish, s4, clock, _rng(79))
+	clock.t += 3000
+	g4.mine.rest_update(clock.t)
+	check(not g4.mine.resting() and g4.mine.stamina_f() >= float(g4.mine.stamina_max()) - 0.01, "读档后休息照常结束")
+
 func test_v068_sell(balance: Dictionary, fish: Array) -> void:
 	print("v0.68: 工坊出售、任务物品、加速对矿井生效")
 	var clock := FakeClock.new()
@@ -1732,11 +1855,18 @@ func _stand_next_to_rock(mn) -> Vector2i:
 		for x in range(1, mn.width() - 1):
 			if mn.is_floor(x, y) and mn.block(x, y) == "":
 				for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-					if mn.block(x + dv.x, y + dv.y) not in ["", "granite"]:
+					if mn.block(x + dv.x, y + dv.y) not in ["", "granite", "chest", "pit"]:
 						mn.m()["run"]["x"] = x
 						mn.m()["run"]["y"] = y
 						return dv
 	return Vector2i.ZERO
+
+## 把当前层的补给木箱都去掉（测试走路线时不让木箱挡路）。
+func _clear_crates(mn) -> void:
+	var lay: Dictionary = mn._layout(mn.floor_n())
+	var ck: PackedByteArray = lay["chest"]
+	ck.fill(0)
+	lay["chest"] = ck
 
 ## 入口到出口沿着地面走的一条路（不管石头）。
 func _floor_path(mn) -> Array:
@@ -1772,6 +1902,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(not g.state.to_dict().has("gems"), "宝石货币已取消")
 	check(mn.start_floors() == [1] and not mn.begin_run(1, clock.t, 5), "还没到过整 5 层，只能从第 1 层开始")
 	check(mn.begin_run(1, clock.t) and mn.in_run() and mn.floor_n() == 1 and mn.pos() == mn.entrance(1), "坐矿车下井：第 1 层，站在入口台阶上")
+	_clear_crates(mn)
 	check(mn.width() >= 25 and mn.height() >= 16, "地图比以前大：%d×%d" % [mn.width(), mn.height()])
 	check(mn.block(-1, 3) == "granite" and mn.block(mn.width(), 3) == "granite" and mn.block(3, mn.height()) == "granite", "地图外面是岩壁")
 	var floor_cells := 0
@@ -1795,7 +1926,12 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 			open_walls += 1
 	check(open_walls == 0 and mn.exit_pos(1) == path[path.size() - 1], "路上没有岩壁，终点是出口")
 	var ex: Vector2i = mn.exit_pos(1)
-	check(mn.has_rock(ex.x, ex.y) and mn.ore(ex.x, ex.y) == "exit" and mn.block(ex.x, ex.y) != "", "出口埋在一块石头下面")
+	var ring := 0
+	for oy in range(-1, 2):
+		for ox in range(-1, 2):
+			if (ox != 0 or oy != 0) and mn.is_floor(ex.x + ox, ex.y + oy) and mn.has_rock(ex.x + ox, ex.y + oy):
+				ring += 1
+	check(mn.block(ex.x, ex.y) == "pit" and not mn.has_rock(ex.x, ex.y) and ring >= 2, "出口是地上的黑洞，周围有 %d 块石头堵着" % ring)
 	check(mn.exit_pos(1) == ex, "同一层的地图每次都一样")
 	# 走到第一块挡路的石头前面
 	var k := 0
@@ -1808,14 +1944,12 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.pos() == path[k - 1] and mn.dig_block_reason(face.x, face.y) == "notool", "没有镐子挖不动")
 	check(mn.give_first_pick() and mn.pick() == 1 and not mn.give_first_pick(), "管理员送第一把镐子，只送一次")
 	check(mn.buy_level("pick") == "gold", "铁镐要金币")
-	check(mn.draft().size() == 3, "开局有 3 个天赋可选")
-	var pid: String = mn.choose_perk(0)
-	check(pid != "" and mn.draft().is_empty() and mn.perk_count(pid) == 1, "选了天赋：" + pid)
+	check(mn.draft().is_empty() and not mn.cfg().has("perks_on"), "不再有天赋选择")
 	var base_ms: int = mn.dig_ms(path[k].x, path[k].y)
 	check(base_ms >= 300 and base_ms <= 2500, "主动挖：这一块约 %d 毫秒" % base_ms)
 	# 体力
 	var sta0: int = mn.stamina()
-	check(sta0 == mn.stamina_max() and sta0 >= 45, "开局体力满：%d" % sta0)
+	check(sta0 == mn.stamina_max() and sta0 >= 60, "开局体力满：%d" % sta0)
 	check(mn.start_dig(face.x, face.y, clock.t) == "", "朝石头挖")
 	var need: int = mn.dig_ms(path[k].x, path[k].y)
 	clock.t += need - 1
@@ -1827,9 +1961,9 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.stamina() == sta0 - 1, "泥土层挖一格体力 -1")
 	var sta_keep: int = mn.stamina()
 	var nb := _stand_next_to_rock(mn)
-	g.state.mine["run"]["sta"] = 0
+	g.state.mine["sta"] = 0.0
 	check(mn.dig_block_reason(nb.x, nb.y) == "tired", "体力用完了挖不动")
-	g.state.mine["run"]["sta"] = sta_keep
+	g.state.mine["sta"] = float(sta_keep)
 	check(mn.start_dig(nb.x, nb.y, clock.t) == "" and mn.dig_block_reason(-nb.x, -nb.y) in ["open", "granite"], "往哪个方向都能挖（没有竖井限制）")
 	var tgt: Vector2i = mn.pos() + nb
 	clock.t += mn.dig_ms(tgt.x, tgt.y) / 2
@@ -1840,11 +1974,11 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.update(clock.t).is_empty() and mn.progress_at(tgt.x, tgt.y, clock.t) == part, "不挖的时候不会自己挖（没有挂机）")
 	mn.stop_dig(clock.t)
 	# 一路走（遇到石头就挖）到出口
-	g.state.mine["run"]["sta"] = 200
+	g.state.mine["sta"] = 200.0
 	g.state.mine["run"]["x"] = path[0].x
 	g.state.mine["run"]["y"] = path[0].y
 	var guard := 0
-	for j in range(1, path.size()):
+	for j in range(1, path.size() - 1):
 		var step: Vector2i = path[j] - path[j - 1]
 		if mn.block(path[j].x, path[j].y) != "":
 			mn.start_dig(step.x, step.y, clock.t)
@@ -1854,8 +1988,11 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 		else:
 			mn.move(step.x, step.y, clock.t)
 		guard += 1
-	check(mn.pos() == ex and mn.on_exit(), "挖开出口，站在了出口上（走了 %d 步）" % guard)
-	check(mn.descend() and mn.floor_n() == 2 and mn.pos() == mn.entrance(2) and not mn.on_exit(), "下到第 2 层，站在新入口")
+	var last: Vector2i = path[path.size() - 1] - path[path.size() - 2]
+	check(mn.pos() == path[path.size() - 2] and mn.exit_ahead(last.x, last.y) and mn.block(ex.x, ex.y) == "pit", "挖开周围的石头，走到洞口前（走了 %d 步）" % guard)
+	check(not mn.move(last.x, last.y, clock.t) and mn.pos() == path[path.size() - 2], "洞口走不上去（像矿石一样要面对着互动）")
+	check(not mn.descend(-last.x, -last.y), "背对着洞下不去")
+	check(mn.descend(last.x, last.y) and mn.floor_n() == 2 and mn.pos() == mn.entrance(2) and mn.on_entrance(), "下到第 2 层，站在新入口")
 	check(mn.ascend() == "hall" and mn.floor_n() == 2 and mn.on_entrance(), "每层入口的梯子都是回地面（不是上一层）")
 	# 顺滑走动：小步走、撞墙停、不会钻进石头和岩壁
 	var p0: Vector2 = mn.fpos()
@@ -1912,7 +2049,6 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	var exit4: Vector2i = mn.exit_pos(4)
 	g.state.mine["run"]["x"] = exit4.x
 	g.state.mine["run"]["y"] = exit4.y
-	g.state.mine["run"]["dug"][mn._key(exit4.x, exit4.y)] = 1
 	check(mn.descend() and mn.floor_n() == 5 and mn.has_elevator() and mn.ascend() == "hall", "到第 5 层：入口有电梯，直接回大厅")
 	mn.end_run()
 	check(mn.start_floors() == [1, 5] and mn.begin_run(1, clock.t + 2, 5) and mn.floor_n() == 5 and mn.pos() == mn.entrance(5), "矿车可以直接从第 5 层开始")
@@ -1964,33 +2100,8 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 				rocks_after += 1
 	check(booms >= 1 and rocks_near >= 3 and rocks_after == 0 and mn.live_bombs().is_empty(), "炸弹把周围一圈的石头都炸开了（%d 块）" % rocks_near)
 	check(mn.stamina() == sta_bomb, "炸弹不耗体力")
-	# 炸药桶连锁、矿脉连锁
-	var tnt_cell := Vector2i(-1, -1)
-	var tnt_floor := 0
-	for ff in range(6, 160):
-		g.state.mine["run"]["floor"] = ff
-		for yy in range(1, mn.height() - 1):
-			for xx in range(2, mn.width() - 2):
-				if tnt_cell.x < 0 and mn.ore(xx, yy) == "tnt" and mn.block(xx, yy) != "":
-					var nbc := 0
-					for oy in range(-1, 2):
-						for ox in range(-1, 2):
-							if (ox != 0 or oy != 0) and mn.block(xx + ox, yy + oy) not in ["", "granite"]:
-								nbc += 1
-					if nbc >= 2:
-						tnt_cell = Vector2i(xx, yy)
-						tnt_floor = ff
-		if tnt_cell.x >= 0:
-			break
-	check(tnt_cell.x >= 0, "能找到旁边有石头的炸药桶（第 %d 层）" % tnt_floor)
-	g.state.mine["run"]["floor"] = tnt_floor
-	var cev: Array = []
-	mn._break_chain(tnt_cell.x, tnt_cell.y, 0, 0, cev, 0)
-	var tcount := 0
-	for ce in cev:
-		if ce["type"] == "dug":
-			tcount += 1
-	check(tcount >= 3, "炸药桶连锁：一桶炸开了 %d 格" % tcount)
+	# 矿脉连锁（炸药桶已取消）
+	check(mn.ore_def("tnt").is_empty() and mn.ore_def("chest").is_empty(), "矿里不再有炸药桶和宝箱矿")
 	var pair := Vector2i(-1, -1)
 	var pair_floor := 0
 	for ff in range(1, 200):
@@ -2010,16 +2121,8 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.is_dug(pair.x + 1, pair.y), "矿脉连锁：连着的金属矿一起碎")
 	mn._c["chain_min"] = 3
 	mn.end_run()
-	# 天赋、菜
+	# 菜
 	mn.begin_run(1, clock.t + 3)
-	var d0: int = mn.dig_ms(3, 3)
-	var swift_i: int = mn.draft().find("swift")
-	if swift_i >= 0:
-		mn.choose_perk(swift_i)
-		check(mn.dig_ms(3, 3) < d0, "疾风镐：挖得更快")
-	else:
-		mn.choose_perk(0)
-		check(true, "（这一局没抽到疾风镐）")
 	mn.end_run()
 	g.state.wallet_gold = 1000
 	g.state.basket = ["crucian", "loach", "bream"]
@@ -2054,7 +2157,6 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	# 中途存档：这一局接着玩（JSON 把数字读成小数，也要对得上）
 	g.mine.begin_run(1, clock.t + 21)
 	g.mine.give_first_pick()
-	g.mine.choose_perk(0)
 	var ex2: Vector2i = g.mine.entrance(1)
 	g.state.mine["run"]["dug"][g.mine._key(ex2.x, 2)] = 1
 	g.state.mine["run"]["y"] = 2

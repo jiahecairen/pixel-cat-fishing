@@ -113,6 +113,10 @@ func tick() -> Array:
 		events.append({"type": "repair_done", "id": wid, "name": str(works.project(wid).get("name", ""))})
 		dirty = true
 	_clamp_wallet()
+	for ev in events:                   # 钓到鱼：体力非常缓慢地恢复
+		if str(ev.get("type", "")) == "catch":
+			mine.recover(float(_cfg.get("mine", {}).get("recover", {}).get("fish", 0.4)))
+	mine.rest_update(_clock.now_ms())
 	# 钓鱼状态一变就更新断点（状态切换不频繁，不会造成频繁写盘）
 	if fishing.state != _last_cp_state:
 		_last_cp_state = fishing.state
@@ -718,6 +722,7 @@ func buy_boat_upgrade(level: int) -> bool:
 	state.wallet_gold -= price
 	state.boat_level = level
 	dirty = true
+	mine.recover(float(_cfg.get("mine", {}).get("recover", {}).get("buy", 0.6)))
 	return true
 
 ## 船在 x 处受到的向右推力占比：浪区入口 0，到 wave_stop 为 1。
@@ -805,6 +810,7 @@ func buy_upgrade(id: String) -> bool:
 		grant_gear("rod_%d" % upgrades.level(state, "rod"))     # 买到手的新鱼竿自动装上，换下来的进物品栏
 	_apply_upgrades()
 	dirty = true
+	mine.recover(float(_cfg.get("mine", {}).get("recover", {}).get("buy", 0.6)))
 	return true
 
 ## 当前生效的时长（分钟）。
@@ -1101,6 +1107,8 @@ func use_item(id: String) -> Dictionary:
 	if str(d["use"]) == "gear":          # 装备：装上，换下来的进物品栏
 		var ok := equip_gear(id)
 		return {"ok": ok, "use": "gear", "gold": 0, "quest": ""}
+	if str(d["use"]) == "food" and mine.stamina_f() >= float(mine.stamina_max()):
+		return {"ok": false, "use": "", "gold": 0}      # 体力是满的：不浪费
 	inventory.consume(state, id)
 	var gold := 0
 	var quest := ""
@@ -1113,6 +1121,8 @@ func use_item(id: String) -> Dictionary:
 		"gold":
 			gold = _rng.randi_range(int(d["gold_min"]), int(d["gold_max"]))
 			state.wallet_gold += gold
+		"food":
+			mine.eat(float(d.get("stamina", 0)))
 		"lucky":
 			# 连着用会把时间接上去，而不是从现在重新算
 			state.effects["lucky_until_ms"] = maxi(now, int(state.effects["lucky_until_ms"])) + int(d["minutes"]) * 60000
@@ -1603,6 +1613,7 @@ func buy_cat_item(kind: String, idx: int) -> bool:
 	state.wallet_gold -= price
 	_own_add(kind, idx)
 	dirty = true
+	mine.recover(float(_cfg.get("mine", {}).get("recover", {}).get("buy", 0.6)))
 	return true
 
 ## 穿上 / 戴上（必须已经拥有）。
@@ -1611,6 +1622,7 @@ func wear_cat_item(kind: String, idx: int) -> bool:
 		return false
 	state.cat[kind] = idx
 	dirty = true
+	mine.recover(float(_cfg.get("mine", {}).get("recover", {}).get("buy", 0.6)))
 	return true
 
 ## ---- 渔具店买鱼饵 ----
@@ -1636,6 +1648,7 @@ func buy_bait(id: String) -> bool:
 	state.wallet_gold -= int(inventory.by_id[id]["price"])
 	inventory.add(state, id)
 	dirty = true
+	mine.recover(float(_cfg.get("mine", {}).get("recover", {}).get("buy", 0.6)))
 	return true
 
 func _clamp_setting(key: String, v: int) -> int:
