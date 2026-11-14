@@ -237,7 +237,7 @@ func _on_event(e: Dictionary) -> void:
 		_float(x, y, "背包满了", Pal.L_R)
 		_warn("背包满了，回地面卖掉再来")
 	elif int(e["gold"]) > 0:
-		_float(x, y, "+%s" % _price(int(e["gold"])), Pal.L_Y)
+		_float(x, y, "+%s 入背包" % _price(int(e["gold"])), Pal.L_Y)
 	if str(e["item"]) != "" and not bool(e["lost"]):
 		var nm: String = str(m.game.inventory.by_id.get(e["item"], {}).get("name", e["item"]))
 		_float(x, y - 1, "%s +%d" % [nm, int(e["n"])], Pal.L_W)
@@ -812,7 +812,7 @@ func _draw_mine(view: Vector2, t: int) -> void:
 				var o: String = mn.ore(x, y) if b != "granite" else ""
 				var seen := Vector2(x - p.x, y - p.y).length() <= R + 0.6
 				if o == "exit":
-					if seen or scout:
+					if seen or (scout and Vector2(x - p.x, y - p.y).length() <= 6.5):
 						var bob := roundf(sin(float(t) / 160.0) * 1.5)
 						m.tex_frame("mine_tiles", pos + shake + Vector2(0, bob), TILE["exit_mark"], MINE_FRAMES)
 				elif o != "" and seen:
@@ -895,17 +895,35 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		m.draw_rect(Rect2(0, view.y - e - 6, view.x, 6), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(e, 0, 6, view.y), Color(0, 0, 0, a2))
 		m.draw_rect(Rect2(view.x - e - 6, 0, 6, view.y), Color(0, 0, 0, a2))
-	# 信息：第几层、背包、炸弹、镐、这一局的天赋和菜
-	var info := "第 %d 层  背包 %d/%d  炸弹 %d  %s" % [mn.floor_n(), mn.bag_n(), mn.bag_cap(), mn.bombs(), str(mn.pick_def().get("name", ""))]
-	m.dyn_text(info, Vector2(view.x - 8 - m.dyn_text_width(info), view.y - 18), Pal.L_R if mn.bag_full() else Pal.L_W)
-	var line := ""
+	# 信息（右下，两行）：第几层、炸弹、镐；背包里装的东西（回地面才换钱）
+	var info := "第 %d 层  炸弹 %d  %s" % [mn.floor_n(), mn.bombs(), str(mn.pick_def().get("name", ""))]
+	m.dyn_text(info, Vector2(view.x - 8 - m.dyn_text_width(info), view.y - 18), Pal.L_W)
+	var bg: Dictionary = mn.bag()
+	var bl := "背包 %d/%d  钱 %s" % [mn.bag_n(), mn.bag_cap(), _price(int(bg.get("coins", 0)))]
+	for it in ["stone", "metal"]:
+		if int(bg.get(it, 0)) > 0:
+			bl += "  %s %d" % [str(m.game.inventory.by_id.get(it, {}).get("name", it)), int(bg[it])]
+	m.dyn_text(bl, Vector2(view.x - 8 - m.dyn_text_width(bl), view.y - 30), Pal.L_R if mn.bag_full() else Pal.L_W)
+	# 天赋和菜（左下，超过一行就往上折行，不盖住右边）
+	var words: Array = []
 	for pid in mn.run().get("perks", {}):
-		line += "%s×%d " % [str(mn.perk_def(str(pid)).get("name", pid)), mn.perk_count(str(pid))]
+		words.append("%s×%d" % [str(mn.perk_def(str(pid)).get("name", pid)), mn.perk_count(str(pid))])
 	var dn: String = str(mn.dish_def().get("name", ""))
 	if dn != "":
-		line += "【%s】" % dn
-	if line != "":
-		m.dyn_text(line, Vector2(8, view.y - 18), Pal.L_Y)
+		words.append("【%s】" % dn)
+	var lines: Array = []
+	var cur := ""
+	for wd in words:
+		var tryl: String = (cur + " " + str(wd)) if cur != "" else str(wd)
+		if cur != "" and m.dyn_text_width(tryl) > 100.0:
+			lines.append(cur)
+			cur = str(wd)
+		else:
+			cur = tryl
+	if cur != "":
+		lines.append(cur)
+	for li in lines.size():
+		m.dyn_text(str(lines[lines.size() - 1 - li]), Vector2(8, view.y - 18 - 12 * li), Pal.L_Y)
 	if not mn.draft().is_empty():
 		_draw_draft(view)
 

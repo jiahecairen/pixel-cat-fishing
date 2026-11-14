@@ -547,13 +547,11 @@ func _break_chain(x: int, y: int, dx: int, dy: int, ev: Array, depth: int) -> vo
 				if not e2.is_empty():
 					e2["chain"] = true
 					ev.append(e2)
-	# 震波：邻格先裂开一截
-	var sh := float(perk_def("shock").get("v", 0.3)) * float(perk_count("shock"))
-	if sh > 0.0 and depth == 0 and (dx != 0 or dy != 0):
-		for dv in [Vector2i(dx, dy), Vector2i(dy, dx), Vector2i(-dy, -dx)]:
-			if dv != Vector2i.ZERO and _breakable(x + dv.x, y + dv.y):
-				var k2 := _key(x + dv.x, y + dv.y)
-				run()["partial"][k2] = minf(0.9, float(run()["partial"].get(k2, 0.0)) + sh)
+	# 震波：只让前方那一格先裂开一截（最多到一半），免得一路连着挖穿
+	var sh := float(perk_def("shock").get("v", 0.15)) * float(perk_count("shock"))
+	if sh > 0.0 and depth == 0 and (dx != 0 or dy != 0) and _breakable(x + dx, y + dy):
+		var k2 := _key(x + dx, y + dy)
+		run()["partial"][k2] = minf(0.5, float(run()["partial"].get(k2, 0.0)) + sh)
 
 ## 和 (x, y) 相邻、同一种矿、还没挖的格子（不含自己，最多 8 个）。
 func _vein(x: int, y: int, o: String) -> Array:

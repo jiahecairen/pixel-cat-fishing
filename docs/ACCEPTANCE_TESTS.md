@@ -216,3 +216,7 @@
 - 自动测试（Linux 沙盒）：run_tests 694 项通过，sim_long_run SIM PASS。
 - 沙盒截图：第 1 层地图、炸弹爆炸、矿车菜单——已目检。
 - 在 macOS 真机上：方向键挖掘手感、B 放炸弹、爆炸观感、下楼/回大厅提示、电梯——未运行。
+
+## C161（v0.73）矿井 HUD 与天赋调整
+- Linux 沙盒：run_tests 694 项通过，sim_long_run SIM PASS，截图目检右下两行信息与左下天赋不再重叠。
+- macOS 真机：震波/探路的手感、HUD 排版——未运行。
