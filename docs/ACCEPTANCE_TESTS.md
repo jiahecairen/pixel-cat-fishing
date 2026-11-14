@@ -185,3 +185,6 @@
 
 ## C153 v0.65 对话框与修理厂/酒馆
 沙盒：run_tests ALL TESTS PASS，sim SIM PASS，Xvfb 截图目检对话两种模式与修理厂面板。真实 macOS：未运行（键盘/点击手感、酒馆面板、工人动画、存档兼容）。
+
+## C154 v0.66 新主角
+沙盒：run_tests ALL TESTS PASS，sim SIM PASS；Xvfb 截图目检：岛上漫步、桥上、船上钓鱼，新主角显示正常、握竿点对齐。真实 macOS：未运行（走路动画速度观感、翻转时的位置、迷你窗口里的显示、首次启动直接起名）。

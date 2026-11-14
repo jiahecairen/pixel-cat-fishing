@@ -1893,5 +1893,7 @@ if __name__ == "__main__":
     export_palette()
     app_icon()
     cat_layers()
+    import import_hero
+    import_hero.build()             # 主角：由用户提供的走路图还原
     cat_gallery()
     check(m)

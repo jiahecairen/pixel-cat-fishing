@@ -220,7 +220,7 @@ func _ready() -> void:
 	book = Book.new(self)
 	admin = Admin.new(self)
 	world = World.new(self)
-	wardrobe.open = not state.cat.get("created", false)   # 第一次启动先捏猫
+	state.cat["created"] = true      # v0.66 起主角形象固定（D152），不再捏猫，直接进入起名
 	_apply_debug_env()
 
 	for n in SPRITES:
@@ -229,6 +229,7 @@ func _ready() -> void:
 		tex[f["sprite"]] = load("res://assets/sprites/%s.png" % f["sprite"])
 	for n in CAT_LAYERS:
 		tex["cat/" + n] = load("res://assets/cat/%s.png" % n)
+	tex["cat/hero"] = load("res://assets/cat/hero.png")
 	for h in cat_cfg["hats"] + cat_cfg["outfits"]:
 		if h.get("sprite", "") != "":
 			tex["cat/" + h["sprite"]] = load("res://assets/cat/%s.png" % h["sprite"])
@@ -741,6 +742,7 @@ func _is_dev_key(event: InputEventKey) -> bool:
 
 
 func _toggle_dev_mode() -> void:
+	return                     # 主角形象固定后不再有捏猫面板（D152）
 	if wardrobe.open:
 		wardrobe.close()
 	else:
@@ -2048,35 +2050,16 @@ func _draw_particles(t: int) -> void:
 ## 按存档里的形象分层画猫：毛色三层 + 花纹两层（白色蒙版乘上颜色）+ 固定层 + 帽子。
 var cat_tint: Color = Color.WHITE     # 对话框里没说话的人要灰蒙蒙的：给猫的每一层乘上这个颜色
 
+const HERO_FRAMES := 8       # assets/cat/hero.png：8 帧走路，第 0 帧兼作站立
+const HERO_WALK_MS := 110
+
+## 画主角。frame 沿用旧编号：4/5 = 走路（自动播 8 帧循环），其余（坐、打盹、正面钓鱼）
+## 暂时都用站立帧，等用户提供对应动作的素材。站立帧的爪子正好在 (21,22)，鱼竿的握点不用改。
 func draw_cat(pos: Vector2, frame: int, flip := false) -> void:
-	var look: Dictionary = game.state.cat
-	var furs: Array = cat_cfg["furs"]
-	var pats: Array = cat_cfg["patterns"]
-	var hats: Array = cat_cfg["hats"]
-	var fur: Dictionary = furs[posmod(int(look.get("fur", 0)), furs.size())]
-	var pat: Dictionary = pats[posmod(int(look.get("pattern", 0)), pats.size())]
-	var hat: Dictionary = hats[posmod(int(look.get("hat", 0)), hats.size())]
-	var outfits: Array = cat_cfg["outfits"]
-	var outfit: Dictionary = outfits[posmod(int(look.get("outfit", 0)), outfits.size())]
-	var base: Color = Pal.BY_KEY.get(fur["base"], Pal.L_F)
-	var shade: Color = Pal.BY_KEY.get(fur["shade"], Pal.U_F)
-	var light: Color = Pal.BY_KEY.get(fur["light"], Pal.L_L)
-	base *= cat_tint
-	shade *= cat_tint
-	light *= cat_tint
-	_tex_frame("cat/fur_base", pos, frame, CAT_FRAMES, base, flip)
-	_tex_frame("cat/fur_shade", pos, frame, CAT_FRAMES, shade, flip)
-	_tex_frame("cat/fur_light", pos, frame, CAT_FRAMES, light, flip)
-	_tex_frame("cat/pat_white", pos, frame, CAT_FRAMES, (Pal.L_W * cat_tint) if pat.get("white", false) else light, flip)
-	_tex_frame("cat/pat_stripe", pos, frame, CAT_FRAMES, shade if pat.get("stripes", false) else base, flip)
-	_tex_frame("cat/fixed", pos, frame, CAT_FRAMES, cat_tint, flip)
-	if outfit.get("sprite", "") != "" and not (game.is_raining() and interior == "" and not wardrobe.open):
-		_tex_frame("cat/" + outfit["sprite"], pos, frame, CAT_FRAMES, cat_tint, flip)
-	if game.is_raining() and interior == "" and not wardrobe.open:
-		# 下雨天在室外：穿蓑衣、戴蓑衣帽（盖掉平时的帽子），进屋就脱掉
-		_tex_frame("cat/rain_gear", pos, frame, CAT_FRAMES, cat_tint, flip)
-	elif hat.get("sprite", "") != "":
-		_tex_frame("cat/" + hat["sprite"], pos, frame, CAT_FRAMES, cat_tint, flip)
+	var hf := 0
+	if frame == 4 or frame == 5:
+		hf = (Time.get_ticks_msec() / HERO_WALK_MS) % HERO_FRAMES
+	_tex_frame("cat/hero", pos + Vector2(1 if flip else 3, -1), hf, HERO_FRAMES, cat_tint, flip)
 
 
 # ---- 给 world / menu / wardrobe 用的公开绘制接口 ----

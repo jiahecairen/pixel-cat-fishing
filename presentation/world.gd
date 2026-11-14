@@ -45,7 +45,7 @@ const TREES := [1010, 940]
 
 # 相对小猫贴图左上角的偏移
 const BRIDGE_H := 9.0                 # 拱桥中间比地面高几像素
-const FRONT_HAND := {6: Vector2(25, 11), 7: Vector2(21, 25), 8: Vector2(22, 19)}   # 正面小猫（桥顶）手握竿的位置，按帧
+const FRONT_HAND := {6: Vector2(21, 22), 7: Vector2(21, 22), 8: Vector2(21, 22)}   # 正面小猫（桥顶）手握竿的位置，按帧
 const FRONT_TIP_IDLE := Vector2(31, 0)
 const FRONT_TIP_WAIT := Vector2(37, 8)
 const FRONT_TIP_REEL := Vector2(33, -10)
@@ -1408,7 +1408,7 @@ func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 			if act == Journey.Activity.ISLAND and not on_break and not roam_moving and m.game.at_lake_spot() and m.game.line_out():
 				_draw_lake_fishing(t, now)
 				return
-			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 4, roam_flip)
+			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 0, roam_flip)
 			if not m.game.state.basket.is_empty():
 				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if roam_flip else 3, 16 + ((t / 180) % 2 if roam_moving else 0)))
 		Journey.Activity.VENDING, Journey.Activity.SOLD_OUT:
@@ -1722,7 +1722,7 @@ const ROOM_MAX_X := ROOM_W - 34
 const ROOM_DOOR_X := 14          # 门的中心
 const ROOMS := {
 	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"], [118, "quest"]]},
-	"tailor": {"keeper": 0, "wall": "w", "spots": [[128, "hats"], [172, "quest"]]},
+	"tailor": {"keeper": 0, "wall": "w", "spots": [[172, "quest"]]},       # 主角形象固定后不卖衣帽（D152）
 	"shipyard": {"keeper": 2, "wall": "w", "spots": [[150, "boats"]]},
 	"workshop": {"keeper": 1, "wall": "w", "spots": [[150, "talk"]]},
 	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [106, "piggy"], [128, "stats"], [172, "bed"]]},
@@ -1837,7 +1837,7 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 		var flip := room_flip
 		if not room_moving and keeper_pos != Vector2.INF and room_spot(kind) == "quest":
 			flip = keeper_pos.x + 8.0 < ox + room_x + 16.0      # 站在任务点：小猫面对店主
-		m.draw_cat(pos, (4 + (t / 180) % 2) if room_moving else 4, flip)
+		m.draw_cat(pos, (4 + (t / 180) % 2) if room_moving else 0, flip)
 	# 店主进门时打招呼
 	if keeper_pos != Vector2.INF and t - room_t0 < 3000:
 		var w: float = m.label_width("欢迎光临") + 6
