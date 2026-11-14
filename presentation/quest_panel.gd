@@ -24,6 +24,7 @@ func open_letter(id: String) -> void:
 
 func open_talk(id: String) -> void:
 	qid = id
+	m.game.begin_talk_quest(id)
 	just_done = false
 	mode = "talk"
 	open = true
@@ -82,7 +83,7 @@ func draw() -> void:
 		_lines(q.get("letter_lines", []), 31.0)
 	else:
 		var st: String = g.quest_state(qid)
-		m.label("店主的心愿", Vector2(19, 31), Pal.L_Y)
+		m.label("看守的心愿" if str(q.get("npc", "")) == "lighthouse" else "店主的心愿", Vector2(19, 31), Pal.L_Y)
 		if st == "":
 			_lines(q.get("idle_lines", []), 44.0)
 		elif st == "done":

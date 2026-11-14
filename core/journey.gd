@@ -5,7 +5,7 @@ extends RefCounted
 
 ## SOLD_OUT：鱼卖光了，小猫在摊位前等玩家点气泡再去钓鱼
 ## ROAM：完整窗口里玩家用方向键亲自带着小猫在镇上走（只追加在末尾，保持旧存档里的数值含义不变）
-enum Activity { FISHING, IDLE_FULL, SAIL_OUT, WALK_TO_STALL, VENDING, WALK_TO_BOAT, SAIL_BACK, ROAM, SOLD_OUT }
+enum Activity { FISHING, IDLE_FULL, SAIL_OUT, WALK_TO_STALL, VENDING, WALK_TO_BOAT, SAIL_BACK, ROAM, SOLD_OUT, ISLAND }
 
 var _j: Dictionary     # 指向 GameState.journey
 var _cfg: Dictionary
@@ -74,6 +74,24 @@ func activity() -> int:
 
 func on_boat() -> bool:
 	return activity() in [Activity.FISHING, Activity.IDLE_FULL, Activity.SAIL_OUT, Activity.SAIL_BACK]
+
+## 小猫登上了小岛，玩家用方向键带着它在岛上走（船留在岛的码头边）。
+func on_island() -> bool:
+	return activity() == Activity.ISLAND
+
+func land_on_island(x: float, now_ms: int) -> bool:
+	if not can_depart():
+		return false
+	_enter(Activity.ISLAND, now_ms, 0)
+	set_roam_x(x)
+	return true
+
+## 从岛上回到船上，接着在原地钓鱼。
+func leave_island(now_ms: int) -> bool:
+	if not on_island():
+		return false
+	_enter(Activity.FISHING, now_ms, 0)
+	return true
 
 func can_depart() -> bool:
 	return activity() == Activity.FISHING or activity() == Activity.IDLE_FULL

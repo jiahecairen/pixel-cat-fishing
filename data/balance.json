@@ -189,6 +189,16 @@
       "drop": "catch"
     },
     {
+      "id": "crab_recipe",
+      "important": true,
+      "name": "蟹笼配方",
+      "desc": "工坊里能照着做蟹笼",
+      "sprite": "item_crab_recipe",
+      "weight": 0,
+      "use": "",
+      "drop": "quest"
+    },
+    {
       "id": "lucky_bait",
       "name": "幸运鱼饵",
       "desc": "十分钟内更走运",
@@ -402,7 +412,7 @@
       {"name": "远洋船", "price": 12000}
     ],
     "boat_max_x": 512,
-    "island": {"id": "mist", "name": "雾灯岛", "x": -3900, "no_fish": 70, "current_end": 160},
+    "island": {"id": "mist", "name": "雾灯岛", "x": -3900, "no_fish": 70, "current_end": 330, "shallow_to": 386, "walk_west": 760, "keeper_off": 196},
     "zones": [
       {
         "id": "deep",
@@ -446,7 +456,8 @@
   },
   "shop_chat": {
     "tackle": ["欢迎常来", "今天鱼口怎么样"],
-    "tailor": ["衣服随便挑", "穿上一定好看"]
+    "tailor": ["衣服随便挑", "穿上一定好看"],
+    "lighthouse": ["雾灯岛欢迎你", "灯塔夜夜亮着"]
   },
   "junk": {
     "chance": 0.1,
@@ -471,6 +482,21 @@
     0.9
   ],
   "quests": [
+    {
+      "id": "lighthouse",
+      "npc": "lighthouse",
+      "start_on_talk": true,
+      "reward_give": "crab_recipe",
+      "reward_name": "蟹笼配方",
+      "wants": [
+        {"item": "bottle", "n": 2},
+        {"item": "pearl", "n": 1}
+      ],
+      "letter_lines": ["灯塔看守的信"],
+      "talk_lines": ["灯塔的灯坏了", "帮我找这些吧"],
+      "idle_lines": ["欢迎来到雾灯岛", "能帮个忙吗"],
+      "done_lines": ["灯又亮了", "蟹笼配方给你", "以后去工坊看看"]
+    },
     {
       "id": "keeper",
       "npc": "tackle",

@@ -41,7 +41,7 @@ const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin"
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
-	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
+	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_bag", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "villager_3", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
@@ -568,6 +568,17 @@ func _update_roam(dt: float) -> void:
 			world.roam_moving = true
 			world.roam_flip = dir < 0
 			_last_walk_input = t
+	elif dir != 0 and j.on_island():
+		# 在小岛上：方向键带着小猫走，东边最远到码头尽头，西边到岛的西岸
+		if absf(_roam_fx - j.roam_x()) > 1.5:
+			_roam_fx = j.roam_x()
+		_roam_fx = clampf(_roam_fx + dir * World.ROAM_SPEED * game.move_speed() * dt, game.island_walk_min(), game.island_land_x())
+		j.set_roam_x(_roam_fx)
+		world.roam_moving = true
+		world.roam_flip = dir < 0
+		_last_walk_input = t
+	elif j.on_island() and mini:
+		game.leave_island()                  # 迷你窗里不能逛岛：自动回到船上
 	elif j.activity() == Journey.Activity.ROAM and mini:
 		# 玩家接管后小猫就一直听玩家的，不会自己走开；只有切到迷你悬浮窗才交还给自动流程
 		_end_roam_auto(float(j.roam_x()))
@@ -671,9 +682,12 @@ func _interact() -> void:
 	elif j.on_boat():
 		if game.at_dock() and game.can_go_to_town():
 			_go_to_town()             # 船贴着码头：按互动键直接上岸
-		elif game.at_island_dock():
-			_toast("岛上还在建设", "")
-			play("deny")
+		elif game.can_land():
+			if game.land_on_island():
+				_roam_fx = game.island_land_x()
+				world.roam_flip = true
+				play("click")
+				log.write("land", {"island": game.island_info().get("id", "")})
 		elif j.activity() == Journey.Activity.FISHING and game.fishing_blocked() and not game.pomodoro.is_break():
 			_toast("水太浅了", "不能钓鱼")
 			play("deny")
@@ -684,6 +698,8 @@ func _interact() -> void:
 			play("click")
 		elif j.activity() == Journey.Activity.FISHING and game.cast_line():
 			play("click")             # 停船后按互动键：重新甩竿
+	elif j.on_island():
+		_interact_island(float(j.roam_x()))
 	elif j.activity() == Journey.Activity.SOLD_OUT:
 		_go_fishing()
 	elif j.activity() == Journey.Activity.ROAM:
@@ -709,6 +725,22 @@ func _interact() -> void:
 			play("click")
 		else:
 			play("deny")
+
+
+## 小岛上的互动：码头尽头 = 回船；灯塔看守旁 = 聊天（接任务 / 交付）；湖边 = 看一眼。
+func _interact_island(x: float) -> void:
+	if world.island_near_pier(x):
+		if game.leave_island():
+			play("click")
+	elif world.island_near_keeper(x):
+		play("click")
+		quest_panel.open_talk(game.room_quest("lighthouse"))
+		on_panel_toggled()
+	elif world.island_near_lake(x):
+		_toast("湖水很清", "湖里有鱼，还钓不了")
+		play("click")
+	else:
+		play("deny")
 
 
 ## 走进镇上的房子：切到室内场景。
@@ -1214,7 +1246,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_interact()
 		return
 	if event is InputEventMouseMotion:
-		menu.hover = event.position / float(px_scale) - ui_off
+		menu.hover = _pz(menu, event.position / float(px_scale) - ui_off)
 		return
 	if not event is InputEventMouseButton or event.button_index != MOUSE_BUTTON_LEFT:
 		return
@@ -1276,7 +1308,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
-	elif admin.click(p) or book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or shipyard_panel.click(p) or dest_panel.click(p) or quest_panel.click(p):
+	elif admin.click(p) or book.click(p) or bag.click(p) or menu.click(_pz(menu, p)) or wardrobe.click(p) or outfit_shop.click(_pz(outfit_shop, p)) or shipyard_panel.click(_pz(shipyard_panel, p)) or dest_panel.click(p) or quest_panel.click(_pz(quest_panel, p)):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_town_button()
@@ -1377,6 +1409,9 @@ func _town_button() -> void:
 			play("click")
 		else:
 			play("deny")
+	elif game.journey.on_island():
+		if game.leave_island():
+			play("click")
 	elif game.journey.in_town():
 		_go_fishing()
 	else:
@@ -1445,6 +1480,36 @@ func _press_main() -> void:
 			game.skip_break()
 
 
+# ------------------------------------------------------------------ 商店面板放大
+## 完整窗口里进得了商店，面板放大两倍（整数倍，像素不糊）并居中；迷你窗进不了商店，不放大。
+const PANEL_ZOOM := 2.0
+
+func _is_zoomed(panel) -> bool:
+	if mini or not panel.open:
+		return false
+	if panel == menu:
+		return interior != "" and menu.tab == 0
+	return true
+
+func _zoom_t(panel) -> Vector2:
+	var x0 := (view.x - float(panel.RECT.size.x) * PANEL_ZOOM) / 2.0 - ui_off.x
+	return Vector2(x0, 28.0) - PANEL_ZOOM * Vector2(15, 28)
+
+## 把界面坐标换成该面板自己的坐标（放大的面板要缩回去）。
+func _pz(panel, p: Vector2) -> Vector2:
+	if not _is_zoomed(panel):
+		return p
+	return (p - _zoom_t(panel)) / PANEL_ZOOM
+
+func _draw_zoomed(panel) -> void:
+	if _is_zoomed(panel):
+		draw_set_transform(ui_off + _zoom_t(panel), 0.0, Vector2(PANEL_ZOOM, PANEL_ZOOM))
+		panel.draw()
+		draw_set_transform(ui_off)
+	else:
+		panel.draw()
+
+
 # ------------------------------------------------------------------ 绘制
 func _draw() -> void:
 	if game == null:
@@ -1467,12 +1532,12 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO)
 	_draw_particles(t)               # 闪光在顶栏之上、所有面板（物品栏、菜单……）之下
 	draw_set_transform(ui_off)
-	menu.draw()
+	_draw_zoomed(menu)
 	wardrobe.draw()
-	outfit_shop.draw()
-	shipyard_panel.draw()
+	_draw_zoomed(outfit_shop)
+	_draw_zoomed(shipyard_panel)
 	dest_panel.draw()
-	quest_panel.draw()
+	_draw_zoomed(quest_panel)
 	if Time.get_ticks_msec() - _toast_t0 < 3000:
 		label(_toast_l1, Vector2(17, 63), Pal.L_R)
 		label(_toast_l2, Vector2(17, 74), Pal.L_R)
@@ -1536,9 +1601,9 @@ func _draw_hud(now: int) -> void:
 	_tex_frame(main_btn, BTN_MAIN.position, 1 if _pressed_btn == "main" else 0, 2)
 	var in_town: bool = game.journey.in_town()
 	var act_now: int = game.journey.activity()
-	var show_fish: bool = in_town or act_now == Journey.Activity.SAIL_BACK
+	var show_fish: bool = in_town or act_now == Journey.Activity.SAIL_BACK or act_now == Journey.Activity.ISLAND
 	var sailing: bool = act_now == Journey.Activity.SAIL_OUT or act_now == Journey.Activity.SAIL_BACK
-	var town_ok: bool = game.can_halt_sail() if sailing else (true if act_now == Journey.Activity.WALK_TO_BOAT else game.can_go_fishing() if in_town else game.can_go_to_town())
+	var town_ok: bool = game.can_halt_sail() if sailing else (true if act_now == Journey.Activity.WALK_TO_BOAT else true if act_now == Journey.Activity.ISLAND else game.can_go_fishing() if in_town else game.can_go_to_town())
 	_tex_frame("btn_fish" if show_fish else "btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,
 			Color.WHITE if town_ok else Color(1, 1, 1, 0.35))
 	if act_now == Journey.Activity.SAIL_OUT or act_now == Journey.Activity.SAIL_BACK or act_now == Journey.Activity.WALK_TO_BOAT:
@@ -1576,6 +1641,10 @@ func _draw_hud(now: int) -> void:
 						Vector2(17, 41), Pal.L_Y)
 			elif World.SPOT_HINT.has(spot):
 				label(World.SPOT_HINT[spot], Vector2(17, 41), Pal.L_Y)
+		elif game.journey.on_island():
+			label("方向键走动", Vector2(17, 30), hint_col)
+			var ix := float(game.journey.roam_x())
+			label("空格键回船" if world.island_near_pier(ix) else ("空格键和看守聊聊" if world.island_near_keeper(ix) else ("空格键互动" if world.island_near_lake(ix) else "岛的西边还没开发" if ix <= game.island_walk_min() + 2.0 else "")), Vector2(17, 41), hint_col)
 		elif game.journey.in_town():
 			label("方向键走动", Vector2(17, 30), hint_col)
 			if game.journey.activity() == Journey.Activity.SOLD_OUT:
@@ -1592,6 +1661,8 @@ func _draw_hud(now: int) -> void:
 				elif world.stroller_near(rx, Time.get_ticks_msec()) >= 0 and not world.near_pier(rx):
 					hint = "空格键聊天"
 				label(hint, Vector2(17, 41), hint_col)
+		elif game.can_land():
+			label("空格键登岛", Vector2(17, 30), hint_col)
 		elif game.at_dock() and game.can_go_to_town():
 			label("空格键上岸", Vector2(17, 30), hint_col)
 		elif game.journey.activity() == Journey.Activity.FISHING and not game.line_out() and not game.pomodoro.is_break() and not game.fishing_blocked():
@@ -1638,7 +1709,7 @@ func cat_title() -> String:
 
 func _begin_naming() -> void:
 	_naming = true
-	_name_buf = ""
+	_name_buf = OS.get_environment("CATFISH_NAMETEXT")      # 调试：预填一段文字，截图看字的位置
 	_name_pick = 0
 	_ime_text = ""
 	DisplayServer.window_set_ime_active(true)
@@ -1684,7 +1755,7 @@ func _draw_name_dialog(t: int) -> void:
 	draw_rect(box, Pal.U_A)
 	draw_rect(box.grow(-1), Pal.U_B)
 	var shown := _name_buf + _ime_text
-	dyn_text(shown, box.position + Vector2(2, 2), Pal.L_W)
+	dyn_text(shown, box.position + Vector2(2, 0), Pal.L_W)
 	if (t / 450) % 2 == 0:
 		draw_rect(Rect2(box.position.x + 2 + dyn_text_width(shown), box.position.y + 2, 1, 10), Pal.L_Y)
 	label("最多六个字", Vector2(r.position.x + 6, r.position.y + 37), Pal.L_A)

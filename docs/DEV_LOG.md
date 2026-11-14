@@ -345,3 +345,11 @@
 - `GameState.cat_name`、`Game.set_cat_name/town_name`、起名框（`_begin_naming/_name_input/_draw_name_dialog`）、`dyn_text` 像素字体现画；生成脚本把字体复制到 `assets/fonts/pixel.woff`；`CATFISH_CATNAME` 调试变量。
 - `go_to_town(stop_at_dock)`、`journey.dock_stop`；目的地面板用它。
 - 测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR；新增 `test_v051`。版本号 0.51。
+
+## v0.52：商店放大、船吃水、岛的浅水区、叠格、登岛
+- `main.gd`：`PANEL_ZOOM`、`_is_zoomed/_zoom_t/_pz/_draw_zoomed`，点击/悬停坐标反推；起名框文字上移；`_interact_island`。
+- `world.gd`：`_draw_hull`（水线以上）、`_draw_ripples(t, pass)` 两遍、船 `boat_y` 下沉 2；岛上木桥、看守、西岸树；`island_near_*`。
+- `core/inventory.gd`：`slots_of / cells / room_for` 叠格；`game.give` 重要物品满格时顶替。
+- `core/journey.gd`：`ISLAND` 活动；`game.gd`：`land_on_island / leave_island / begin_talk_quest / reward_give`；`zone_bounds` 加岛侧浅水区。
+- `balance.json`：`island.shallow_to/walk_west/keeper_off`、lighthouse 任务、crab_recipe 物品。素材：`ico_bag`、villager_3、item_crab_recipe。
+- 测试 450 项 ALL TESTS PASS、SIM PASS；新增 `test_v052`。版本号 0.52。

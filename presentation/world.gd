@@ -87,7 +87,7 @@ func _ease(p: float) -> float:
 	return p * p * (3.0 - 2.0 * p)
 
 func boat_y(t: int) -> float:
-	return WATER_Y - 11 + (1 if (t / 900) % 2 == 0 else 0)
+	return WATER_Y - 9 + (1 if (t / 900) % 2 == 0 else 0)
 
 func bobber_rest() -> Vector2:
 	return Vector2(boat_x + 74, WATER_Y - 3)
@@ -102,7 +102,7 @@ func update(now: int, t: int) -> void:
 			boat_x = lerpf(float(j.boat_x()), DOCK_X, p)
 		Journey.Activity.SAIL_BACK:
 			boat_x = lerpf(DOCK_X, float(j.boat_x()), p)
-		Journey.Activity.FISHING, Journey.Activity.IDLE_FULL:
+		Journey.Activity.FISHING, Journey.Activity.IDLE_FULL, Journey.Activity.ISLAND:
 			boat_x = float(j.boat_x())
 		_:
 			boat_x = DOCK_X
@@ -133,6 +133,8 @@ func update(now: int, t: int) -> void:
 				ry -= float(LIFT) * clampf(1.0 - absf(rx - roam_exit_x) / 12.0, 0.0, 1.0)   # 刚走出来时还抬高着，慢慢落回地面
 			walk_behind = roam_behind
 			cat_pos = Vector2(rx, roundf(ry))
+		Journey.Activity.ISLAND:
+			cat_pos = Vector2(float(j.roam_x()), float(GROUND_Y - 28))
 		Journey.Activity.VENDING, Journey.Activity.SOLD_OUT:
 			cat_pos = Vector2(STALL_CAT_X, GROUND_Y - 29)      # 脚踩在地面上
 		_:
@@ -193,6 +195,17 @@ func frac_to_boat(x: float) -> float:
 ## 小猫（贴图左边缘 x）站在鱼摊前的任何位置都算"到摊位了"：中心落在摊位宽度内（再宽 8 像素）。
 func near_stall(x: float) -> bool:
 	return absf(x + 16.0 - (STALL_X + 23.0)) <= 31.0
+
+## ---- 小岛上的位置判断（x 是小猫贴图左边缘）----
+func island_near_pier(x: float) -> bool:
+	return x >= m.game.island_land_x() - 14.0
+
+func island_near_keeper(x: float) -> bool:
+	return absf(x + 16.0 - (m.game.island_keeper_x() + 8.0)) <= 26.0
+
+func island_near_lake(x: float) -> bool:
+	var lk: Vector2 = m.game.island_lake()
+	return x + 16.0 >= lk.x - 14.0 and x + 16.0 <= lk.y + 14.0
 
 func near_pier(x: float) -> bool:
 	return x <= PIER_X + NEAR
@@ -497,6 +510,15 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 		for rx2 in [lx - 6.0, lx + lw + 3.0, lx + lw + 8.0]:
 			m.draw_rect(Rect2(rx2, GROUND_Y - 9, 1, 9), Pal.U_G)
 			m.draw_rect(Rect2(rx2 - 1, GROUND_Y - 11, 3, 3), Pal.L_G)
+	# 湖上的木桥：小猫从桥上走过去，桥栏在小猫后面
+	if lx + lw > left - 20 and lx < right + 20:
+		m.draw_rect(Rect2(lx - 8, GROUND_Y + 2, lw + 16, 4), Pal.L_O)
+		m.draw_rect(Rect2(lx - 8, GROUND_Y + 5, lw + 16, 1), Pal.U_O)
+		for bx in range(int(lx) - 8, int(lx + lw) + 8, 10):
+			m.draw_rect(Rect2(bx, GROUND_Y + 2, 1, 3), Pal.U_O)
+		for rx3 in [lx - 8.0, lx + lw / 2.0, lx + lw + 6.0]:
+			m.draw_rect(Rect2(rx3, GROUND_Y - 6, 2, 9), Pal.U_O)
+		m.draw_rect(Rect2(lx - 8, GROUND_Y - 5, lw + 16, 1), Pal.U_O)
 	# 树和灯塔
 	for tx in [-250.0, -330.0, -520.0, -590.0, -660.0]:
 		var px: float = shore + tx
@@ -509,6 +531,22 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 			m.draw_rect(Rect2(lhx + 5, GROUND_Y - 53, 8, 3), Color(Pal.L_Y, 0.9))
 			m.draw_rect(Rect2(lhx - 4, GROUND_Y - 53, 5, 1), Color(Pal.L_Y, 0.45))
 			m.draw_rect(Rect2(lhx + 17, GROUND_Y - 53, 5, 1), Color(Pal.L_Y, 0.45))
+	# 岛的西岸：一排树挡着路，走不过去
+	var wx: float = m.game.island_walk_min()
+	for k in 4:
+		var px2: float = wx - 4.0 + float(k) * 22.0 - 30.0
+		if px2 > left - 30 and px2 < right + 4:
+			m.draw_texture(m.tex["tree"], Vector2(px2, GROUND_Y - 36 + (k % 2) * 2))
+	# 灯塔看守：站在灯塔脚下，面朝码头；有事可做时头顶冒一个黄色的"!"
+	var kx: float = m.game.island_keeper_x()
+	if kx > left - 30 and kx < right + 4:
+		m.tex_frame_flipped("villager_3", Vector2(kx, GROUND_Y - 19), 0, 2)
+		var qid: String = m.game.room_quest("lighthouse")
+		if qid != "" and (m.game.quest_state(qid) == "" or m.game.can_turn_in(qid)):
+			var by: float = GROUND_Y - 36.0 - float((t / 400) % 2)
+			m.draw_rect(Rect2(kx + 5, by - 1, 4, 9), Pal.U_K)
+			m.draw_rect(Rect2(kx + 6, by, 2, 5), Pal.L_Y)
+			m.draw_rect(Rect2(kx + 6, by + 6, 2, 1), Pal.L_Y)
 	var sign_x: float = shore - 24.0
 	if sign_x > left - 40 and sign_x < right + 10 and m.game.island_visited():
 		_plate(sign_x, GROUND_Y - 22, str(m.game.island_info().get("name", "")))
@@ -522,7 +560,7 @@ func _draw_waves(left: float, right: float, bottom: float, t: int) -> void:
 	var wstart: float = -100000.0
 	var fade: float = 1.0
 	if not m.game.island_info().is_empty():
-		wstart = m.game.island_x() + float(m.game.island_info().get("current_end", 160))
+		wstart = m.game.island_x() + float(m.game.island_info().get("shallow_to", 386))
 	if left >= wend or right <= wstart:
 		return
 	var x: float = floorf(maxf(left, wstart) / 2.0) * 2.0
@@ -630,9 +668,9 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 			for tint in _zone_tints(x + 2.0, zones):
 				m.draw_rect(Rect2(x, WATER_Y, 4, maxf(0, bottom - WATER_Y)), tint)
 			x += 4.0
-		for z in zones:
-			var bx := float(z["x1"])
-			if z["id"] != "shallow" and bx > left - 4 and bx < right + 4:
+		for zi in zones.size() - 1:            # 每两片水域之间漂一个浮标（最后一片的右端是海岸）
+			var bx := float(zones[zi]["x1"])
+			if bx > left - 4 and bx < right + 4:
 				var bob := 1 if (t / 700 + int(bx)) % 2 == 0 else 0
 				# 水域分界浮标：黄色浮筒 + 竖杆 + 小旗，和钓鱼的红白浮漂区分开
 				m.draw_rect(Rect2(bx, WATER_Y - 9 + bob, 1, 6), Pal.U_K)
@@ -692,10 +730,11 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	m.draw_texture_rect_region(m.tex["market_gate"], Rect2(GATE_X + 38, GROUND_Y - 42, 10, 42), Rect2(38, 8, 10, 42))
 
 	# 船：鱼篓在船舱里、小猫背后（先画）→ 小猫 → 船身（盖住鱼篓和小猫的下半截）→ 龙头 → 吃水线和水纹
+	_draw_ripples(t, 0)                    # 船背面的那几道水纹先画，被船身挡住
 	_draw_boat_basket(bob_y, not in_town)
 	if not in_town:
 		_draw_boat_cat(act, on_break, now, t)
-	m.draw_texture(m.tex["boat_%d" % clampi(int(m.game.state.boat_level), 0, 3)] if m.game.state.boat_level > 0 else m.tex["boat"], Vector2(boat_x, bob_y))
+	_draw_hull(bob_y)
 	m.draw_texture(m.tex["boat_head"], Vector2(boat_x - 2, bob_y - 17))
 	_draw_waterline(bob_y, t)
 	if not in_town:
@@ -748,24 +787,25 @@ func _zone_tints(cx: float, zones: Array) -> Array:
 func _draw_waterline(bob_y: float, t: int) -> void:
 	var x0 := boat_x - 1.0
 	var w := 66.0
-	var top := float(WATER_Y + 2)          # 水线和浮漂入水的位置持平，船身只露出水面以上的部分
-	var zones: Array = m.game.zone_bounds(SHORE_X)
-	# 盖住船底的水：颜色要和这里的海一致（含水域染色），按 3 像素一列画
-	var cx := x0
-	while cx < x0 + w:
-		var col: Color = Pal.L_B
-		for tint in _zone_tints(cx + 1.5, zones):
-			col = col.lerp(Color(tint, 1.0), tint.a)
-		var rel := cx - x0
-		var y0 := top + (1.0 if rel < 3.0 or rel > w - 6.0 else 0.0)
-		m.draw_rect(Rect2(cx, y0, minf(3.0, x0 + w - cx), float(WATER_Y + 10) - y0), col)
-		cx += 3.0
+	var top := float(WATER_Y + 2)
 	for k in int((w - 12.0) / 3.0):                                 # 水线上的白沫，一格格错开起伏
 		var wave := (k + t / 260) % 2 == 0
 		m.draw_rect(Rect2(x0 + 6.0 + k * 3.0, top - (1 if wave else 0) + 1, 3, 1), Pal.L_W if wave else Pal.L_C)
 	m.draw_rect(Rect2(x0 + 6.0, WATER_Y + 3, 14, 1), Pal.L_C)    # 船身下面透出的水纹
 	m.draw_rect(Rect2(x0 + 30.0 + float((t / 500) % 3) * 2.0, WATER_Y + 5, 12, 1), Pal.L_C)
-	_draw_ripples(t)
+	_draw_ripples(t, 1)
+
+## 船身只画到水线以上：水面以下的部分不画，海面的浪纹原样透出来（不再盖一块纯色矩形）。
+func _draw_hull(bob_y: float) -> void:
+	var tx: Texture2D = m.tex["boat_%d" % clampi(int(m.game.state.boat_level), 0, 3)] if m.game.state.boat_level > 0 else m.tex["boat"]
+	var w := float(tx.get_width())
+	var vis := minf(float(tx.get_height()), float(WATER_Y + 2) - bob_y)
+	for seg in [[0.0, 3.0, 1.0], [3.0, w - 6.0, 0.0], [w - 3.0, w, 1.0]]:     # 船头船尾收一格，水线是弧形的
+		var x0: float = seg[0]
+		var x1: float = seg[1]
+		var h: float = vis - float(seg[2])
+		if x1 > x0 and h > 0.0:
+			m.draw_texture_rect_region(tx, Rect2(boat_x + x0, bob_y, x1 - x0, h), Rect2(x0, 0, x1 - x0, h))
 
 # ------------------------------------------------------------------ 水纹
 ## 水纹都钉在世界坐标上，船开走以后留在原地慢慢散开：
@@ -807,7 +847,7 @@ func _update_wake(t: int) -> void:
 		_ripples.append({"k": "ring", "x": boat_x + 2.0, "y": y, "t0": t, "life": 2600, "side": -1.0})
 		_ripples.append({"k": "ring", "x": boat_x + 62.0, "y": y, "t0": t, "life": 2600, "side": 1.0})
 
-func _draw_ripples(t: int) -> void:
+func _draw_ripples(t: int, pass_no: int = 1) -> void:
 	var keep: Array = []
 	for r in _ripples:
 		var age := t - int(r["t0"])
@@ -815,6 +855,8 @@ func _draw_ripples(t: int) -> void:
 		if age >= life or _ripples.size() > 120:
 			continue
 		keep.append(r)
+		if pass_no == 0 and r["k"] != "wake":
+			continue
 		var f := float(age) / float(life)
 		var col := Color(Pal.L_W, 0.2 + 0.7 * sin(PI * f))
 		if r["k"] == "ring":
@@ -828,11 +870,17 @@ func _draw_ripples(t: int) -> void:
 			var x0 := xc if dir < 0.0 else xc - len
 			var sp := roundf(float(r["spread"]) * f)
 			var y: float = float(r["y"])
-			m.draw_rect(Rect2(x0, y - sp, len, 1), col)
-			if sp > 0.0:
-				m.draw_rect(Rect2(x0, y + sp, len, 1), col)
-	_ripples = keep
-	_draw_drops(t)
+			if pass_no == 0:
+				if sp > 0.0:
+					m.draw_rect(Rect2(x0, y - sp, len, 1), col)      # 远的那道在船后面
+			else:
+				if sp <= 0.0:
+					m.draw_rect(Rect2(x0, y, len, 1), col)
+				else:
+					m.draw_rect(Rect2(x0, y + sp, len, 1), col)
+	if pass_no == 1:
+		_ripples = keep
+		_draw_drops(t)
 
 ## ---- 浮漂处的水花：圈圈涟漪 + 飞起来又落回水里的小水珠 ----
 var _drops: Array = []
@@ -1132,7 +1180,7 @@ func _moon(c: Vector2, r: int, phase: float, south: bool, alpha: float) -> void:
 
 func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 	# 番茄休息时小猫原地打盹——但玩家正用方向键带着它走的时候除外，那时照常画走路
-	if on_break and act != Journey.Activity.ROAM:
+	if on_break and act != Journey.Activity.ROAM and act != Journey.Activity.ISLAND:
 		m.draw_cat(cat_pos + Vector2(0, -1 if act != Journey.Activity.VENDING else 0), 2 + (t / 1100) % 2)
 		m.draw_texture(m.tex["zzz"], cat_pos + Vector2(30, -4 - (t / 500) % 3))
 		return
@@ -1141,7 +1189,7 @@ func _draw_town_cat(act: int, on_break: bool, now: int, t: int) -> void:
 			m.draw_cat(cat_pos, 4 + (t / 180) % 2, walk_flip)
 			if not m.game.state.basket.is_empty():        # 还有鱼就背着鱼篓
 				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if walk_flip else 3, 16 + (t / 180) % 2))
-		Journey.Activity.ROAM:
+		Journey.Activity.ROAM, Journey.Activity.ISLAND:
 			m.draw_cat(cat_pos, (4 + (t / 180) % 2) if roam_moving else 4, roam_flip)
 			if not m.game.state.basket.is_empty():
 				m.draw_texture(m.tex["basket"], cat_pos + Vector2(18 if roam_flip else 3, 16 + ((t / 180) % 2 if roam_moving else 0)))
@@ -1580,5 +1628,5 @@ func _draw_room_customer(kind: String, ox: float, fy: float, keeper_pos: Vector2
 		elif k < 0.55:
 			m.tex_frame("sparkle", counter + Vector2(0, -6), (t / 120) % 2, 2)
 		else:
-			var item := "bobber" if kind == "tackle" else "ico_fruit"
+			var item := "ico_bag"           # 店主递出购物袋
 			m.draw_texture(m.tex[item], counter.lerp(hand, (k - 0.55) / 0.45).round())

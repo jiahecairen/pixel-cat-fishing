@@ -55,6 +55,7 @@ func _init() -> void:
 		test_v048(balance, fish)
 		test_v050(balance, fish)
 		test_v051(balance, fish)
+		test_v052(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -688,7 +689,8 @@ func test_water(balance: Dictionary, fish: Array) -> void:
 	var g := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(4))
 	check(g.zone_id(100.0) == "deep" and g.zone_id(250.0) == "shallow" and g.zone_id(400.0) == "shallow" and g.zone_id(-3000.0) == "deep", "按位置判断水域（远海也是深水区）")
 	var zb := g.zone_bounds(640.0)
-	check(zb.size() == 2 and zb[1]["x1"] == 640.0 and zb[1]["x0"] == zb[0]["x1"], "水域范围首尾相接")
+	check(zb.size() == 3 and zb[2]["x1"] == 640.0 and zb[2]["x0"] == zb[1]["x1"] and zb[1]["x0"] == zb[0]["x1"], "水域范围首尾相接（小岛浅水区 / 深水区 / 小镇浅水区）")
+	check(g.zone_id(g.island_x() + 200.0) == "shallow" and g.zone_id(g.island_x() + 500.0) == "deep", "小岛附近是浅水区")
 	check(g.can_steer() and g.steer_to(120.0) and g.journey.boat_x() == 120, "钓鱼时可以划船")
 	check(g.steer_to(-50.0) and g.journey.boat_x() == 30 and g.steer_to(9999.0) and g.journey.boat_x() == 512, "划船范围有边界（右端是码头）")
 	check(not g.line_out() and g.fishing.state == Fishing.State.IDLE, "划船先收杆")
@@ -753,7 +755,7 @@ func test_warehouse(balance: Dictionary, fish: Array) -> void:
 	check(g.fetch_item("pearl", true) == 3 and g.inventory.count(g.state, "pearl") == 3 and g.inventory.count_w(g.state, "pearl") == 0, "整堆取回")
 	check(g.stash_item("bait_worm", true) == 50 and g.state.equipped_bait == "", "鱼饵全存走后换回面团")
 	g.inventory.add(g.state, "bait_worm", 60)
-	check(g.fetch_item("bait_worm", true) == 39 and g.inventory.count(g.state, "bait_worm") == 99 and g.inventory.count_w(g.state, "bait_worm") == 11, "取回受 99 个上限限制，放不下的留在仓库")
+	check(g.fetch_item("bait_worm", true) == 50 and g.inventory.count(g.state, "bait_worm") == 110 and g.inventory.count_w(g.state, "bait_worm") == 0 and g.inventory.slots_of("bait_worm", 110) == 2, "叠过 99 个的占第二格，仓库的整堆取得回来")
 	check(g.stash_item("nope") == 0 and g.fetch_item("pearl") == 0, "不存在或没有的不动")
 	var st2 := GameState.new()
 	check(st2.from_dict(g.state.to_dict()) and st2.warehouse == g.state.warehouse and st2.inventory == g.state.inventory, "仓库随存档保存和读取")
@@ -786,7 +788,8 @@ func test_stats_and_bait_shop(balance: Dictionary, fish: Array) -> void:
 	check(not g.can_buy_bait("bait_worm"), "钱不够不能买")
 	g.state.wallet_gold = 9999
 	g.inventory.add(g.state, "bait_worm", 98)
-	check(not g.buy_bait("bait_worm") and g.inventory.count(g.state, "bait_worm") == 99, "鱼饵到 99 个上限不能再买")
+	g.state.bag_slots = g.inventory.slots_used(g.state)
+	check(not g.buy_bait("bait_worm") and g.inventory.count(g.state, "bait_worm") == 99, "鱼饵叠满 99 个、又没有空格子就不能再买")
 
 func test_outfit_shop_and_dock(balance: Dictionary, fish: Array) -> void:
 	print("outfit: 买帽子 / 买衣服 / 码头不能钓鱼")
@@ -864,8 +867,11 @@ func test_bag_gear_quests(balance: Dictionary, fish: Array) -> void:
 	var inv = g.inventory
 	check(g.state.bag_slots == 8 and g.equipment_name("rod") == "树枝" and int(g.state.gear["rod"]) == 0, "开局 8 格，身上装着树枝竿")
 	# 每格最多叠 10 个
-	check(inv.add(g.state, "pearl", 10) and inv.count(g.state, "pearl") == 10 and not inv.add(g.state, "pearl", 1), "珍珠一格最多 10 个")
-	check(g.give("pearl") == "dropped" and inv.count_w(g.state, "pearl") == 0 and inv.count(g.state, "pearl") == 10, "叠满了放不下的重要物品也不会传送到仓库")
+	check(inv.add(g.state, "pearl", 10) and inv.count(g.state, "pearl") == 10 and inv.slots_used(g.state) == 1, "珍珠一格 10 个")
+	check(g.give("pearl") == "bag" and inv.count(g.state, "pearl") == 11 and inv.slots_used(g.state) == 2, "叠满了再来一个占下一格，不会被扔掉")
+	check(inv.cells(g.state) == [["pearl", 10], ["pearl", 1]], "物品栏里分成两格显示")
+	g.state.bag_slots = inv.slots_used(g.state)
+	check(g.give("boot") == "dropped" and inv.count(g.state, "boot") == 0, "格子真的满了，普通物品只好扔掉")
 	check(g.take_overflow() == "dropped" and g.take_overflow() == "", "扔掉会提示一次")
 	# 8 种东西占满 8 格，第 9 种放不下
 	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(72))
@@ -951,7 +957,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 8 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "8 种普通物品（含两种鱼饵）+ 10 件装备，开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 9 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "9 种普通物品（含两种鱼饵、蟹笼配方）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -1070,8 +1076,12 @@ func test_bait(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(21))
 	g.set_chest_chance(0.0)
-	check(g.inventory.add(g.state, "bait_worm", 200) and g.inventory.count(g.state, "bait_worm") == 99, "鱼饵最多 99 个")
-	check(not g.inventory.add(g.state, "bait_worm", 1), "满 99 个再加不进去")
+	check(g.inventory.add(g.state, "bait_worm", 200) and g.inventory.count(g.state, "bait_worm") == 200 and g.inventory.slots_used(g.state) == 3, "鱼饵每格 99 个，200 个占三格")
+	g.state.bag_slots = 3
+	check(g.inventory.add(g.state, "bait_worm", 1000) and g.inventory.count(g.state, "bait_worm") == 297, "格子满了只放得下剩下的空位")
+	check(not g.inventory.add(g.state, "bait_worm", 1), "没有空位再加不进去")
+	g.state.bag_slots = 8
+	g.inventory.remove(g.state, "bait_worm", 198)
 	g.inventory.add(g.state, "bait_shrimp", 2)
 	var r: Dictionary = g.use_item("bait_shrimp")
 	check(r["ok"] and g.state.equipped_bait == "bait_shrimp" and g.inventory.count(g.state, "bait_shrimp") == 2, "使用鱼饵 = 装上，不消耗")
@@ -1328,6 +1338,27 @@ func test_v051(balance: Dictionary, fish: Array) -> void:
 	g3.go_to_town(false)
 	_run(g3, g3._clock, 120.0)
 	check(g3.journey.activity() != Journey.Activity.ROAM, "普通回小镇仍然自动去摊位")
+
+func test_v052(balance: Dictionary, fish: Array) -> void:
+	print("v052: 登岛、灯塔看守的任务、物品叠格")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(111))
+	g.state.boat_level = 1
+	g.steer_to(g.island_x())
+	check(g.at_island_dock() and g.can_land(), "船贴着岛的码头可以登岛")
+	check(g.land_on_island() and g.journey.on_island() and g.journey.roam_x() == int(g.island_land_x()), "登岛：小猫站在码头尽头")
+	check(not g.journey.on_boat() and not g.journey.in_town(), "在岛上既不算在船上也不算在镇上")
+	_run(g, g._clock, 60.0)
+	check(g.journey.on_island() and g.state.basket.is_empty(), "岛上不会自己走开，也不钓鱼")
+	check(g.leave_island() and g.journey.activity() == Journey.Activity.FISHING, "回船接着钓鱼")
+	check(not g.leave_island(), "不在岛上不能回船")
+	check(g.room_quest("lighthouse") == "lighthouse" and g.quest_state("lighthouse") == "" and g.next_quest_letter() != "lighthouse", "看守的任务当面接，不会出现在漂流瓶里")
+	g.begin_talk_quest("lighthouse")
+	check(g.quest_state("lighthouse") == "active" and not g.can_turn_in("lighthouse"), "聊一次就接下任务")
+	g.inventory.add(g.state, "bottle", 2)
+	g.inventory.add(g.state, "pearl", 1)
+	check(g.turn_in("lighthouse") and g.inventory.count(g.state, "crab_recipe") == 1 and g.inventory.count(g.state, "bottle") == 0, "交付后拿到蟹笼配方")
+	check(not g.turn_in("lighthouse") and g.inventory.count(g.state, "crab_recipe") == 1, "任务只能交一次")
+	check(g.zone_id(g.island_x() + 100.0) == "shallow" and g.zone_id(g.island_x() + 800.0) == "deep", "岛边是浅水区")
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

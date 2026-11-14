@@ -367,16 +367,29 @@ func bait_active() -> bool:
 func bird_act_after_ms() -> int:
 	return int(_birds.get("act_after_ms", 6000))
 
+## 小岛一侧的浅水区：从小岛到 island.shallow_to（距小岛的距离）；和小镇一侧对称，中间是深水区。
+func _island_shallow_end() -> float:
+	if island_info().is_empty():
+		return -1.0e9
+	return island_x() + float(island_info().get("shallow_to", 386))
+
 func zone_id(x: float) -> String:
+	if x < _island_shallow_end():
+		return "shallow"
 	for z in _water.get("zones", []):
 		if x < float(z["max_x"]):
 			return z["id"]
 	return "shallow"
 
 ## 各水域的范围：[{id, x0, x1}]，从左到右；最后一片的右端用 sea_end 截断。
+## 画面和钓鱼的水域都靠它：小岛一侧是浅水区，中间深水区，小镇一侧又是浅水区。
 func zone_bounds(sea_end: float) -> Array:
 	var out: Array = []
-	var x0 := -100000.0                  # 最左的深水区一直延伸到远海
+	var x0 := -100000.0
+	if not island_info().is_empty():
+		var ie := island_x() + float(island_info().get("shallow_to", 386))
+		out.append({"id": "shallow", "x0": x0, "x1": ie})
+		x0 = ie
 	for z in _water.get("zones", []):
 		var x1 := minf(float(z["max_x"]), sea_end)
 		out.append({"id": z["id"], "x0": x0, "x1": x1})
@@ -423,6 +436,46 @@ func at_island_shoal() -> bool:
 ## 船贴着小岛的码头。
 func at_island_dock() -> bool:
 	return not island_info().is_empty() and float(journey.boat_x()) <= island_x() + 14.0
+
+## 小岛上的位置（世界坐标）：登岛时站在码头尽头，往西走进岛里；灯塔、看守人、岛心湖都以岛的坐标为准。
+func island_land_x() -> float:
+	return island_x() - 34.0
+
+func island_walk_min() -> float:
+	return island_x() - float(island_info().get("walk_west", 760))
+
+func island_keeper_x() -> float:
+	return island_x() - float(island_info().get("keeper_off", 196))
+
+## 湖的范围（世界坐标 x0, x1）。
+func island_lake() -> Vector2:
+	var shore := island_x() - 64.0
+	return Vector2(shore - 420.0, shore - 270.0)
+
+func can_land() -> bool:
+	return at_island_dock() and journey.can_depart() and not pomodoro.is_break()
+
+## 在岛的码头按互动键：小猫上岸（先收竿）。
+func land_on_island() -> bool:
+	if not can_land():
+		return false
+	var now: int = _clock.now_ms()
+	fishing.stop(now)
+	state.journey["line_out"] = 1
+	_cancel_bird()
+	if not journey.land_on_island(island_land_x(), now):
+		return false
+	dirty = true
+	return true
+
+## 回到船上，接着钓鱼。
+func leave_island() -> bool:
+	var now: int = _clock.now_ms()
+	if not journey.leave_island(now):
+		return false
+	state.journey["line_out"] = 1
+	dirty = true
+	return true
 
 ## 第一次靠近小岛：记下来并给界面一个"发现小岛"事件。
 func _check_island(events: Array) -> void:
@@ -928,7 +981,7 @@ func give(id: String, n: int = 1, events: Array = []) -> String:
 	if moved >= n:
 		return "bag"
 	var left := n - moved
-	if is_important(id) and inventory.count(state, id) == 0:
+	if is_important(id):
 		# 格子满了：顶掉最普通的一种非重要物品（整格）
 		var victim := ""
 		var best := -1.0
@@ -1065,6 +1118,8 @@ func next_quest_letter() -> String:
 		var id := str(q["id"])
 		if quest_state(id) != "":
 			continue
+		if bool(q.get("start_on_talk", false)):      # 当面接的任务（灯塔看守），漂流瓶里不会出现
+			continue
 		var req := str(q.get("requires", ""))
 		if req != "" and quest_state(req) != "done":
 			continue
@@ -1115,6 +1170,15 @@ func quest_needs(id: String) -> Array:
 		out.append([str(w["item"]), inventory.count(state, str(w["item"])), int(w["n"])])
 	return out
 
+## 和 NPC 当面聊起一个"当面接"的任务：还没开始就接下来。
+func begin_talk_quest(id: String) -> void:
+	var q := quest_cfg(id)
+	if q.is_empty() or not bool(q.get("start_on_talk", false)) or quest_state(id) != "":
+		return
+	state.quests[id] = "active"
+	state.revision += 1
+	dirty = true
+
 func can_turn_in(id: String) -> bool:
 	if quest_state(id) != "active":
 		return false
@@ -1133,6 +1197,8 @@ func turn_in(id: String) -> bool:
 	var qc: Dictionary = quest_cfg(id)
 	if str(qc.get("reward_item", "")) != "":
 		grant_gear(str(qc["reward_item"]))
+	if str(qc.get("reward_give", "")) != "":
+		give(str(qc["reward_give"]), 1)
 	if int(qc.get("reward_slots", 0)) > 0:
 		state.bag_slots += int(qc["reward_slots"])
 	_apply_upgrades()

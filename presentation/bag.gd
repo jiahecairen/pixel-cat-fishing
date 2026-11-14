@@ -50,10 +50,12 @@ func _use_rect() -> Rect2:
 		return Rect2(r.end.x - 31, _detail_y(), 28, 12)
 	return Rect2(r.end.x - 46, _detail_y() + 4, 38, 13)
 
+## 每一格的 [id, 个数]；叠满的物品占好几格。
+func _cells() -> Array:
+	return m.game.inventory.cells(m.game.state, wh and tab == 1)
+
 func _owned() -> Array:
-	if wh and tab == 1:
-		return m.game.inventory.owned_w(m.game.state)
-	return m.game.inventory.owned(m.game.state)
+	return _cells().map(func(c): return c[0])
 
 func _cnt(id: String) -> int:
 	if wh and tab == 1:
@@ -255,7 +257,7 @@ func draw() -> void:
 		if i < owned.size():
 			var d: Dictionary = g.inventory.by_id[owned[i]]
 			m.draw_texture(m.tex[d["sprite"]], p + Vector2((size - 16) / 2, (size - 16) / 2))
-			var n: int = _cnt(owned[i])
+			var n: int = int(_cells()[i][1])
 			if n > 1:
 				var s := str(n)
 				m.draw_rect(Rect2(p.x + size - s.length() * 4 - 2, p.y + size - 7, s.length() * 4 + 1, 6), Pal.U_K)

@@ -27,22 +27,37 @@ func stack_cap(id: String) -> int:
 	var ms := int(by_id.get(id, {}).get("max_stack", 0))
 	return ms if ms > 0 else stack_default
 
-## 手里占了几格（每种物品一格）。
+## 一种物品占几格：每 stack_cap 个一格，叠满了再来的占下一格。
+func slots_of(id: String, n: int) -> int:
+	return 0 if n <= 0 else int(ceil(float(n) / float(stack_cap(id))))
+
+## 手里占了几格。
 func slots_used(s: GameState) -> int:
 	var n := 0
 	for k in s.inventory:
-		if int(s.inventory[k]) > 0:
-			n += 1
+		n += slots_of(str(k), int(s.inventory[k]))
 	return n
 
-## 现在最多还能放进几个：受每格叠加上限和格子总数限制。
+## 物品栏每一格的内容 [[id, 个数], ...]，按定义顺序；叠满的物品拆成几格。warehouse=true 时看仓库。
+func cells(s: GameState, warehouse: bool = false) -> Array:
+	var out: Array = []
+	for d in defs:
+		var left := count_w(s, d["id"]) if warehouse else count(s, d["id"])
+		var cap := stack_cap(d["id"])
+		while left > 0:
+			out.append([d["id"], mini(left, cap)])
+			left -= cap
+	return out
+
+## 现在最多还能放进几个：先填满已有的那格，再用空格子。
 func room_for(s: GameState, id: String, n: int = 1) -> int:
 	if not by_id.has(id) or n <= 0:
 		return 0
+	var cap := stack_cap(id)
 	var have := count(s, id)
-	if have == 0 and slots_used(s) >= s.bag_slots:
-		return 0
-	return clampi(stack_cap(id) - have, 0, n)
+	var tail := slots_of(id, have) * cap - have                 # 已有那几格里的空位
+	var free_slots := maxi(0, s.bag_slots - slots_used(s))
+	return clampi(tail + free_slots * cap, 0, n)
 
 ## 放进物品栏。放不下的部分不放（返回 false 表示一个都没放进去）；调用方决定放不下怎么办。
 func add(s: GameState, id: String, n: int = 1) -> bool:

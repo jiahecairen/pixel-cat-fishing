@@ -4,11 +4,11 @@ extends RefCounted
 
 const Pal := preload("res://presentation/palette.gd")
 
-const RECT := Rect2(15, 28, 98, 66)
+const RECT := Rect2(15, 28, 130, 66)   # 宽一点，几金几银几铜写得下
 const ROW_X := 58
 const ROW_Y := 44
 const ROW_H := 11
-const CLOSE_RECT := Rect2(100, 30, 11, 11)
+const CLOSE_RECT := Rect2(132, 30, 11, 11)
 
 var open: bool = false
 var kind: String = "hat"
@@ -41,7 +41,7 @@ func _items() -> Array:
 	return m.game.cat_items(kind)
 
 func _row_rect(i: int) -> Rect2:
-	return Rect2(ROW_X, ROW_Y + i * ROW_H - 1, 54, ROW_H)
+	return Rect2(ROW_X, ROW_Y + i * ROW_H - 1, 84, ROW_H)
 
 ## 对第 i 件货做"买下 / 穿上"。
 func act(i: int) -> void:
@@ -123,11 +123,11 @@ func draw() -> void:
 		var owned: bool = g.cat_owns(kind, i)
 		m.label(str(items[i]["name"]), Vector2(ROW_X + 3, y), Pal.L_W if owned else Pal.L_A)
 		if g.cat_wearing(kind, i):
-			m.label("穿着", Vector2(ROW_X + 32, y), Pal.L_G)
+			m.label("穿着", Vector2(ROW_X + 58, y), Pal.L_G)
 		elif owned:
-			m.label("已有", Vector2(ROW_X + 32, y), Pal.L_A)
+			m.label("已有", Vector2(ROW_X + 58, y), Pal.L_A)
 		else:
-			m.money_full_right(g.cat_price(kind, i), ROW_X + 51, y + 3, Pal.L_Y if g.state.wallet_gold >= g.cat_price(kind, i) else Pal.L_R)
+			m.money_full_right(g.cat_price(kind, i), ROW_X + 81, y + 3, Pal.L_Y if g.state.wallet_gold >= g.cat_price(kind, i) else Pal.L_R)
 	if Time.get_ticks_msec() - note_t0 < 1500:
 		m.label(note, Vector2(19, 82), Pal.L_R)
 	else:
