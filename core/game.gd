@@ -446,13 +446,22 @@ func at_island_dock() -> bool:
 func island_land_x() -> float:
 	return island_x() - 34.0
 
-## 岛上能走的最西处：岛心湖的东岸（湖挡着路，小猫就站在岸边钓鱼）。
-func island_walk_min() -> float:
+## 湖东岸的钓位（小猫站在这里朝西钓鱼）。
+func lake_spot_x() -> float:
 	return island_lake().y + 2.0
+
+func bridge_built() -> bool:
+	return int(state.effects.get("bridge", 0)) == 1
+
+## 岛上能走的最西处：没修桥时是湖东岸（湖挡着路）；修好桥后能一直走到岛的西边。
+func island_walk_min() -> float:
+	if bridge_built():
+		return island_x() - float(island_info().get("walk_west", 760))
+	return lake_spot_x()
 
 ## 小猫是不是站在湖边的钓位上。
 func at_lake_spot() -> bool:
-	return journey.on_island() and float(journey.roam_x()) <= island_walk_min() + 3.0
+	return journey.on_island() and absf(float(journey.roam_x()) - lake_spot_x()) <= 3.0
 
 func island_keeper_x() -> float:
 	return island_x() - float(island_info().get("keeper_off", 196))
@@ -505,7 +514,8 @@ func drift_x(i: int) -> float:
 	return island_x() + float(offs[i]) if i < offs.size() else INF
 
 func drift_count() -> int:
-	return _cfg.get("drift", {}).get("offsets", []).size()
+	var n: int = _cfg.get("drift", {}).get("offsets", []).size()
+	return n if bridge_built() else mini(n, int(_cfg.get("drift", {}).get("west_from", n)))
 
 func drift_ready(i: int) -> bool:
 	return i < drift_count() and _clock.now_ms() >= int(state.effects.get("drift_%d" % i, 0))
@@ -544,6 +554,104 @@ func pick_drift(i: int) -> Dictionary:
 	state.effects["drift_%d" % i] = _clock.now_ms() + int(cfg.get("refill_min", 8)) * 60000
 	dirty = true
 	return out
+
+# ------------------------------------------------------------------ 工作台与蟹笼
+func pots_cfg() -> Dictionary:
+	return _cfg.get("pots", {})
+
+func bench_x() -> float:
+	return island_keeper_x() + float(pots_cfg().get("bench_off", -66))
+
+func pot_count() -> int:
+	var n := 0
+	for i in int(pots_cfg().get("max", 3)):
+		if int(state.effects.get("pot_%d" % i, 0)) > 0:
+			n += 1
+	return n
+
+func has_pot_recipe() -> bool:
+	return inventory.count(state, "crab_recipe") > 0
+
+func pot_materials_ok() -> bool:
+	for c in pots_cfg().get("cost", []):
+		if inventory.count(state, str(c[0])) < int(c[1]):
+			return false
+	return true
+
+## 在工作台做一个蟹笼（要配方和材料），自动放进岛心湖。成功返回 true。
+func craft_pot() -> bool:
+	if not journey.on_island() or not has_pot_recipe() or not pot_materials_ok():
+		return false
+	if pot_count() >= int(pots_cfg().get("max", 3)):
+		return false
+	for c in pots_cfg().get("cost", []):
+		inventory.remove(state, str(c[0]), int(c[1]))
+	for i in int(pots_cfg().get("max", 3)):
+		if int(state.effects.get("pot_%d" % i, 0)) == 0:
+			state.effects["pot_%d" % i] = _clock.now_ms() + int(pots_cfg().get("ready_min", 25)) * 60000
+			break
+	dirty = true
+	return true
+
+func pot_ready(i: int) -> bool:
+	var v := int(state.effects.get("pot_%d" % i, 0))
+	return v > 0 and _clock.now_ms() >= v
+
+func pots_ready() -> int:
+	var n := 0
+	for i in int(pots_cfg().get("max", 3)):
+		if pot_ready(i):
+			n += 1
+	return n
+
+## 在湖边收蟹笼：每个好了的笼子给一点铜币，有机会带出别的东西；笼子自动重新下好。返回 {"gold","items":{id:n}}。
+func collect_pots() -> Dictionary:
+	var out := {"gold": 0, "items": {}}
+	if not at_lake_spot() or pomodoro.is_break():
+		return out
+	var cfg := pots_cfg()
+	for i in int(cfg.get("max", 3)):
+		if not pot_ready(i):
+			continue
+		var gr: Array = cfg.get("gold", [10, 30])
+		var gold := _rng.randi_range(int(gr[0]), int(gr[1]))
+		economy.grant_gold(state, state.new_id("p"), gold)
+		out["gold"] = int(out["gold"]) + gold
+		if _rng.randf() < float(cfg.get("item_chance", 0.4)):
+			var total := 0.0
+			for e in cfg.get("pool", []):
+				total += float(e[1])
+			var r := _rng.randf() * total
+			for e in cfg["pool"]:
+				r -= float(e[1])
+				if r < 0.0:
+					give(str(e[0]), 1)
+					out["items"][str(e[0])] = int(out["items"].get(str(e[0]), 0)) + 1
+					break
+		state.effects["pot_%d" % i] = _clock.now_ms() + int(cfg.get("ready_min", 25)) * 60000
+	if int(out["gold"]) > 0:
+		dirty = true
+	return out
+
+# ------------------------------------------------------------------ 西岸旧营地的木箱
+func west_chest_x() -> float:
+	return island_x() + float(_cfg.get("west_chest", {}).get("off", -690))
+
+func west_chest_open() -> bool:
+	return int(state.effects.get("west_chest", 0)) == 1
+
+func open_west_chest() -> Dictionary:
+	if not bridge_built() or west_chest_open() or not journey.on_island():
+		return {}
+	var cfg: Dictionary = _cfg.get("west_chest", {})
+	state.effects["west_chest"] = 1
+	economy.open_chest(state, "island_west_chest", int(cfg.get("gold", 0)))
+	var items := {}
+	for e in cfg.get("give", []):
+		give(str(e[0]), int(e[1]))
+		items[str(e[0])] = int(e[1])
+	dirty = true
+	return {"gold": int(cfg.get("gold", 0)), "items": items}
 
 # ------------------------------------------------------------------ 信号台小游戏
 func signal_cfg() -> Dictionary:
@@ -1307,6 +1415,8 @@ func turn_in(id: String) -> bool:
 		state.bag_slots += int(qc["reward_slots"])
 	if int(qc.get("reward_gold", 0)) > 0:
 		economy.grant_gold(state, "q_" + id, int(qc["reward_gold"]))
+	if str(qc.get("reward_flag", "")) != "":
+		state.effects[str(qc["reward_flag"])] = 1
 	_apply_upgrades()
 	state.revision += 1
 	dirty = true

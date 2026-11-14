@@ -784,6 +784,31 @@ func _interact_island(x: float) -> void:
 			play("click")
 			signal_panel.open_panel()
 			on_panel_toggled()
+	elif world.island_near_bench(x):
+		if not game.has_pot_recipe():
+			_toast("需要蟹笼配方", "")
+			play("deny")
+		elif game.pot_count() >= int(game.pots_cfg().get("max", 3)):
+			_toast("蟹笼已满", "")
+			play("deny")
+		elif not game.pot_materials_ok():
+			_toast("材料不够", "雾灯贝和木板")
+			play("deny")
+		elif game.craft_pot():
+			_toast("蟹笼做好了", "已放进湖里")
+			play("catch")
+		else:
+			play("deny")
+	elif world.island_near_chest(x):
+		var cg: Dictionary = game.open_west_chest()
+		if cg.is_empty():
+			play("deny")
+		else:
+			play("chest")
+			world.chest_open_t0 = Time.get_ticks_msec()
+			_float_money(int(cg["gold"]), world.cat_pos + Vector2(34, 8))
+			for iid in cg["items"]:
+				_float("+%d" % int(cg["items"][iid]), str(game.inventory.by_id.get(iid, {}).get("sprite", "")), world.cat_pos + Vector2(34, -6))
 	elif world.island_near_drift(x) >= 0:
 		var di: int = world.island_near_drift(x)
 		var got: Dictionary = game.pick_drift(di)
@@ -798,7 +823,13 @@ func _interact_island(x: float) -> void:
 				_float("+1", str(idef.get("sprite", "")), world.cat_pos + Vector2(34, 8))
 	elif world.island_near_lake(x):
 		if game.at_lake_spot():
-			if game.line_out():
+			if game.pots_ready() > 0 and not game.line_out():
+				var pc: Dictionary = game.collect_pots()
+				play("catch")
+				_float_money(int(pc["gold"]), world.cat_pos + Vector2(-24, 8))
+				for iid in pc["items"]:
+					_float("+%d" % int(pc["items"][iid]), str(game.inventory.by_id.get(iid, {}).get("sprite", "")), world.cat_pos + Vector2(-24, -6))
+			elif game.line_out():
 				game.reel_in()
 				play("click")
 			elif game.pomodoro.is_break():
@@ -809,7 +840,7 @@ func _interact_island(x: float) -> void:
 			else:
 				play("deny")
 		elif not game.pomodoro.is_break():
-			_stand_to = game.island_walk_min()       # 慢慢走到湖边，到了自动甩竿
+			_stand_to = game.lake_spot_x()       # 慢慢走到湖边，到了自动甩竿
 			_stand_cast = true
 			play("click")
 		else:
@@ -2063,12 +2094,18 @@ func _island_hint(ix: float) -> String:
 		return "空格键和看守聊聊"
 	if world.island_near_console(ix):
 		return "空格键开信号灯"
+	if world.island_near_bench(ix):
+		return "空格键做蟹笼"
+	if world.island_near_chest(ix):
+		return "空格键打开木箱"
 	if world.island_near_drift(ix) >= 0:
 		return "空格键拾取"
 	if world.island_near_lake(ix):
 		if game.at_lake_spot():
+			if game.pots_ready() > 0 and not game.line_out():
+				return "空格键收蟹笼"
 			return "空格键收竿" if game.line_out() else "空格键钓鱼"
 		return "空格键去湖边钓鱼"
 	if ix <= game.island_walk_min() + 2.0:
-		return "岛的西边还没开发"
+		return "岛的最西边" if game.bridge_built() else "岛的西边还没开发"
 	return ""

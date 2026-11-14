@@ -91,7 +91,7 @@ func boat_y(t: int) -> float:
 
 func bobber_rest() -> Vector2:
 	if m.game.journey.on_island():
-		return Vector2(cat_pos.x + 64, GROUND_Y + 1)       # 湖边：画在镜像里，实际落在小猫左边的湖面
+		return Vector2(cat_pos.x + 64, GROUND_Y + (3 if m.game.bridge_built() else 1))   # 湖边：画在镜像里，实际落在小猫左边的湖面
 	return Vector2(boat_x + 74, WATER_Y - 3)
 
 ## 每帧先调用：根据活动状态算出船和猫的位置。
@@ -204,6 +204,12 @@ func island_near_pier(x: float) -> bool:
 
 func island_near_keeper(x: float) -> bool:
 	return absf(x + 16.0 - (m.game.island_keeper_x() + 8.0)) <= 26.0
+
+func island_near_bench(x: float) -> bool:
+	return absf(x + 16.0 - (m.game.bench_x() + 8.0)) <= 20.0
+
+func island_near_chest(x: float) -> bool:
+	return m.game.bridge_built() and not m.game.west_chest_open() and absf(x + 16.0 - (m.game.west_chest_x() + 8.0)) <= 20.0
 
 func island_near_console(x: float) -> bool:
 	return absf(x + 16.0 - (m.game.signal_x() + 5.0)) <= 20.0
@@ -507,6 +513,44 @@ func _draw_island_extras(left: float, right: float, t: int) -> void:
 		m.draw_rect(Rect2(sx, GROUND_Y - 21, 9, 8), Pal.U_K)
 		var on: bool = lit and g.signal_ready()
 		m.draw_rect(Rect2(sx + 1, GROUND_Y - 20, 7, 6), (Pal.L_Y if (t / 500) % 2 == 0 else Pal.L_W) if on else Pal.U_A)
+	# 工作台：一块木板桌，上面摆着锯子和木料
+	var bnx: float = g.bench_x()
+	if bnx > left - 30 and bnx < right + 10:
+		m.draw_rect(Rect2(bnx, GROUND_Y - 9, 18, 3), Pal.L_O)
+		m.draw_rect(Rect2(bnx, GROUND_Y - 6, 18, 1), Pal.U_O)
+		m.draw_rect(Rect2(bnx + 1, GROUND_Y - 6, 2, 6), Pal.U_O)
+		m.draw_rect(Rect2(bnx + 15, GROUND_Y - 6, 2, 6), Pal.U_O)
+		m.draw_rect(Rect2(bnx + 3, GROUND_Y - 11, 7, 2), Pal.L_N)
+		m.draw_rect(Rect2(bnx + 12, GROUND_Y - 13, 2, 4), Pal.U_A)
+		if g.has_pot_recipe() and g.pot_materials_ok() and g.pot_count() < int(g.pots_cfg().get("max", 3)):
+			m.tex_frame("sparkle", Vector2(bnx + 6, GROUND_Y - 21 - float((t / 400) % 2)), (t / 250) % 2, 2)
+	# 湖里的蟹笼：浮在水面的小笼子，好了就冒亮点
+	var lk0: Vector2 = g.island_lake()
+	if lk0.y > left - 20 and lk0.x < right + 20:
+		for i in int(g.pots_cfg().get("max", 3)):
+			if int(g.state.effects.get("pot_%d" % i, 0)) > 0:
+				var px0: float = lk0.x + 28.0 + float(i) * 42.0
+				var py0: float = GROUND_Y + 4.0 + float((t / 700 + i) % 2)
+				m.draw_rect(Rect2(px0, py0, 9, 6), Pal.U_O)
+				m.draw_rect(Rect2(px0 + 1, py0 + 1, 7, 4), Pal.L_N)
+				for kx in 3:
+					m.draw_rect(Rect2(px0 + 2 + kx * 2, py0 + 1, 1, 4), Pal.U_O)
+				m.draw_rect(Rect2(px0 + 4, py0 - 3, 1, 3), Pal.U_K)
+				if g.pot_ready(i):
+					m.tex_frame("sparkle", Vector2(px0 + 1, py0 - 9), (t / 250 + i) % 2, 2)
+	# 修好的桥横在湖上
+	if g.bridge_built() and lk0.y > left - 20 and lk0.x < right + 20:
+		m.draw_rect(Rect2(lk0.x - 6, GROUND_Y - 1, lk0.y - lk0.x + 12, 3), Pal.L_N)
+		m.draw_rect(Rect2(lk0.x - 6, GROUND_Y + 2, lk0.y - lk0.x + 12, 1), Pal.U_O)
+		for k in range(0, int(lk0.y - lk0.x) + 8, 14):
+			m.draw_rect(Rect2(lk0.x - 6 + k, GROUND_Y - 1, 1, 3), Pal.L_O)
+			m.draw_rect(Rect2(lk0.x - 6 + k, GROUND_Y - 6, 2, 5), Pal.U_O)
+	# 西岸旧营地的木箱
+	var cx0: float = g.west_chest_x()
+	if g.bridge_built() and cx0 > left - 30 and cx0 < right + 10:
+		m.tex_frame("chest", Vector2(cx0, GROUND_Y - 14), 1 if g.west_chest_open() else 0, 2)
+		if not g.west_chest_open():
+			m.tex_frame("sparkle", Vector2(cx0 + 4, GROUND_Y - 22 - float((t / 400) % 2)), (t / 250) % 2, 2)
 	# 草丛里的亮点：有东西可以拾
 	for i in g.drift_count():
 		var dx: float = g.drift_x(i)
@@ -848,7 +892,7 @@ func _draw_hull(bob_y: float) -> void:
 	var tx: Texture2D = m.tex["boat_%d" % clampi(int(m.game.state.boat_level), 0, 3)] if m.game.state.boat_level > 0 else m.tex["boat"]
 	var w := float(tx.get_width())
 	var vis := minf(float(tx.get_height()), float(WATER_Y + 2) - bob_y)
-	for seg in [[0.0, 3.0, 1.0], [3.0, w - 6.0, 0.0], [w - 3.0, w, 1.0]]:     # 船头船尾收一格，水线是弧形的
+	for seg in [[0.0, 3.0, 1.0], [3.0, w - 3.0, 0.0], [w - 3.0, w, 1.0]]:     # 船头船尾收一格，水线是弧形的
 		var x0: float = seg[0]
 		var x1: float = seg[1]
 		var h: float = vis - float(seg[2])
@@ -939,7 +983,9 @@ var _fx_retract_t: int = -1
 
 ## 浮漂处的水面高度；岛上是湖面，而且画面是镜像的（小猫朝西），x 要翻回来。
 func _fx_y() -> float:
-	return float(GROUND_Y) if m.game.journey.on_island() else float(WATER_Y)
+	if m.game.journey.on_island():
+		return float(GROUND_Y + (2 if m.game.bridge_built() else 0))
+	return float(WATER_Y)
 
 func _fx_x(x: float) -> float:
 	return 2.0 * (cat_pos.x + 16.0) - x if (_mirror and m.game.journey.on_island()) else x
@@ -1157,8 +1203,19 @@ func _draw_sky(cam: Vector2, view: Vector2, t: int) -> void:
 			var c: Color = Pal.L_C.lerp(dusk[i], clampf(warm * 1.05, 0.0, 1.0))
 			c = c.lerp(night[i], clampf(dark * 1.1, 0.0, 1.0))
 			m.draw_rect(Rect2(cam.x, roundf(y0), view.x, roundf(y1) - roundf(y0) + 1), c)
-	var haze := Pal.U_W.lerp(Pal.L_P if dawn else Pal.L_F, clampf(warm, 0.0, 1.0) * 0.7)
-	m.draw_rect(Rect2(cam.x, WATER_Y - 26, view.x, 26), haze.lerp(Pal.U_B.lerp(Pal.U_K, 0.3), clampf(dark * 1.1, 0.0, 1.0)))
+	# 地平线的雾气：从天空色一级一级过渡到雾色（白天不再是一条突兀的白带）
+	var sky_bottom: Color = Pal.L_C
+	if warm > 0.01 or dark > 0.01:
+		var dusk_last: Color = Pal.L_Y
+		var night_last: Color = Pal.U_B.lerp(Pal.U_K, 0.2)
+		sky_bottom = Pal.L_C.lerp(dusk_last, clampf(warm * 1.05, 0.0, 1.0)).lerp(night_last, clampf(dark * 1.1, 0.0, 1.0))
+	var haze_day := Pal.L_C.lerp(Pal.U_W, 0.5)
+	var haze := haze_day.lerp(Pal.L_P if dawn else Pal.L_F, clampf(warm, 0.0, 1.0) * 0.7)
+	haze = haze.lerp(Pal.U_B.lerp(Pal.U_K, 0.3), clampf(dark * 1.1, 0.0, 1.0))
+	var hb := 8
+	for i in hb:
+		var f := float(i + 1) / float(hb)
+		m.draw_rect(Rect2(cam.x, WATER_Y - 26 + i * 26 / hb, view.x, (i + 1) * 26 / hb - i * 26 / hb), sky_bottom.lerp(haze, f * f * 0.6 + f * 0.4))
 	# 星星：夜里才有，阴天和下雨看不见；位置固定，闪烁
 	if dark > 0.35 and not overcast:
 		var star_a := clampf((dark - 0.35) / 0.4, 0.0, 1.0)

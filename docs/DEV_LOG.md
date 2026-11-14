@@ -372,3 +372,9 @@
 - 新玩法：草丛拾取（`game.drift_*`，effects.drift_0..2）、信号台小游戏（`core/signal_game.gd`、`presentation/signal_panel.gd`，`game.signal_*`）、任务 lighthouse3（日记残页）/lighthouse4（雾灯鳞）、`reward_gold`、鱼表 `gate` / `drop_item`、雾灯鱼（夜里+灯塔修好）。
 - 画面：夜里灯塔光束、湖面微光、信号台、草丛亮点；素材 item_diary_page / item_lamp_scale / fish_lamp。
 - 测试 472 项 ALL TESTS PASS、SIM PASS；新增 `test_v055`。版本号 0.55。
+
+## v0.56：蟹笼、修桥、西岸
+- 修：`_draw_sky` 地平线雾气 8 级渐变；`_draw_hull` 船尾那一段区间写错（w-6 → w-3）。
+- `game.gd`：`lake_spot_x / bridge_built / island_walk_min(桥)`、`craft_pot / collect_pots / pot_*`、`west_chest_*`；任务 `reward_flag`；`drift_count` 随桥解锁 3 处。
+- 数据：木板 plank、pots 配置、west_chest、lighthouse5；素材 item_plank；画面：工作台、湖中蟹笼、桥、木箱。
+- 测试 486 项 ALL TESTS PASS、SIM PASS；新增 `test_v056`。版本号 0.56。

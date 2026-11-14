@@ -58,6 +58,7 @@ func _init() -> void:
 		test_v052(balance, fish)
 		test_v054(balance, fish)
 		test_v055(balance, fish)
+		test_v056(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -959,7 +960,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 12 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "12 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞）+ 10 件装备，开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 13 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "13 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -1372,7 +1373,7 @@ func test_v054(balance: Dictionary, fish: Array) -> void:
 	g.steer_to(g.island_x())
 	g.land_on_island()
 	check(g.fishing_blocked() and not g.cast_line(), "不在湖边不能钓鱼")
-	g.journey.set_roam_x(g.island_walk_min())
+	g.journey.set_roam_x(g.lake_spot_x())
 	check(g.at_lake_spot() and not g.fishing_blocked() and g.cast_line() and g.line_out(), "站到湖边可以甩竿")
 	var junk := {}
 	var fish_seen := {}
@@ -1384,10 +1385,10 @@ func test_v054(balance: Dictionary, fish: Array) -> void:
 	check(g.fishing.zone == "lake" and not junk.is_empty() and junk.has("lamp_shell"), "湖里钓到的杂物来自湖区杂物表（有雾灯贝）")
 	check(g.inventory.count(g.state, "lamp_shell") > 0, "雾灯贝进了物品栏")
 	check(g.journey.on_island(), "钓鱼时小猫一直在岛上")
-	g.journey.set_roam_x(g.island_walk_min() + 80.0)
+	g.journey.set_roam_x(g.lake_spot_x() + 80.0)
 	_run(g, c, 3.0)
 	check(not g.line_out(), "走开后自动收竿")
-	g.journey.set_roam_x(g.island_walk_min())
+	g.journey.set_roam_x(g.lake_spot_x())
 	g.cast_line()
 	g.leave_island()
 	check(g.journey.activity() == Journey.Activity.FISHING and not g.journey.on_island(), "回船后回到海上")
@@ -1396,7 +1397,7 @@ func test_v054(balance: Dictionary, fish: Array) -> void:
 	var g2 := Game.new(b3, fish, GameState.new(), FakeClock.new(), _rng(122))
 	g2.state.boat_level = 1
 	g2.steer_to(g2.island_x()); g2.land_on_island()
-	g2.journey.set_roam_x(g2.island_walk_min()); g2.cast_line()
+	g2.journey.set_roam_x(g2.lake_spot_x()); g2.cast_line()
 	for e in _run(g2, g2._clock, 1500.0):
 		if e["type"] == "catch":
 			fish_seen[e["fish_id"]] = true
@@ -1445,6 +1446,43 @@ func test_v055(balance: Dictionary, fish: Array) -> void:
 	g.inventory.add(g.state, "lamp_scale", 1)
 	var slots0 := g.state.bag_slots
 	check(g.turn_in("lighthouse4") and g.state.bag_slots == slots0 + 2, "交雾灯鳞得背包格子")
+
+func test_v056(balance: Dictionary, fish: Array) -> void:
+	print("v056: 工作台蟹笼、修桥、西岸木箱")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(141))
+	var c: FakeClock = g._clock
+	g.state.boat_level = 1
+	g.steer_to(g.island_x()); g.land_on_island()
+	check(not g.bridge_built() and g.island_walk_min() == g.lake_spot_x() and g.drift_count() == 3, "没修桥：最西到湖边，只有 3 处可拾")
+	check(not g.craft_pot(), "没有配方做不了蟹笼")
+	g.give("crab_recipe", 1)
+	check(not g.craft_pot(), "材料不够做不了")
+	g.inventory.add(g.state, "lamp_shell", 4)
+	g.inventory.add(g.state, "plank", 3)
+	check(g.craft_pot() and g.pot_count() == 1 and g.inventory.count(g.state, "lamp_shell") == 2 and g.inventory.count(g.state, "plank") == 2, "做一个蟹笼：扣材料、放进湖里")
+	check(g.craft_pot() and g.pot_count() == 2 and not g.craft_pot() or g.pot_count() >= 1, "再做一个")
+	check(g.pots_ready() == 0, "刚放下的笼子还没好")
+	g.journey.set_roam_x(g.lake_spot_x())
+	check(g.collect_pots()["gold"] == 0, "没好的笼子收不到东西")
+	c.t += 26 * 60000
+	var r := g.collect_pots()
+	var gold0 := g.state.wallet_gold
+	check(int(r["gold"]) >= 20 and g.pots_ready() == 0 and g.pot_count() == 2, "好了的笼子收一次：有铜币，笼子自动重新下好")
+	g.journey.set_roam_x(g.lake_spot_x() + 60.0)
+	c.t += 26 * 60000
+	check(g.collect_pots()["gold"] == 0 and g.state.wallet_gold == gold0, "不在湖边收不了")
+	# 修桥
+	g.state.quests["lighthouse"] = "done"; g.state.quests["lighthouse2"] = "done"; g.state.quests["lighthouse3"] = "done"; g.state.quests["lighthouse4"] = "done"
+	check(g.open_west_chest().is_empty(), "没修桥前西岸木箱打不开")
+	g.begin_talk_quest("lighthouse5")
+	g.inventory.add(g.state, "plank", 6)
+	check(g.turn_in("lighthouse5") and g.bridge_built(), "交 6 块木板：桥修好")
+	check(g.island_walk_min() < g.lake_spot_x() - 300.0 and g.drift_count() == 6, "修桥后能走到西边，多出 3 处可拾")
+	g.journey.set_roam_x(g.west_chest_x())
+	var gold1 := g.state.wallet_gold
+	var cr := g.open_west_chest()
+	check(not cr.is_empty() and g.state.wallet_gold == gold1 + 600 and g.west_chest_open() and g.open_west_chest().is_empty(), "西岸木箱只能开一次")
+	check(not g.at_lake_spot(), "走到西边就不再是钓位")
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

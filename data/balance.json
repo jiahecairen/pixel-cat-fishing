@@ -192,7 +192,7 @@
       "id": "crab_recipe",
       "important": true,
       "name": "蟹笼配方",
-      "desc": "工坊里能照着做蟹笼",
+      "desc": "岛上的工作台能照着做蟹笼",
       "sprite": "item_crab_recipe",
       "weight": 0,
       "use": "",
@@ -224,6 +224,16 @@
       "name": "雾灯鳞",
       "desc": "雾灯鱼身上掉的亮鳞",
       "sprite": "item_lamp_scale",
+      "weight": 0,
+      "use": "",
+      "drop": "quest"
+    },
+    {
+      "id": "plank",
+      "important": true,
+      "name": "木板",
+      "desc": "结实的旧木板，能修桥做笼",
+      "sprite": "item_plank",
       "weight": 0,
       "use": "",
       "drop": "quest"
@@ -508,10 +518,11 @@
   },
   "drift": {
     "refill_min": 8,
-    "offsets": [-290, -110, -76],
+    "offsets": [-290, -110, -76, -430, -520, -610],
+    "west_from": 3,
     "reach": 20,
     "gold": [12, 60],
-    "pool": [["lamp_shell", 30], ["diary_page", 8], ["bottle", 16], ["pearl", 8], ["gold", 38]]
+    "pool": [["lamp_shell", 30], ["diary_page", 8], ["plank", 16], ["bottle", 14], ["pearl", 8], ["gold", 34]]
   },
   "signal": {
     "rounds": 5,
@@ -524,9 +535,19 @@
     "cooldown_min": 20,
     "console_off": 36
   },
+  "pots": {
+    "max": 3,
+    "cost": [["lamp_shell", 2], ["plank", 1]],
+    "ready_min": 25,
+    "gold": [20, 50],
+    "pool": [["pearl", 14], ["lamp_shell", 18], ["plank", 12], ["bottle", 10]],
+    "item_chance": 0.4,
+    "bench_off": -66
+  },
+  "west_chest": {"off": -690, "gold": 600, "give": [["pearl", 2], ["plank", 2]]},
   "lake_junk": {
     "chance": 0.22,
-    "pool": [["lamp_shell", 45], ["diary_page", 12], ["bottle", 22], ["boot", 16], ["pearl", 10]]
+    "pool": [["lamp_shell", 45], ["diary_page", 12], ["plank", 14], ["bottle", 22], ["boot", 16], ["pearl", 10]]
   },
   "hook_wait_mult": [
     1.0,
@@ -547,7 +568,7 @@
       "letter_lines": ["灯塔看守的信"],
       "talk_lines": ["灯塔的灯坏了", "帮我找这些吧"],
       "idle_lines": ["欢迎来到雾灯岛", "能帮个忙吗"],
-      "done_lines": ["灯又亮了", "蟹笼配方给你", "以后去工坊看看"]
+      "done_lines": ["灯又亮了", "蟹笼配方给你", "以后去工作台看看"]
     },
     {
       "id": "lighthouse2",
@@ -594,6 +615,22 @@
       "talk_lines": ["夜里湖会发光", "雾灯鱼会来看灯"],
       "idle_lines": ["夜里再来看看", "灯亮着它才来"],
       "done_lines": ["它真的来了", "背包和钱都给你", "雾灯岛永远欢迎你"]
+    },
+    {
+      "id": "lighthouse5",
+      "npc": "lighthouse",
+      "start_on_talk": true,
+      "requires": "lighthouse4",
+      "reward_flag": "bridge",
+      "reward_gold": 200,
+      "reward_name": "修好的桥",
+      "wants": [
+        {"item": "plank", "n": 6}
+      ],
+      "letter_lines": ["灯塔看守的信"],
+      "talk_lines": ["湖上的桥断了很久", "西边有我的旧营地"],
+      "idle_lines": ["西边的路等着呢", "凑够木板就修桥"],
+      "done_lines": ["桥修好了", "西边随你去", "旧营地里有东西"]
     },
     {
       "id": "keeper",
