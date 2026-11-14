@@ -30,6 +30,7 @@
           {"text": "我想帮你把岛修好。", "next": "help1", "if": ["lamp_heard", "wreck_heard", "!help_ok"]},
           {"text": "修理的事……", "next": "help2", "if": ["help_ok"]},
           {"text": "桥修好了！", "next": "bridge1", "if": ["done_bridge", "!bridge_told"]},
+          {"text": "矿山岛……我能去挖矿吗？", "next": "pick1", "if": ["bridge_told", "!pick_given"]},
           {"text": "你托付的东西我带来了。", "next": "", "action": "open_quest"},
           {"text": "没什么，随便看看。", "next": "bye"}
         ]
@@ -41,6 +42,7 @@
       "help1b": {"who": "keeper", "text": ["……你愿意？", "那得一样一样来：先修湖上的桥，再整栈桥，最后加固灯室。", "木板从海里的碎片里来；石头和金属，得去更远的矿山岛。", "修理厂在湖那边。干活要人手——酒馆里的岛民也许肯来。"], "set": {"help_ok": 1}, "next": "root"},
       "help2": {"who": "keeper", "text": ["修理厂在湖那边，工人去酒馆找老桶雇。", "木板够了就先开工，别一次想全修完。"], "next": "root"},
       "bridge1": {"who": "keeper", "text": ["桥通了……真的通了。", "桥那头有个旧营地，是我年轻时放东西的地方。", "还有，听说往更远的海上有座矿山岛，鼹鼠们在那里挖矿。", "那里的浪大，得有结实一点的船才去得了。"], "set": {"bridge_told": 1}, "next": "root"},
+      "pick1": {"who": "keeper", "text": ["矿山岛……你要去挖矿？", "这把鹤嘴锄是我年轻时用的，木柄都磨亮了。", "你帮了我这么多，它该交给你了。", "挖到的石头和金属，别忘了带回来修岛。"], "set": {"pick_given": 1}, "next": "", "action": "give_pick"},
       "bye": {"who": "keeper", "text": "好，有需要再来。", "next": ""}
     }
   },

@@ -49,7 +49,7 @@ const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_dest", "lighthouse", "btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "noren_ship", "ship_model", "blueprint", "anchor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish",
-	"mine_tiles", "mole_0", "mole_1", "mole_2", "mole_miner", "mine_shop", "mine_rest", "mine_gate", "mine_mtn", "item_rope", "item_ladder"]
+	"mine_tiles", "mine_cart", "mole_0", "mole_1", "mole_2", "mole_miner", "mine_shop", "mine_rest", "mine_gate", "mine_mtn", "item_rope", "item_ladder"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 9
 
@@ -226,10 +226,16 @@ func _ready() -> void:
 	mine_view = MineView.new(self)
 	var mat := str(state.mine.get("at", ""))
 	if mat != "" and game.journey.on_island():
-		mine_view.go(mat)              # 重启前在矿山岛：回到原处（矿里离线的进度由 update 补算）
-		mine_view.isle_x = MineView.SPOT["gate"] - 16.0
+		mine_view.restore(mat)         # 重启前在矿山岛：回到原处（在矿里这一局还在）
 	if OS.has_environment("CATFISH_REGION"):      # 调试：直接进矿山岛的某个区域
 		mine_view.go(OS.get_environment("CATFISH_REGION"))
+		if OS.has_environment("CATFISH_MINEMENU"):    # 调试：直接打开岛上/大厅的某个菜单
+			mine_view._open(OS.get_environment("CATFISH_MINEMENU"))
+		if OS.has_environment("CATFISH_PERK") and not game.mine.draft().is_empty():
+			mine_view._take_perk(OS.get_environment("CATFISH_PERK").to_int())
+			if OS.has_environment("CATFISH_DIG"):     # 调试：选完天赋后朝下开始挖
+				game.mine.m()["pick"] = maxi(game.mine.pick(), 1)
+				game.mine.start_dig(0, 1, game.now_ms())
 	if OS.has_environment("CATFISH_ISLEX"):
 		mine_view.isle_x = OS.get_environment("CATFISH_ISLEX").to_float()
 	state.cat["created"] = true      # v0.66 起主角形象固定（D152），不再捏猫，直接进入起名
@@ -873,6 +879,14 @@ func _after_dialog() -> void:
 			_open_works("tavern")
 		"open_repair":
 			_open_works("repair")
+		"give_pick":
+			game.mine.ensure(game.now_ms())
+			if game.mine.give_first_pick():
+				_toast("拿到了鹤嘴锄", "")
+				play("done")
+				game.dirty = true
+			else:
+				_toast("你已经有镐子了", "")
 
 ## 小岛上的互动：码头尽头 = 回船；灯塔看守旁 = 聊天（接任务 / 交付）；湖边 = 看一眼。
 func _interact_island(x: float) -> void:
