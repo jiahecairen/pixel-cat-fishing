@@ -228,3 +228,7 @@
 ## C163（v0.75）
 - Linux 沙盒：run_tests 707 项通过，sim_long_run SIM PASS，无 SCRIPT ERROR；截图目检洞穴地面/岩壁/石块/黑暗和矿车 5 行菜单。
 - macOS 真机：大地图走动与相机、黑暗范围手感、◀▶ 翻页、2 号井修复流程、目的地一键直达——未运行。
+
+## C164（v0.76）
+- Linux 沙盒：run_tests 707 项通过，sim_long_run SIM PASS，无 SCRIPT ERROR；截图目检对话框半身像、矿井地面/石头/崖壁。
+- macOS 真机：半身像清晰度、矿井新画面观感——未运行。

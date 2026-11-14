@@ -1729,39 +1729,41 @@ def mine_tile(kind):
     import random
     rnd = random.Random(kind)
     c = Canvas(32, 32)
-    base = {"dirt": ("O", ["o", "n", "K"]), "stone": ("a", ["A", "W", "A"]), "rock": ("A", ["S", "a", "K"]),
-            "deep": ("S", ["A", "B", "K"]), "granite": ("p", ["a", "R", "w", "K"]), "back": ("K", ["A"])}
-    if kind in base:
-        b, sp = base[kind]
-        c.rect(0, 0, 31, 31, b)
-        for _ in range(70 if kind != "back" else 18):        # 2×1 或 1×1 的碎点，比单像素更像石头颗粒
-            x, y, k = rnd.randint(0, 30), rnd.randint(0, 30), rnd.choice(sp)
-            c.set(x, y, k)
-            if rnd.random() < 0.5:
-                c.set(x + 1, y, k)
-        if kind != "back":
-            c.rect(0, 31, 31, 31, "K"); c.rect(31, 0, 31, 31, "K")
-            c.rect(0, 0, 30, 0, "W" if kind in ("stone", "granite") else ("n" if kind == "dirt" else "a"))
-            c.rect(0, 30, 30, 30, {"dirt": "K", "stone": "A", "rock": "K", "deep": "K", "granite": "R"}[kind])
-    elif kind == "floor":                                    # 洞穴地面：一块块鹅卵石
+    rocks = {"dirt": ("n", "o", "O"), "stone": ("w", "a", "A"), "rock": ("a", "A", "K"), "deep": ("s", "S", "K")}
+    if kind in rocks:                                         # 地上的一块石头（不再是方块）：圆滚滚，左上亮、右下暗
+        hi, mid, lo = rocks[kind]
+        h = Canvas(16, 16)
+        h.ellipse(8, 9, 6.6, 5.6, mid)
+        h.ellipse(6.5, 7.5, 3.6, 2.6, hi)
+        h.ellipse(10, 11.5, 4.2, 2.2, lo)
+        h.set(5, 6, "W" if kind != "dirt" else "w")
+        h.rect(5, 14, 12, 14, "K")
+        h.outline()
+        c = _up2(h)
+    elif kind in ("back", "granite"):
         c.rect(0, 0, 31, 31, "K")
-        for (x, y, w, h) in ((0, 0, 11, 9), (11, 0, 10, 8), (21, 0, 11, 9), (0, 9, 8, 11), (8, 9, 12, 10), (20, 9, 12, 11), (0, 20, 12, 12), (12, 19, 9, 13), (21, 20, 11, 12)):
-            c.rect(x, y, x + w - 1, y + h - 1, "O" if (x + y) % 3 == 0 else "A")
-            c.rect(x, y, x + w - 1, y, "a")
-            c.rect(x, y + h - 1, x + w - 1, y + h - 1, "K"); c.rect(x + w - 1, y, x + w - 1, y + h - 1, "K")
-        for _ in range(26):
-            c.set(rnd.randint(0, 30), rnd.randint(0, 30), rnd.choice(["A", "a", "K"]))
-    elif kind == "wall":                                     # 岩壁：棕色岩层，上沿挂着钟乳
+    elif kind == "floor":                                    # 洞穴地面：深棕土地，只有零星几颗小石子，不花眼
         c.rect(0, 0, 31, 31, "O")
-        for _ in range(60):
-            x, y = rnd.randint(0, 30), rnd.randint(0, 30)
-            k = rnd.choice(["o", "n", "K", "o"])
-            c.set(x, y, k); c.set(x, y + 1, k)
-        for x in range(0, 32, 4):
-            hgt = 5 + rnd.randint(0, 6)
-            c.rect(x, 0, x + 2, hgt, "n"); c.rect(x + 3, 0, x + 3, hgt - 2, "K")
-        c.rect(0, 29, 31, 31, "K")
-        c.rect(0, 26, 31, 26, "o")
+        for (x, y) in ((5, 7), (21, 4), (13, 18), (27, 22), (7, 26), (18, 29)):
+            c.set(x, y, "o"); c.set(x + 1, y, "o"); c.set(x, y + 1, "K")
+    elif kind == "wall":                                     # 岩壁正面（下面是地面）：亮边 + 竖条纹的崖壁，越往下越暗
+        c.rect(0, 0, 31, 31, "o")
+        c.rect(0, 0, 31, 2, "n"); c.rect(0, 3, 31, 3, "O")
+        for x in range(0, 32, 3):
+            top = 4 + rnd.randint(0, 5)
+            bot = top + 8 + rnd.randint(0, 14)
+            c.rect(x, top, x, min(bot, 31), "O")
+            if rnd.random() < 0.5:
+                c.rect(x + 1, top + 2, x + 1, min(bot - 3, 31), "n")
+        c.rect(0, 26, 31, 28, "O"); c.rect(0, 29, 31, 31, "K")
+        for x in range(1, 31, 4):
+            c.set(x, 25 + (x % 3), "O")
+    elif kind == "walltop":                                  # 岩壁顶面：黑暗里隐约的圆石堆，不排成砖块
+        c.rect(0, 0, 31, 31, "K")
+        for (x, y, rx, ry) in ((7, 8, 5.5, 4.2), (22, 6, 6.5, 4.8), (15, 18, 6.0, 4.5), (5, 25, 4.5, 3.6), (26, 24, 5.0, 4.0)):
+            c.ellipse(x, y, rx, ry, "O")
+            c.ellipse(x - 1.5, y - 1.5, rx * 0.5, ry * 0.4, "o")
+            c.ellipse(x + 1.5, y + ry * 0.6, rx * 0.6, 1.0, "K")
     elif kind == "ladder":
         c.rect(7, 0, 9, 31, "o"); c.rect(22, 0, 24, 31, "o"); c.rect(7, 0, 7, 31, "n"); c.rect(22, 0, 22, 31, "n")
         c.rect(9, 0, 9, 31, "O"); c.rect(24, 0, 24, 31, "O")
@@ -1788,14 +1790,14 @@ def mine_tile(kind):
     elif kind in ("gold", "metal", "stone_ore", "chest"):
         h = Canvas(16, 16)
         if kind == "gold":                                   # 金矿：黄色矿粒
-            for (x, y) in ((4, 5), (10, 9), (7, 12)):
+            for (x, y) in ((6, 8), (10, 10), (7, 12)):
                 h.rows(x - 2, y - 2, [".y.", "yWy", "yHy", ".H."])
         elif kind == "metal":                                # 金属矿：蓝灰色铁条
-            for (x, y, w) in ((3, 4, 4), (8, 8, 5), (4, 11, 3)):
+            for (x, y, w) in ((4, 6, 3), (8, 9, 3), (5, 12, 3)):
                 h.rect(x, y, x + w, y + 1, "a"); h.rect(x, y + 1, x + w, y + 1, "A"); h.set(x, y, "W")
-        elif kind == "stone_ore":
-            for (x, y) in ((4, 4), (10, 6), (6, 10), (11, 11)):
-                h.ellipse(x, y, 1.8, 1.3, "w"); h.set(x + 1, y + 1, "a")
+        elif kind == "stone_ore":                            # 好石料：几道浅色的石纹
+            for (x, y) in ((5, 7), (9, 9), (7, 11)):
+                h.rect(x, y, x + 2, y, "w"); h.set(x + 3, y + 1, "a")
         else:
             h.rect(3, 6, 12, 12, "o"); h.rect(3, 6, 12, 8, "n"); h.rect(3, 12, 12, 12, "O")
             h.rect(3, 9, 12, 9, "H"); h.rect(7, 8, 8, 10, "y"); h.outline()
@@ -1810,13 +1812,14 @@ def mine_tile(kind):
                 steps = max(abs(bx - ax), abs(by - ay))
                 for i in range(steps + 1):
                     x = round(ax + (bx - ax) * i / steps); y = round(ay + (by - ay) * i / steps)
+                    x = 7 + round(x * 18 / 31); y = 8 + round(y * 16 / 31)     # 裂纹只落在石头上，不画到地面
                     c.set(x, y, "K")
                     if n >= 2:
                         c.set(x + 1, y, "K")
                     if n >= 4:
                         c.set(x, y + 1, "K")
         if n >= 3:
-            for (x, y) in ((6, 6), (25, 14), (10, 27), (27, 27), (4, 20), (20, 5)):
+            for (x, y) in ((10, 11), (22, 15), (13, 22), (21, 21)):
                 c.set(x, y, "W")
     return c
 
@@ -2055,7 +2058,7 @@ def build():
         made["villager_%d" % k] = save(sheet([villager(k, 0), villager(k, 1)]), "villager_%d" % k)
     for n in BTN:
         made["btn_" + n] = save(sheet([button(n), button(n, True)]), "btn_" + n)
-    tiles = ["dirt", "stone", "rock", "deep", "granite", "back", "ladder", "gold", "metal", "stone_ore", "chest", "crack1", "crack2", "crack3", "crack4", "tnt", "exit_mark", "hole", "floor", "wall"]
+    tiles = ["dirt", "stone", "rock", "deep", "granite", "back", "ladder", "gold", "metal", "stone_ore", "chest", "crack1", "crack2", "crack3", "crack4", "tnt", "exit_mark", "hole", "floor", "wall", "walltop"]
     made["mine_tiles"] = save(sheet([mine_tile(k) for k in tiles]), "mine_tiles")
     for r in range(3):
         made["mole_%d" % r] = save(sheet([mole(r, 0), mole(r, 1)]), "mole_%d" % r)
@@ -2136,5 +2139,7 @@ if __name__ == "__main__":
     cat_layers()
     import import_hero
     import_hero.build()             # 主角：由用户提供的走路图还原
+    import import_portrait
+    import_portrait.build()         # 主角立绘：对话框用的半身像
     cat_gallery()
     check(m)

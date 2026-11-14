@@ -6,9 +6,9 @@ const Pal := preload("res://presentation/palette.gd")
 const MoneyC := preload("res://core/money.gd")
 
 const CELL := 32
-const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "tnt": 15, "exit_mark": 16, "hole": 17, "floor": 18, "wall": 19}
+const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "tnt": 15, "exit_mark": 16, "hole": 17, "floor": 18, "wall": 19, "walltop": 20}
 const CRACK0 := 11
-const MINE_FRAMES := 20
+const MINE_FRAMES := 21
 const CROSS_MS := 4200
 const RIDE_MS := 1500
 const ISLE_W := 560.0
@@ -672,6 +672,27 @@ func draw(view: Vector2, t: int) -> void:
 			_draw_mine(view, t)
 	_draw_overlay(view, t)
 
+## 岩壁（像星露谷的洞穴外围）：下面挨着地面的画崖壁正面；其它挨着地面的画岩壁顶面，朝地面那一边描亮边；再往外全黑。
+func _draw_wall(mn, x: int, y: int, pos: Vector2) -> void:
+	if mn.is_floor(x, y + 1):
+		m.tex_frame("mine_tiles", pos, TILE["wall"], MINE_FRAMES)
+		return
+	var near := false
+	for oy in range(-1, 2):
+		for ox in range(-1, 2):
+			if mn.is_floor(x + ox, y + oy) or (oy == 0 and ox == 0 and false):
+				near = true
+	if not near and not mn.is_floor(x, y + 2):
+		return
+	m.tex_frame("mine_tiles", pos, TILE["walltop"], MINE_FRAMES)
+	var rim := Color(Pal.U_O, 1.0)
+	if mn.is_floor(x - 1, y):
+		m.draw_rect(Rect2(pos, Vector2(3, CELL)), rim)
+	if mn.is_floor(x + 1, y):
+		m.draw_rect(Rect2(pos + Vector2(CELL - 3, 0), Vector2(3, CELL)), rim)
+	if mn.is_floor(x, y - 1):
+		m.draw_rect(Rect2(pos, Vector2(CELL, 3)), rim)
+
 ## 迷你窗里的挖矿动画：小猫对着岩壁一下一下挥镐，碎石飞溅、矿石闪光。游戏暂停，放大窗口接着挖。
 func draw_mini(view: Vector2, t: int) -> void:
 	var mn = m.game.mine
@@ -932,16 +953,13 @@ func _draw_mine(view: Vector2, t: int) -> void:
 			var pos := Vector2(x * CELL, y * CELL)
 			var b: String = mn.block(x, y)
 			if not mn.is_floor(x, y):
-				# 岩壁：只画贴着地面的一圈，再往外是漆黑的岩体
-				var near := false
-				for oy in range(-1, 2):
-					for ox in range(-1, 2):
-						if mn.is_floor(x + ox, y + oy):
-							near = true
-				if near:
-					m.tex_frame("mine_tiles", pos, TILE["wall"], MINE_FRAMES)
+				_draw_wall(mn, x, y, pos)
 				continue
 			m.tex_frame("mine_tiles", pos, TILE["floor"], MINE_FRAMES)
+			if not mn.is_floor(x, y - 1):                # 崖壁脚下的一道阴影
+				m.draw_rect(Rect2(pos, Vector2(CELL, 4)), Color(0, 0, 0, 0.35))
+			if not mn.is_floor(x - 1, y):
+				m.draw_rect(Rect2(pos, Vector2(2, CELL)), Color(0, 0, 0, 0.25))
 			if b == "":
 				if Vector2i(x, y) == en:
 					m.tex_frame("mine_tiles", pos, TILE["ladder"], MINE_FRAMES)

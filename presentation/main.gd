@@ -239,7 +239,7 @@ func _ready() -> void:
 		if OS.has_environment("CATFISH_KIT"):     # 调试：铁镐、油灯、5 颗炸弹，往下挖几格再放一颗炸弹
 			var mk = game.mine
 			mk.m()["pick"] = 2
-			mk.m()["lamp"] = 2
+			mk.m()["lamp"] = int(OS.get_environment("CATFISH_KIT")) if OS.get_environment("CATFISH_KIT").to_int() > 1 else 2
 			mk.m()["bombs"] = 5
 			mk.stop_dig(game.now_ms())
 			mk.m()["run"]["y"] = 3
@@ -259,6 +259,7 @@ func _ready() -> void:
 	for n in CAT_LAYERS:
 		tex["cat/" + n] = load("res://assets/cat/%s.png" % n)
 	tex["cat/hero"] = load("res://assets/cat/hero.png")
+	tex["cat/portrait_bust"] = load("res://assets/cat/portrait_bust.png")   # 用户提供的立绘缩成的半身像（对话框）
 	for h in cat_cfg["hats"] + cat_cfg["outfits"]:
 		if h.get("sprite", "") != "":
 			tex["cat/" + h["sprite"]] = load("res://assets/cat/%s.png" % h["sprite"])

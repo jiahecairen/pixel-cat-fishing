@@ -223,13 +223,12 @@ func _who_name(who: String) -> String:
 
 func _portrait(who: String, pos: Vector2, scale: float, lit: bool, flip: bool) -> void:
 	var tint := Color.WHITE if lit else Color(0.5, 0.52, 0.62)
-	var sc: float = 2.0 if who == "cat" else 3.0
+	var sc: float = 1.0 if who == "cat" else 3.0
 	var xf := Transform2D(Vector2(sc * (-1.0 if flip else 1.0), 0), Vector2(0, sc), pos + m.ui_off)
 	m.draw_set_transform_matrix(xf)
 	if who == "cat":
-		m.cat_tint = tint
-		m.draw_cat(Vector2(-32 if flip else 0, 0), 0, false)
-		m.cat_tint = Color.WHITE
+		var bt: Texture2D = m.tex["cat/portrait_bust"]
+		m.draw_texture(bt, Vector2(-bt.get_width() if flip else 0, 0), tint)
 	else:
 		var tex_name := "villager_%d" % int(_d.get("faces", {}).get(who, 1))
 		if m.tex.has(tex_name):
@@ -274,13 +273,13 @@ func draw() -> void:
 			var dsz := Vector2(tx.get_width(), tx.get_height()) * k
 			m.draw_texture_rect(tx, Rect2(sp + (sz - dsz) / 2.0, dsz), false)
 		var speaker := who if who != "" else str(_d.get("left", "cat"))
-		_portrait(speaker, Vector2(r.position.x + 10, b.position.y - 4 - (64 if speaker == "cat" else 66)), 3.0, who != "", false)
+		_portrait(speaker, Vector2(r.position.x + 10, b.position.y - 4 - (72 if speaker == "cat" else 66)), 3.0, who != "", false)
 	else:
 		m.draw_rect(Rect2(r.position + Vector2(2, 2), r.size - Vector2(4, 4)), Color("#262a3f"))
 		var left := str(_d.get("left", "cat"))
 		var right := str(_d.get("right", "keeper"))
-		_portrait(left, Vector2(r.position.x + 8, b.position.y - 4 - (64 if left == "cat" else 66)), 3.0, who == left, false)
-		_portrait(right, Vector2(r.end.x - 8 - (64 if right == "cat" else 48), b.position.y - 4 - (64 if right == "cat" else 66)), 3.0, who == right, true)
+		_portrait(left, Vector2(r.position.x + 8, b.position.y - 4 - (72 if left == "cat" else 66)), 3.0, who == left, false)
+		_portrait(right, Vector2(r.end.x - 8 - (60 if right == "cat" else 48), b.position.y - 4 - (72 if right == "cat" else 66)), 3.0, who == right, true)
 		var place := str(_d.get("place", ""))
 		if place != "":
 			var pw: float = m.dyn_text_width(place) + 14.0
