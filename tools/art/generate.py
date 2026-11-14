@@ -1002,7 +1002,7 @@ BTN = {
     "stop": [".......", ".rrrrr.", ".rrrrr.", ".rrrrr.", ".rrrrr.", ".rrrrr.", "......."],
     "dest": ["...w...", ".ww.ww.", ".w...w.", "ww.r.ww", ".w...w.", ".ww.ww.", "...w..."],
     "fish": [".......", "..cc..c", ".cKccc.", "ccccccc", ".ccccc.", "..cc..c", "......."],
-    "town": ["...r...", "..rrr..", ".rrrrr.", ".hhhhh.", ".hohch.", ".hohhh.", "......."],
+    "town": [".......", "rwrwrwr", "rwrwrwr", ".o...o.", ".o...o.", "nnnnnnn", "......."],
     "view": ["ww...ww", "w.....w", "..www..", "..www..", "..www..", "w.....w", "ww...ww"],
     "skip": [".......", "c..c.c.", "cc.ccc.", "cccccc.", "cc.ccc.", "c..c.c.", "......."],
     "bag": [".......", "..hhh..", ".h...h.", ".ooooo.", ".oonoo.", ".ooooo.", "......."],

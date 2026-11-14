@@ -479,6 +479,7 @@ func _update_camera(dt: float) -> void:
 
 
 ## 完整窗口里用方向键带着小猫在镇上走；松手一会儿后交还给自动流程。
+var _stand_depart: bool = false     # 走到码头后上船回小镇
 var _stand_cast: bool = false      # 走到湖边钓位后自动甩竿
 var _stand_to: float = INF         # 和居民聊天时慢慢退到的位置
 
@@ -519,15 +520,24 @@ func _update_roam(dt: float) -> void:
 		if dir != 0 or (j.activity() != Journey.Activity.ROAM and not j.on_island()):
 			_stand_to = INF
 			_stand_cast = false
+			_stand_depart = false
 		else:
 			if absf(_roam_fx - j.roam_x()) > 1.5:
 				_roam_fx = j.roam_x()
+			if game.line_out():
+				game.reel_in()
+			world.roam_flip = _stand_to < _roam_fx - 0.5
 			_roam_fx = move_toward(_roam_fx, _stand_to, World.ROAM_SPEED * game.move_speed() * dt)
 			j.set_roam_x(_roam_fx)
 			world.roam_moving = true
 			_last_walk_input = t
 			if absf(_roam_fx - _stand_to) < 0.5:
 				_stand_to = INF
+				if _stand_depart:
+					_stand_depart = false
+					if game.leave_island():
+						play("click")
+						_go_to_town()
 				if _stand_cast:
 					_stand_cast = false
 					world.roam_flip = true
@@ -628,10 +638,7 @@ func _update_roam(dt: float) -> void:
 		world.roam_flip = dir < 0
 		_last_walk_input = t
 	elif j.on_island() and mini:
-		# 迷你窗里不能逛岛：不在钓位就自己走回湖边接着钓
-		if not game.at_lake_spot() and _stand_to == INF and not game.pomodoro.is_break():
-			_stand_to = game.lake_spot_x()
-			_stand_cast = true
+		pass                                 # 迷你窗里也留在岛上当前的位置（在钓位就继续钓）
 	elif j.activity() == Journey.Activity.ROAM and mini:
 		# 玩家接管后小猫就一直听玩家的，不会自己走开；只有切到迷你悬浮窗才交还给自动流程
 		_end_roam_auto(float(j.roam_x()))
@@ -1547,9 +1554,16 @@ func _town_button() -> void:
 			play("deny")
 	elif game.journey.on_island():
 		game.state.effects["lake_resume"] = 1          # 卖完鱼回来，直接回湖边接着钓
-		if game.leave_island():
+		if absf(float(game.journey.roam_x()) - game.island_land_x()) < 2.0:
+			if game.leave_island():
+				play("click")
+				_go_to_town()
+		else:
+			game.reel_in()
+			_stand_to = game.island_land_x()            # 先走到码头，再上船出发
+			_stand_cast = false
+			_stand_depart = true
 			play("click")
-			_go_to_town()                              # 一键回镇，不用再点一次
 	elif game.journey.in_town():
 		_go_fishing()
 	else:
@@ -1718,7 +1732,7 @@ func _draw_hud(now: int) -> void:
 	_tex_frame(main_btn, BTN_MAIN.position, 1 if _pressed_btn == "main" else 0, 2)
 	var in_town: bool = game.journey.in_town()
 	var act_now: int = game.journey.activity()
-	var show_fish: bool = in_town or act_now == Journey.Activity.SAIL_BACK or act_now == Journey.Activity.ISLAND
+	var show_fish: bool = in_town or act_now == Journey.Activity.SAIL_BACK
 	var sailing: bool = act_now == Journey.Activity.SAIL_OUT or act_now == Journey.Activity.SAIL_BACK
 	var town_ok: bool = game.can_halt_sail() if sailing else (true if act_now == Journey.Activity.WALK_TO_BOAT else true if act_now == Journey.Activity.ISLAND else game.can_go_fishing() if in_town else game.can_go_to_town())
 	_tex_frame("btn_fish" if show_fish else "btn_town", BTN_TOWN.position, 1 if _pressed_btn == "town" else 0, 2,

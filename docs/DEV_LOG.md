@@ -383,3 +383,7 @@
 - `main._town_button`：岛上一键回镇；`effects.lake_resume` + `_update_roam` 里的自动登岛接着钓；迷你窗不再强制离岛（走回钓位）。
 - `world._draw_sky`：太阳在天上时不画月亮；拾取/收笼/木箱的 `_toast`。新增 labels。
 - 测试 486 项 ALL TESTS PASS、SIM PASS。版本号 0.57。
+
+## v0.58：岛上按钮与摊位图标
+- `generate.py` BTN["town"] 改摊位；`main.gd`：岛上不显示 btn_fish；`_stand_depart`（走到码头再上船）；迷你窗不再自动走回钓位；`_stand_to` 行走时自动收竿、朝向。
+- 测试 486 项 ALL TESTS PASS、SIM PASS。版本号 0.58。
