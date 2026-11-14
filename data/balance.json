@@ -219,28 +219,6 @@
       "drop": "quest"
     },
     {
-      "id": "stone",
-      "important": true,
-      "name": "石头",
-      "desc": "矿山里挖出来的",
-      "sprite": "item_stone",
-      "weight": 0,
-      "use": "",
-      "drop": "quest",
-      "sell": 3
-    },
-    {
-      "id": "metal",
-      "important": true,
-      "name": "金属锭",
-      "desc": "炼好的金属",
-      "sprite": "item_metal",
-      "weight": 0,
-      "use": "",
-      "drop": "quest",
-      "sell": 9
-    },
-    {
       "id": "lamp_scale",
       "important": true,
       "name": "雾灯鳞",
@@ -529,11 +507,383 @@
       "drop": ""
     },
     {
+      "id": "stone",
+      "important": true,
+      "name": "石头",
+      "desc": "最常见的石头，修东西要用",
+      "sprite": "item_stone",
+      "weight": 0,
+      "use": "",
+      "drop": "",
+      "sell": 3
+    },
+    {
+      "id": "coal",
+      "sell": 4,
+      "name": "煤块",
+      "desc": "黑黑的，烧起来很旺",
+      "sprite": "item_coal",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "metal",
+      "important": true,
+      "name": "金属",
+      "desc": "含铁的矿块，能炼成铁",
+      "sprite": "item_metal",
+      "weight": 0,
+      "use": "",
+      "drop": "",
+      "sell": 9
+    },
+    {
       "id": "gold_ore",
       "sell": 16,
       "name": "金矿石",
-      "desc": "沉甸甸的金矿石，可以拿去典当行",
+      "desc": "沉甸甸的金矿石，可以拿去卖",
       "sprite": "item_gold_ore",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "tin_ore",
+      "sell": 14,
+      "name": "锡矿石",
+      "desc": "银白色的软金属矿",
+      "sprite": "item_tin_ore",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "quartz",
+      "sell": 22,
+      "name": "石英",
+      "desc": "透明的白色晶体",
+      "sprite": "item_quartz",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "amber",
+      "sell": 34,
+      "name": "琥珀",
+      "desc": "半透明的树脂化石",
+      "sprite": "item_amber",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "garnet",
+      "sell": 52,
+      "name": "石榴石",
+      "desc": "深红色的小宝石",
+      "sprite": "item_garnet",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "moonstone",
+      "sell": 160,
+      "name": "月光石",
+      "desc": "泛着蓝白光的稀有宝石",
+      "sprite": "item_moonstone",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "opal",
+      "sell": 190,
+      "name": "欧泊",
+      "desc": "里面像有彩虹在流动",
+      "sprite": "item_opal",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "copper_ore",
+      "sell": 20,
+      "name": "铜矿石",
+      "desc": "带着绿锈的红铜矿",
+      "sprite": "item_copper_ore",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "silver_ore",
+      "sell": 36,
+      "name": "银矿石",
+      "desc": "亮闪闪的银色矿块",
+      "sprite": "item_silver_ore",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "jade",
+      "sell": 55,
+      "name": "翡翠",
+      "desc": "温润的绿色玉石",
+      "sprite": "item_jade",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "lapis",
+      "sell": 78,
+      "name": "青金石",
+      "desc": "深蓝色里点缀着金星",
+      "sprite": "item_lapis",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "topaz",
+      "sell": 110,
+      "name": "黄玉",
+      "desc": "透亮的金黄色宝石",
+      "sprite": "item_topaz",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "sunstone",
+      "sell": 260,
+      "name": "日光石",
+      "desc": "像一小块凝固的阳光",
+      "sprite": "item_sunstone",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "peridot",
+      "sell": 240,
+      "name": "橄榄石",
+      "desc": "黄绿色的火山宝石",
+      "sprite": "item_peridot",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "cobalt_ore",
+      "sell": 48,
+      "name": "钴矿石",
+      "desc": "蓝色的金属矿，很硬",
+      "sprite": "item_cobalt_ore",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "sapphire",
+      "sell": 85,
+      "name": "蓝宝石",
+      "desc": "深海一样的蓝",
+      "sprite": "item_sapphire",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "aquamarine",
+      "sell": 120,
+      "name": "海蓝宝",
+      "desc": "像一滴凝固的海水",
+      "sprite": "item_aquamarine",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "tanzanite",
+      "sell": 170,
+      "name": "坦桑石",
+      "desc": "蓝紫色，换个角度换个颜色",
+      "sprite": "item_tanzanite",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "azurite",
+      "sell": 230,
+      "name": "蓝铜矿",
+      "desc": "蓝得发黑的铜矿",
+      "sprite": "item_azurite",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "ice_crystal",
+      "sell": 420,
+      "name": "冰晶",
+      "desc": "摸上去永远是凉的",
+      "sprite": "item_ice_crystal",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "star_sapphire",
+      "sell": 460,
+      "name": "星光蓝宝石",
+      "desc": "里面有一颗六芒星",
+      "sprite": "item_star_sapphire",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "sulfur",
+      "sell": 70,
+      "name": "硫磺",
+      "desc": "黄色，味道很冲",
+      "sprite": "item_sulfur",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "obsidian",
+      "sell": 105,
+      "name": "黑曜石",
+      "desc": "火山冷却成的黑玻璃",
+      "sprite": "item_obsidian",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "ruby",
+      "sell": 150,
+      "name": "红宝石",
+      "desc": "烧得通红的宝石",
+      "sprite": "item_ruby",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "fire_opal",
+      "sell": 210,
+      "name": "火蛋白石",
+      "desc": "里面有一团火苗",
+      "sprite": "item_fire_opal",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "magma_core",
+      "sell": 300,
+      "name": "熔岩核",
+      "desc": "还是烫的，别直接抱着",
+      "sprite": "item_magma_core",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "dragon_blood",
+      "sell": 620,
+      "name": "龙血石",
+      "desc": "传说是龙留下的血",
+      "sprite": "item_dragon_blood",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "sun_gold",
+      "sell": 680,
+      "name": "日冕金",
+      "desc": "比金子还要亮的金子",
+      "sprite": "item_sun_gold",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "meteorite",
+      "sell": 130,
+      "name": "陨铁",
+      "desc": "从天上掉下来的铁",
+      "sprite": "item_meteorite",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "mithril",
+      "sell": 190,
+      "name": "秘银",
+      "desc": "又轻又硬的银蓝色金属",
+      "sprite": "item_mithril",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "starstone",
+      "sell": 260,
+      "name": "星辰石",
+      "desc": "夜里会微微发光",
+      "sprite": "item_starstone",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "void_crystal",
+      "sell": 360,
+      "name": "虚空晶",
+      "desc": "看久了会觉得在往里吸",
+      "sprite": "item_void_crystal",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "iridium",
+      "sell": 480,
+      "name": "铱",
+      "desc": "世上最重的金属之一",
+      "sprite": "item_iridium",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "aether",
+      "sell": 880,
+      "name": "以太晶",
+      "desc": "轻得像是不存在",
+      "sprite": "item_aether",
+      "weight": 0,
+      "use": "",
+      "drop": ""
+    },
+    {
+      "id": "world_core",
+      "sell": 960,
+      "name": "世界之核",
+      "desc": "据说是这座山的心脏",
+      "sprite": "item_world_core",
       "weight": 0,
       "use": "",
       "drop": ""
@@ -1167,27 +1517,194 @@
     ],
     "ores": [
       {
-        "id": "gold",
-        "min_y": 1,
-        "chance": 0.1,
-        "deep_bonus": 0.002,
-        "hard_mul": 1.4,
-        "item": "gold_ore"
+        "id": "stone",
+        "item": "stone",
+        "hard_mul": 1.0
+      },
+      {
+        "id": "coal",
+        "item": "coal",
+        "hard_mul": 1.0
       },
       {
         "id": "metal",
-        "min_y": 2,
-        "chance": 0.14,
-        "deep_bonus": 0.003,
         "item": "metal",
+        "hard_mul": 1.2
+      },
+      {
+        "id": "gold_ore",
+        "item": "gold_ore",
+        "hard_mul": 1.4
+      },
+      {
+        "id": "tin_ore",
+        "item": "tin_ore",
         "hard_mul": 1.3
       },
       {
-        "id": "stone",
-        "min_y": 1,
-        "chance": 0.22,
-        "item": "stone",
-        "hard_mul": 1.0
+        "id": "quartz",
+        "item": "quartz",
+        "hard_mul": 1.5
+      },
+      {
+        "id": "amber",
+        "item": "amber",
+        "hard_mul": 1.6
+      },
+      {
+        "id": "garnet",
+        "item": "garnet",
+        "hard_mul": 1.8
+      },
+      {
+        "id": "moonstone",
+        "item": "moonstone",
+        "hard_mul": 2.0
+      },
+      {
+        "id": "opal",
+        "item": "opal",
+        "hard_mul": 2.0
+      },
+      {
+        "id": "copper_ore",
+        "item": "copper_ore",
+        "hard_mul": 1.3
+      },
+      {
+        "id": "silver_ore",
+        "item": "silver_ore",
+        "hard_mul": 1.5
+      },
+      {
+        "id": "jade",
+        "item": "jade",
+        "hard_mul": 1.7
+      },
+      {
+        "id": "lapis",
+        "item": "lapis",
+        "hard_mul": 1.9
+      },
+      {
+        "id": "topaz",
+        "item": "topaz",
+        "hard_mul": 2.1
+      },
+      {
+        "id": "sunstone",
+        "item": "sunstone",
+        "hard_mul": 2.4
+      },
+      {
+        "id": "peridot",
+        "item": "peridot",
+        "hard_mul": 2.3
+      },
+      {
+        "id": "cobalt_ore",
+        "item": "cobalt_ore",
+        "hard_mul": 1.7
+      },
+      {
+        "id": "sapphire",
+        "item": "sapphire",
+        "hard_mul": 2.0
+      },
+      {
+        "id": "aquamarine",
+        "item": "aquamarine",
+        "hard_mul": 2.1
+      },
+      {
+        "id": "tanzanite",
+        "item": "tanzanite",
+        "hard_mul": 2.3
+      },
+      {
+        "id": "azurite",
+        "item": "azurite",
+        "hard_mul": 2.4
+      },
+      {
+        "id": "ice_crystal",
+        "item": "ice_crystal",
+        "hard_mul": 2.7
+      },
+      {
+        "id": "star_sapphire",
+        "item": "star_sapphire",
+        "hard_mul": 2.8
+      },
+      {
+        "id": "sulfur",
+        "item": "sulfur",
+        "hard_mul": 1.9
+      },
+      {
+        "id": "obsidian",
+        "item": "obsidian",
+        "hard_mul": 2.1
+      },
+      {
+        "id": "ruby",
+        "item": "ruby",
+        "hard_mul": 2.3
+      },
+      {
+        "id": "fire_opal",
+        "item": "fire_opal",
+        "hard_mul": 2.5
+      },
+      {
+        "id": "magma_core",
+        "item": "magma_core",
+        "hard_mul": 2.7
+      },
+      {
+        "id": "dragon_blood",
+        "item": "dragon_blood",
+        "hard_mul": 3.0
+      },
+      {
+        "id": "sun_gold",
+        "item": "sun_gold",
+        "hard_mul": 3.1
+      },
+      {
+        "id": "meteorite",
+        "item": "meteorite",
+        "hard_mul": 2.4
+      },
+      {
+        "id": "mithril",
+        "item": "mithril",
+        "hard_mul": 2.6
+      },
+      {
+        "id": "starstone",
+        "item": "starstone",
+        "hard_mul": 2.7
+      },
+      {
+        "id": "void_crystal",
+        "item": "void_crystal",
+        "hard_mul": 2.9
+      },
+      {
+        "id": "iridium",
+        "item": "iridium",
+        "hard_mul": 3.0
+      },
+      {
+        "id": "aether",
+        "item": "aether",
+        "hard_mul": 3.4
+      },
+      {
+        "id": "world_core",
+        "item": "world_core",
+        "hard_mul": 3.5
       }
     ],
     "picks": [
@@ -1395,6 +1912,443 @@
           "desc": "最舒服的床，体力到 130%"
         }
       ]
-    }
+    },
+    "floors": 100,
+    "ore_defs": [
+      {
+        "id": "stone",
+        "hard": 1.0
+      },
+      {
+        "id": "coal",
+        "hard": 1.0
+      },
+      {
+        "id": "metal",
+        "hard": 1.2
+      },
+      {
+        "id": "gold_ore",
+        "hard": 1.4
+      },
+      {
+        "id": "tin_ore",
+        "hard": 1.3
+      },
+      {
+        "id": "quartz",
+        "hard": 1.5
+      },
+      {
+        "id": "amber",
+        "hard": 1.6
+      },
+      {
+        "id": "garnet",
+        "hard": 1.8
+      },
+      {
+        "id": "moonstone",
+        "hard": 2.0
+      },
+      {
+        "id": "opal",
+        "hard": 2.0
+      },
+      {
+        "id": "copper_ore",
+        "hard": 1.3
+      },
+      {
+        "id": "silver_ore",
+        "hard": 1.5
+      },
+      {
+        "id": "jade",
+        "hard": 1.7
+      },
+      {
+        "id": "lapis",
+        "hard": 1.9
+      },
+      {
+        "id": "topaz",
+        "hard": 2.1
+      },
+      {
+        "id": "sunstone",
+        "hard": 2.4
+      },
+      {
+        "id": "peridot",
+        "hard": 2.3
+      },
+      {
+        "id": "cobalt_ore",
+        "hard": 1.7
+      },
+      {
+        "id": "sapphire",
+        "hard": 2.0
+      },
+      {
+        "id": "aquamarine",
+        "hard": 2.1
+      },
+      {
+        "id": "tanzanite",
+        "hard": 2.3
+      },
+      {
+        "id": "azurite",
+        "hard": 2.4
+      },
+      {
+        "id": "ice_crystal",
+        "hard": 2.7
+      },
+      {
+        "id": "star_sapphire",
+        "hard": 2.8
+      },
+      {
+        "id": "sulfur",
+        "hard": 1.9
+      },
+      {
+        "id": "obsidian",
+        "hard": 2.1
+      },
+      {
+        "id": "ruby",
+        "hard": 2.3
+      },
+      {
+        "id": "fire_opal",
+        "hard": 2.5
+      },
+      {
+        "id": "magma_core",
+        "hard": 2.7
+      },
+      {
+        "id": "dragon_blood",
+        "hard": 3.0
+      },
+      {
+        "id": "sun_gold",
+        "hard": 3.1
+      },
+      {
+        "id": "meteorite",
+        "hard": 2.4
+      },
+      {
+        "id": "mithril",
+        "hard": 2.6
+      },
+      {
+        "id": "starstone",
+        "hard": 2.7
+      },
+      {
+        "id": "void_crystal",
+        "hard": 2.9
+      },
+      {
+        "id": "iridium",
+        "hard": 3.0
+      },
+      {
+        "id": "aether",
+        "hard": 3.4
+      },
+      {
+        "id": "world_core",
+        "hard": 3.5
+      }
+    ],
+    "mines": [
+      {
+        "id": 1,
+        "name": "灰岩矿井",
+        "desc": "矿山岛最浅的一口井，石头和煤到处都是",
+        "start": [
+          {
+            "id": "stone",
+            "chance": 0.16
+          },
+          {
+            "id": "coal",
+            "chance": 0.11
+          },
+          {
+            "id": "metal",
+            "chance": 0.08
+          },
+          {
+            "id": "gold_ore",
+            "chance": 0.05
+          }
+        ],
+        "new": [
+          {
+            "id": "tin_ore",
+            "chance": 0.045,
+            "from": 21
+          },
+          {
+            "id": "quartz",
+            "chance": 0.04,
+            "from": 41
+          },
+          {
+            "id": "amber",
+            "chance": 0.04,
+            "from": 61
+          },
+          {
+            "id": "garnet",
+            "chance": 0.035,
+            "from": 81
+          }
+        ],
+        "rare": [
+          {
+            "id": "moonstone",
+            "chance": 0.012
+          },
+          {
+            "id": "opal",
+            "chance": 0.012
+          }
+        ],
+        "rare_floors": 3
+      },
+      {
+        "id": 2,
+        "name": "赤铜矿井",
+        "desc": "铁轨塌了的旧矿井，红铜和白银",
+        "start": [
+          {
+            "id": "metal",
+            "chance": 0.16
+          },
+          {
+            "id": "tin_ore",
+            "chance": 0.11
+          },
+          {
+            "id": "quartz",
+            "chance": 0.08
+          },
+          {
+            "id": "copper_ore",
+            "chance": 0.05
+          }
+        ],
+        "new": [
+          {
+            "id": "silver_ore",
+            "chance": 0.045,
+            "from": 21
+          },
+          {
+            "id": "jade",
+            "chance": 0.04,
+            "from": 41
+          },
+          {
+            "id": "lapis",
+            "chance": 0.04,
+            "from": 61
+          },
+          {
+            "id": "topaz",
+            "chance": 0.035,
+            "from": 81
+          }
+        ],
+        "rare": [
+          {
+            "id": "sunstone",
+            "chance": 0.012
+          },
+          {
+            "id": "peridot",
+            "chance": 0.012
+          }
+        ],
+        "rare_floors": 3
+      },
+      {
+        "id": 3,
+        "name": "蓝晶矿井",
+        "desc": "潮湿阴冷，岩缝里全是蓝色的光",
+        "start": [
+          {
+            "id": "copper_ore",
+            "chance": 0.16
+          },
+          {
+            "id": "silver_ore",
+            "chance": 0.11
+          },
+          {
+            "id": "jade",
+            "chance": 0.08
+          },
+          {
+            "id": "cobalt_ore",
+            "chance": 0.05
+          }
+        ],
+        "new": [
+          {
+            "id": "sapphire",
+            "chance": 0.045,
+            "from": 21
+          },
+          {
+            "id": "aquamarine",
+            "chance": 0.04,
+            "from": 41
+          },
+          {
+            "id": "tanzanite",
+            "chance": 0.04,
+            "from": 61
+          },
+          {
+            "id": "azurite",
+            "chance": 0.035,
+            "from": 81
+          }
+        ],
+        "rare": [
+          {
+            "id": "ice_crystal",
+            "chance": 0.012
+          },
+          {
+            "id": "star_sapphire",
+            "chance": 0.012
+          }
+        ],
+        "rare_floors": 3
+      },
+      {
+        "id": 4,
+        "name": "地火矿井",
+        "desc": "越往下越热，岩浆就在隔壁",
+        "start": [
+          {
+            "id": "cobalt_ore",
+            "chance": 0.16
+          },
+          {
+            "id": "sapphire",
+            "chance": 0.11
+          },
+          {
+            "id": "aquamarine",
+            "chance": 0.08
+          },
+          {
+            "id": "sulfur",
+            "chance": 0.05
+          }
+        ],
+        "new": [
+          {
+            "id": "obsidian",
+            "chance": 0.045,
+            "from": 21
+          },
+          {
+            "id": "ruby",
+            "chance": 0.04,
+            "from": 41
+          },
+          {
+            "id": "fire_opal",
+            "chance": 0.04,
+            "from": 61
+          },
+          {
+            "id": "magma_core",
+            "chance": 0.035,
+            "from": 81
+          }
+        ],
+        "rare": [
+          {
+            "id": "dragon_blood",
+            "chance": 0.012
+          },
+          {
+            "id": "sun_gold",
+            "chance": 0.012
+          }
+        ],
+        "rare_floors": 3
+      },
+      {
+        "id": 5,
+        "name": "星陨矿井",
+        "desc": "山最深处，陨石砸出来的洞",
+        "start": [
+          {
+            "id": "sulfur",
+            "chance": 0.16
+          },
+          {
+            "id": "obsidian",
+            "chance": 0.11
+          },
+          {
+            "id": "ruby",
+            "chance": 0.08
+          },
+          {
+            "id": "meteorite",
+            "chance": 0.05
+          }
+        ],
+        "new": [
+          {
+            "id": "mithril",
+            "chance": 0.045,
+            "from": 21
+          },
+          {
+            "id": "starstone",
+            "chance": 0.04,
+            "from": 41
+          },
+          {
+            "id": "void_crystal",
+            "chance": 0.04,
+            "from": 61
+          },
+          {
+            "id": "iridium",
+            "chance": 0.035,
+            "from": 81
+          }
+        ],
+        "rare": [
+          {
+            "id": "aether",
+            "chance": 0.012
+          },
+          {
+            "id": "world_core",
+            "chance": 0.012
+          }
+        ],
+        "rare_floors": 3
+      }
+    ]
   }
 }

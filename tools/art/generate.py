@@ -1171,6 +1171,30 @@ def chest(open_=False):
 
 
 # ---------------------------------------------------------------- 物品图标（16×16）
+def ore_icon(oid):
+    """矿石图标：按 tools/mine_data.py 里的形状（块/金块/水晶/宝石）和三种颜色画。"""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) + "/tools")
+    from mine_data import ORES
+    _n, _d, shape, hi, mid, lo = ORES[oid][:6]
+    c = Canvas(16, 16)
+    if shape == "chunk":
+        c.ellipse(8, 9, 6, 4.6, mid); c.ellipse(7, 8, 3, 2, hi); c.ellipse(10, 11, 3.5, 1.8, lo)
+        c.set(5, 9, hi); c.set(11, 8, hi)
+    elif shape == "nugget":
+        c.ellipse(8, 9, 5, 4, mid); c.ellipse(6.5, 7.5, 2.4, 1.8, hi); c.ellipse(10, 11, 3, 1.5, lo)
+        c.ellipse(12, 7, 2, 1.8, mid); c.set(12, 6, hi)
+    elif shape == "crystal":
+        c.rect(7, 3, 9, 12, mid); c.pts([(8, 1), (7, 2), (9, 2)], mid); c.rect(4, 7, 5, 12, mid); c.rect(11, 6, 12, 12, mid)
+        c.rect(7, 3, 7, 11, hi); c.rect(9, 8, 9, 12, lo); c.rect(5, 9, 5, 12, lo); c.rect(12, 8, 12, 12, lo)
+        c.rect(3, 13, 13, 13, lo)
+    else:                                                    # gem
+        c.pts([(4, 6), (5, 4), (10, 4), (11, 6), (8, 12)], mid)
+        c.rect(5, 5, 10, 6, mid); c.rect(6, 7, 9, 8, mid); c.rect(7, 9, 8, 10, mid)
+        c.rect(5, 5, 7, 5, hi); c.set(6, 6, hi); c.rect(9, 7, 10, 7, lo); c.rect(8, 9, 8, 11, lo)
+    c.outline()
+    return c
+
 def item_icon(kind):
     c = Canvas(16, 16)
     if kind == "bottle":
@@ -1750,21 +1774,21 @@ def mine_tile(kind):
         hi, mid, lo = rocks[base]
         h = Canvas(16, 16)
         if var == 0:
-            h.ellipse(8, 9, 4.3, 3.7, mid)
-            h.ellipse(7, 8, 2.4, 1.7, hi)
-            h.ellipse(9.4, 10.4, 2.8, 1.5, lo)
+            h.ellipse(8, 8.6, 5.6, 4.8, mid)
+            h.ellipse(6.8, 7, 3.2, 2.2, hi)
+            h.ellipse(9.4, 10.6, 3.6, 1.8, lo)
             h.set(6, 7, "W" if base != "dirt" else "w")
         elif var == 1:                                        # 扁平的一块
-            h.ellipse(8, 10, 5.0, 2.8, mid)
-            h.ellipse(7, 9, 3.0, 1.3, hi)
-            h.ellipse(10, 11.4, 3.2, 1.2, lo)
+            h.ellipse(8, 9.4, 6.2, 3.8, mid)
+            h.ellipse(6.8, 8, 3.6, 1.8, hi)
+            h.ellipse(10, 11.2, 4.0, 1.6, lo)
             h.set(5, 9, "W" if base != "dirt" else "w")
         else:                                                 # 两块小石头叠在一起
-            h.ellipse(6.5, 10, 3.0, 2.6, mid)
-            h.ellipse(10, 8.5, 3.0, 3.0, mid)
-            h.ellipse(9.2, 7.5, 1.7, 1.4, hi)
-            h.ellipse(6, 9.2, 1.6, 1.2, hi)
-            h.ellipse(10.5, 10, 2.0, 1.4, lo)
+            h.ellipse(5.8, 10, 4.0, 3.4, mid)
+            h.ellipse(10.4, 8.2, 4.2, 4.4, mid)
+            h.ellipse(9.4, 6.8, 2.4, 1.8, hi)
+            h.ellipse(5.2, 9, 2.2, 1.5, hi)
+            h.ellipse(10.8, 10.4, 2.8, 1.8, lo)
         h.rect(6, 13, 10, 13, "K")
         h.outline()
         c = _up2(h)
@@ -2113,6 +2137,12 @@ def build():
     }
     for k in ("bottle", "crab_recipe", "lucky_bait", "bell", "map_piece", "pearl", "lamp_shell", "diary_page", "lamp_scale", "stone", "metal", "plank", "rope", "ladder", "boot", "gold_ore", "ration", "jerky", "tonic", "bait_worm", "bait_shrimp", "rod", "line", "hook"):
         made["item_" + k] = save(item_icon(k), "item_" + k)
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))) + "/tools")
+    from mine_data import ORES as _ORES
+    for k in _ORES:
+        if "item_" + k not in made:
+            made["item_" + k] = save(ore_icon(k), "item_" + k)
     for k in ("fruit", "veg", "bread", "flower"):
         made["goods_" + k] = save(goods(k), "goods_" + k)
         made["ico_" + k] = save(goods_icon(k), "ico_" + k)

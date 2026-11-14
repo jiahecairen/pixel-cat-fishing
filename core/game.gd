@@ -1403,9 +1403,8 @@ func pawn_redeem(id: String) -> String:
 	return ""
 
 ## 矿洞大厅的老钻收矿石：只收石头、金属、金矿石，不记赎回。
-const ORE_ITEMS := ["stone", "metal", "gold_ore"]
 func ore_sell(id: String, all: bool = false) -> int:
-	if not id in ORE_ITEMS:
+	if not mine.is_ore(id):
 		return 0
 	var total := 0
 	for i in (inventory.count(state, id) if all else 1):

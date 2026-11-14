@@ -194,14 +194,14 @@ func _diggable_ahead() -> bool:
 	var mn = m.game.mine
 	var t: Vector2i = mn.target(face_v.x, face_v.y)
 	var b: String = mn.block(t.x, t.y)
-	return b != "" and b not in ["granite", "pit", "chest"]
+	return b != "" and b not in ["granite", "pit", "chest", "ladder"]
 
 ## 面前够得到的是什么特殊物：""/"pit"/"chest"。
 func _special_ahead() -> String:
 	var mn = m.game.mine
 	var t: Vector2i = mn.target(face_v.x, face_v.y)
 	var b: String = mn.block(t.x, t.y)
-	return b if b in ["pit", "chest"] else ""
+	return b if b in ["pit", "chest", "ladder"] else ""
 
 func _dig_ahead(now: int) -> void:
 	var mn = m.game.mine
@@ -328,11 +328,11 @@ func key(code: int) -> bool:
 				_open("descend")                  # 默认选"下去"
 			elif sp == "chest":
 				_open_crate()
-			elif mn.on_entrance():
+			elif sp == "ladder":
 				_open("leave")
 				menu_sel = 1                      # 默认停在"再挖一会儿"，免得手滑
 			else:
-				say("面朝石头按住空格挖；往下的黑洞要先把周围的石头挖开")
+				pass
 			return true
 		return code in [KEY_UP, KEY_W, KEY_DOWN, KEY_S]
 	if region == "isle" and act:
@@ -357,7 +357,7 @@ func _bomb() -> void:
 ## 站在入口台阶上：回上一层；第 1 层和有电梯的层直接回大厅，背包里的东西换成钱和材料。
 func _ascend() -> void:
 	var mn = m.game.mine
-	var r: String = mn.ascend()
+	var r: String = mn.ascend(face_v.x, face_v.y)
 	if r == "up":
 		_mcam = Vector2.INF
 		say("回到第 %d 层" % mn.floor_n())
@@ -636,8 +636,8 @@ func hint() -> String:
 				return "空格键：下一层"
 			if _special_ahead() == "chest":
 				return "空格键：打开木箱"
-			if mh.on_entrance():
-				return "空格键回地面（背包换钱）"
+			if _special_ahead() == "ladder":
+				return "空格键：爬梯子"
 			return "第 %d 层  方向键走  空格挖  B 放炸弹（有 %d 颗）" % [mh.floor_n(), mh.bombs()]
 	return ""
 
@@ -1022,8 +1022,9 @@ func _draw_mine(view: Vector2, t: int) -> void:
 			if not mn.is_floor(x - 1, y):
 				m.draw_rect(Rect2(pos, Vector2(2, CELL)), Color(0, 0, 0, 0.25))
 			if b == "":
-				if Vector2i(x, y) == en:
-					m.tex_frame("mine_tiles", pos, TILE["ladder"], MINE_FRAMES)
+				pass
+			elif b == "ladder":
+				m.tex_frame("mine_tiles", pos, TILE["ladder"], MINE_FRAMES)
 			elif b == "pit":
 				m.tex_frame("mine_tiles", pos, TILE["hole"], MINE_FRAMES)
 			elif b == "chest":
@@ -1039,8 +1040,8 @@ func _draw_mine(view: Vector2, t: int) -> void:
 				var o: String = mn.ore(x, y) if b != "granite" else ""
 				var seen := Vector2(x + 0.5 - fp.x, y + 0.5 - fp.y).length() <= R * 0.8
 				var gl: int = absi(hash([x, y, mn.floor_n(), "glint"])) % 100
-				if seen and ((o in ["gold", "metal"] and gl < 45) or (o == "" and b != "granite" and gl < 8)):
-					var gc: Color = Pal.L_Y if (o == "gold" or (o == "" and gl % 2 == 0)) else Pal.L_C
+				if seen and ((o != "" and gl < 40) or (o == "" and b != "granite" and gl < 8)):
+					var gc: Color = Pal.L_Y if gl % 2 == 0 else Pal.L_C
 					m.draw_rect(Rect2(pos + shake + Vector2(12 + gl % 7, 11 + gl % 5), Vector2(2, 2)), gc)
 				if f > 0.02:
 					m.tex_frame("mine_tiles", pos + shake, CRACK0 + clampi(int(f * 4.0), 0, 3), MINE_FRAMES)

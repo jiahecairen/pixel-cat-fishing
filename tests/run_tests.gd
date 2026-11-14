@@ -66,6 +66,7 @@ func _init() -> void:
 		test_v067(balance, fish)
 		test_v068_sell(balance, fish)
 		test_v078(balance, fish)
+		test_v082(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -968,7 +969,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	var clock := FakeClock.new()
 	var g := Game.new(balance, fish, GameState.new(), clock, _rng(31))
 	var inv = g.inventory
-	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 21 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "15 种普通物品（含两种鱼饵、蟹笼配方、雾灯贝、日记残页、雾灯鳞、木板）+ 10 件装备，开局物品栏为空")
+	check(inv.defs.filter(func(d): return d["use"] != "gear").size() == 56 and inv.defs.filter(func(d): return d["use"] == "gear").size() == 10 and inv.owned(g.state).is_empty(), "21 种普通物品 + 35 种新矿石（共 38 种矿石）+ 10 件装备，开局物品栏为空")
 	check(not inv.add(g.state, "nope") and inv.add(g.state, "boot") and inv.add(g.state, "boot", 2), "只能加入已定义的物品，同种叠加")
 	check(inv.count(g.state, "boot") == 3 and inv.owned(g.state) == ["boot"], "旧靴子 ×3 只占一格")
 	check(not inv.can_use(g.state, "boot") and not g.use_item("boot")["ok"] and inv.count(g.state, "boot") == 3, "收藏品不能使用，也不会被扣掉")
@@ -1889,7 +1890,7 @@ func _stand_next_to_rock(mn) -> Vector2i:
 		for x in range(1, mn.width() - 1):
 			if mn.is_floor(x, y) and mn.block(x, y) == "":
 				for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-					if mn.block(x + dv.x, y + dv.y) not in ["", "granite", "chest", "pit"]:
+					if mn.block(x + dv.x, y + dv.y) not in ["", "granite", "chest", "pit", "ladder"]:
 						mn.m()["run"]["x"] = x
 						mn.m()["run"]["y"] = y
 						return dv
@@ -1904,7 +1905,7 @@ func _clear_crates(mn) -> void:
 
 ## 入口到出口沿着地面走的一条路（不管石头）。
 func _floor_path(mn) -> Array:
-	var en: Vector2i = mn.entrance(mn.floor_n())
+	var en: Vector2i = mn.entrance(mn.floor_n()) + Vector2i(0, 1)
 	var ex: Vector2i = mn.exit_pos(mn.floor_n())
 	var prev := {en: en}
 	var q: Array = [en]
@@ -1935,7 +1936,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.shaft_status(2) == "broken" and mn.shaft_status(3) == "locked" and mn.shaft_count() == 5, "一共 5 口井：2 号坏了，3-5 号还没开放")
 	check(not g.state.to_dict().has("gems"), "宝石货币已取消")
 	check(mn.start_floors() == [1] and not mn.begin_run(1, clock.t, 5), "还没到过整 5 层，只能从第 1 层开始")
-	check(mn.begin_run(1, clock.t) and mn.in_run() and mn.floor_n() == 1 and mn.pos() == mn.entrance(1), "坐矿车下井：第 1 层，站在入口台阶上")
+	check(mn.begin_run(1, clock.t) and mn.in_run() and mn.floor_n() == 1 and mn.pos() == mn.entrance(1) + Vector2i(0, 1), "坐矿车下井：第 1 层，站在入口梯子下面一格")
 	_clear_crates(mn)
 	check(mn.width() >= 25 and mn.height() >= 16, "地图比以前大：%d×%d" % [mn.width(), mn.height()])
 	check(mn.block(-1, 3) == "granite" and mn.block(mn.width(), 3) == "granite" and mn.block(3, mn.height()) == "granite", "地图外面是岩壁")
@@ -2025,7 +2026,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.block(ex.x, ex.y) == "pit" and mn.pos() == path[path.size() - 2], "凿碎后露出下一层的黑洞")
 	check(not mn.move(last.x, last.y, clock.t) and mn.pos() == path[path.size() - 2], "洞口走不上去（像矿石一样要面对着互动）")
 	check(not mn.descend(-last.x, -last.y), "背对着洞下不去")
-	check(mn.descend(last.x, last.y) and mn.floor_n() == 2 and mn.pos() == mn.entrance(2) and mn.on_entrance(), "下到第 2 层，站在新入口")
+	check(mn.descend(last.x, last.y) and mn.floor_n() == 2 and mn.pos() == mn.entrance(2) + Vector2i(0, 1) and mn.on_entrance(), "下到第 2 层，站在新入口梯子下面")
 	check(mn.ascend() == "hall" and mn.floor_n() == 2 and mn.on_entrance(), "每层入口的梯子都是回地面（不是上一层）")
 	# 顺滑走动：小步走、撞墙停、不会钻进石头和岩壁
 	var p0: Vector2 = mn.fpos()
@@ -2051,7 +2052,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 		g.state.mine["run"]["floor"] = ff
 		for yy in range(1, mn.height()):
 			for xx in range(1, mn.width() - 1):
-				if gx < 0 and mn.ore(xx, yy) == "gold" and mn.block(xx, yy) != "":
+				if gx < 0 and mn.ore(xx, yy) == "gold_ore" and mn.block(xx, yy) != "":
 					gx = xx
 					gy = yy
 					gf = ff
@@ -2085,7 +2086,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	g.state.mine["run"]["dug"][mn._key(exit4.x, exit4.y)] = 1
 	check(mn.descend() and mn.floor_n() == 5 and mn.has_elevator() and mn.ascend() == "hall", "到第 5 层：入口有电梯，直接回大厅")
 	mn.end_run()
-	check(mn.start_floors() == [1, 5] and mn.begin_run(1, clock.t + 2, 5) and mn.floor_n() == 5 and mn.pos() == mn.entrance(5), "矿车可以直接从第 5 层开始")
+	check(mn.start_floors() == [1, 5] and mn.begin_run(1, clock.t + 2, 5) and mn.floor_n() == 5 and mn.pos() == mn.entrance(5) + Vector2i(0, 1), "矿车可以直接从第 5 层开始")
 	# 工具等级：第 5 层起是石层，要铁镐
 	var nb5 := _stand_next_to_rock(mn)
 	check(mn.dig_block_reason(nb5.x, nb5.y) == "tool" and mn.need_tool(0, 0) == 2, "第 5 层是石层，鹤嘴锄挖不动")
@@ -2190,3 +2191,149 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	var g3 := Game.new(balance, fish, s3, clock, _rng(69))
 	g3.mine.ensure(clock.t)
 	check(g3.mine.in_run() and g3.mine.floor_n() == g.mine.floor_n() and g3.mine.pos() == g.mine.pos() and g3.mine.exit_pos(1) == g.mine.exit_pos(1), "读档后这一局的位置和地图都在")
+
+
+func test_v082(balance: Dictionary, fish: Array) -> void:
+	print("v0.82: 梯子实心、石头缝隙、无孤立岩壁、5 口井的矿石")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(82))
+	var mn = g.mine
+	mn.ensure(clock.t)
+	mn.begin_run(1, clock.t)
+	mn.give_first_pick()
+	_clear_crates(mn)
+	var en: Vector2i = mn.entrance(1)
+	check(mn.block(en.x, en.y) == "ladder" and mn.dig_block_reason(0, -1) == "ladder", "入口的梯子是实心的，不能挖")
+	check(mn.pos() == en + Vector2i(0, 1) and mn.ladder_ahead(0, -1) and not mn.ladder_ahead(0, 1), "站在梯子下面，面朝上才够得到梯子")
+	for _i in 30:
+		mn.walk(0.0, -0.1)
+	check(mn.fpos().y > float(en.y) + 1.0, "走不进梯子那一格（脚停在 %.2f）" % mn.fpos().y)
+	check(mn.ascend(0, 1) == "" and mn.ascend(0, -1) == "hall", "面朝梯子按空格才能上去")
+	# 相邻石头的缝比角色窄
+	check(mn.HB.x * 2.0 > 1.0 - 2.0 * mn.ROCK_HALF, "两块贴着的石头之间的缝（%.2f）比角色（%.2f）窄" % [1.0 - 2.0 * mn.ROCK_HALF, mn.HB.x * 2.0])
+	# 地形：任何一层都没有被地面围住的孤立岩壁，也没有一格宽的缺口
+	var isolated := 0
+	var notch := 0
+	for f in [1, 2, 3, 7, 12, 25, 40, 66, 99, 100]:
+		mn.m()["run"]["floor"] = f
+		var W: int = mn.width()
+		var H: int = mn.height()
+		var seen := {}
+		var q: Array = []
+		for y in H:
+			for x in W:
+				if (x == 0 or y == 0 or x == W - 1 or y == H - 1) and not mn.is_floor(x, y):
+					seen[Vector2i(x, y)] = 1
+					q.append(Vector2i(x, y))
+				if x > 0 and y > 0 and x < W - 1 and y < H - 1 and not mn.is_floor(x, y) and ((mn.is_floor(x - 1, y) and mn.is_floor(x + 1, y)) or (mn.is_floor(x, y - 1) and mn.is_floor(x, y + 1))):
+					notch += 1
+		while not q.is_empty():
+			var c: Vector2i = q.pop_back()
+			for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var n: Vector2i = c + dv
+				if mn.in_map(n.x, n.y) and not seen.has(n) and not mn.is_floor(n.x, n.y):
+					seen[n] = 1
+					q.append(n)
+		for y in H:
+			for x in W:
+				if not mn.is_floor(x, y) and not seen.has(Vector2i(x, y)):
+					isolated += 1
+	check(isolated == 0 and notch == 0, "10 层抽查：没有孤立岩壁（%d），没有一格宽的缺口（%d）" % [isolated, notch])
+	mn.m()["run"]["floor"] = 1
+	# 5 口井的矿石规则
+	check(mn.max_floor() == 100 and _count_mines(mn) == 5, "5 口井，每口最深 100 层")
+	var ok_start := true
+	var ok_rm := true
+	var ok_new := true
+	var ok_rare := true
+	var ok_share := true
+	var seen_before := {}
+	var prev50 := {}
+	for sid in range(1, 6):
+		var md: Dictionary = mn.mine_def(sid)
+		var p1: Array = mn.ore_pool(sid, 1)
+		if p1.size() < 3:
+			ok_start = false
+		var ids1: Array = p1.map(func(o): return str(o["id"]))
+		# 第 21/41/61 层各少一种最常见的，第 21/41/61/81 层各多一种新的
+		for step in 4:
+			var f0: int = 1 + 20 * step
+			var pool: Array = mn.ore_pool(sid, f0).map(func(o): return str(o["id"]))
+			var pool_prev: Array = mn.ore_pool(sid, maxi(1, f0 - 1)).map(func(o): return str(o["id"]))
+			if step > 0:
+				if pool.has(str(md["start"][step - 1]["id"])) or pool_prev.has(str(md["start"][step - 1]["id"])) == false:
+					ok_rm = false
+				if not pool.has(str(md["new"][step - 1]["id"])) or pool_prev.has(str(md["new"][step - 1]["id"])):
+					ok_new = false
+			# 一段 20 层之内矿种不变
+			if mn.ore_pool(sid, f0 + 19).size() != mn.ore_pool(sid, f0).size() and f0 + 19 < 98:
+				ok_new = false
+		for f in range(1, 101):
+			var has_rare := false
+			for o in mn.ore_pool(sid, f):
+				for r in md["rare"]:
+					if str(o["id"]) == str(r["id"]):
+						has_rare = true
+			if has_rare != (f >= 98):
+				ok_rare = false
+		# 重复规则：第 21 层起的矿，前面所有井里都没出现过；前 20 层的矿只能来自上一口井前 50 层
+		var later := {}
+		for f in range(21, 101):
+			for o in mn.ore_pool(sid, f):
+				if not ids1.has(str(o["id"])):
+					later[str(o["id"])] = 1
+		for id in later:
+			if seen_before.has(id):
+				ok_share = false
+		if sid > 1:
+			var shared := 0
+			for id in ids1:
+				if prev50.has(id):
+					shared += 1
+				elif seen_before.has(id):
+					ok_share = false
+			if shared < 3:
+				ok_share = false
+		prev50 = {}
+		for f in range(1, 51):
+			for o in mn.ore_pool(sid, f):
+				prev50[str(o["id"])] = 1
+		for f in range(1, 101):
+			for o in mn.ore_pool(sid, f):
+				seen_before[str(o["id"])] = 1
+	check(ok_start, "每口井前 20 层至少 3 种常见矿")
+	check(ok_rm, "第 21/41/61 层起，前 20 层里最常见的矿一种一种消失")
+	check(ok_new, "第 21/41/61/81 层各出现一种新矿，20 层内不变")
+	check(ok_rare, "稀有矿只在最后 3 层（98-100）出现")
+	check(ok_share, "只有前 20 层会和上一口井前 50 层的矿重复，第 21 层起全是新矿")
+	# 物品栏里的产地信息
+	var txt: String = mn.ore_origin_text("stone")
+	check(txt.contains("1号井") and txt.contains("1-20"), "石头的产地：" + txt)
+	var tin: String = mn.ore_origin_text("tin_ore")
+	check(tin.contains("1号井") and tin.contains("2号井"), "锡矿石出在 1 号井和 2 号井：" + tin)
+	check(mn.ore_origin_text("world_core").contains("5号井") and mn.ore_origin_text("world_core").contains("稀有"), "世界之核：5 号井 98-100 层，稀有")
+	var orphan := 0
+	for o in mn.cfg()["ores"]:
+		if mn.ore_sources(str(o["id"])).is_empty():
+			orphan += 1
+	check(orphan == 0, "38 种矿石每种都有产地（没有的 %d）" % orphan)
+	# 第 100 层没有往下的洞
+	mn.m()["run"]["floor"] = 100
+	var ex: Vector2i = mn.exit_pos(100)
+	mn.m()["run"]["dug"][mn._key(ex.x, ex.y)] = 1
+	check(mn.block(ex.x, ex.y) == "" and not mn.exit_ahead(0, 1), "第 100 层是底，没有往下的洞")
+	# 挖出来的矿直接进物品栏，前几层大概一半石头没有矿
+	mn.m()["run"]["floor"] = 1
+	var with_ore := 0
+	var total := 0
+	for y in mn.height():
+		for x in mn.width():
+			if mn.has_rock(x, y):
+				total += 1
+				if mn.ore(x, y) != "":
+					with_ore += 1
+	var frac := float(with_ore) / float(maxi(1, total))
+	check(frac > 0.2 and frac < 0.6, "不是每块石头都有矿（%.0f%%）" % (frac * 100.0))
+
+func _count_mines(mn) -> int:
+	return mn.cfg().get("mines", []).size()

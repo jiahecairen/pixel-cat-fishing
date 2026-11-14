@@ -86,7 +86,7 @@ func sell_stack_selected() -> void:
 
 func _sellable() -> bool:
 	var owned := _owned()
-	return sell_mode and tab == 0 and sel < owned.size() and m.game.pawn_value(str(owned[sel])) > 0 and (not ore_mode or str(owned[sel]) in m.game.ORE_ITEMS)
+	return sell_mode and tab == 0 and sel < owned.size() and m.game.pawn_value(str(owned[sel])) > 0 and (not ore_mode or m.game.mine.is_ore(str(owned[sel])))
 
 func sell_selected() -> void:
 	var owned := _owned()
@@ -443,6 +443,8 @@ func draw() -> void:
 		tx += 20
 	m.label(def["name"], Vector2(tx, dy), Pal.L_W)
 	m.label(def.get("desc", ""), Vector2(tx, dy + 11), Pal.L_A)
+	if not m.mini and g.mine.is_ore(id):                  # 矿石：来自哪口井、哪几层
+		m.dyn_text(g.mine.ore_origin_text(id), Vector2(tx, dy + 22), Pal.L_Y)
 	if not m.mini:
 		var gs: Array = g.gear_stat(id)      # 装备的属性写在图标右边
 		if not gs.is_empty():

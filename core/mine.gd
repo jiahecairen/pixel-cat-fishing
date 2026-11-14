@@ -28,6 +28,9 @@ func cfg() -> Dictionary:
 func m() -> Dictionary:
 	return _s.mine
 
+func max_floor() -> int:
+	return int(_c.get("floors", 100))
+
 func width() -> int:
 	return int(_c.get("width", 15))
 
@@ -178,7 +181,7 @@ func begin_run(id: int, now_ms: int, start_floor: int = 1) -> bool:
 		m()["sta"] = minf(float(stamina_max()) * float(_c.get("stamina", {}).get("cap_mult", 1.3)), stamina_f() + float(dish_by_id(dish).get("stamina", 0)))
 	var en := entrance(start_floor)
 	run()["x"] = en.x
-	run()["y"] = en.y
+	run()["y"] = en.y + 1                                   # 站在梯子下面一格
 	return true
 
 ## 结束这一局：背包里的东西换成钱和材料。返回 {"coins","stone","metal","lost"}。
@@ -317,6 +320,7 @@ func _layout(f: int) -> Dictionary:
 	for y in range(0, 5):                                  # 入口：顶上的缺口，一条路通到第一个房间
 		fl[y * W + en.x] = 1
 		fl[y * W + clampi(en.x + 1, 1, W - 2)] = 1 if y > 0 else fl[y * W + clampi(en.x + 1, 1, W - 2)]
+	_tidy_floor(fl, W, H)
 	# 出口：从入口走过去最远的那一批地面里挑一个
 	var dist := {}
 	var q: Array = [en]
@@ -366,6 +370,32 @@ func _layout(f: int) -> Dictionary:
 	_lay[key] = out
 	return out
 
+## 整理地形：地面里孤零零的一块"墙"、一格宽的小缺口都填成地面，免得出现突兀的单块岩壁。
+func _tidy_floor(fl: PackedByteArray, W: int, H: int) -> void:
+	for _pass in 2:
+		for y in range(1, H - 1):
+			for x in range(1, W - 1):
+				if fl[y * W + x] == 0 and ((fl[y * W + x - 1] == 1 and fl[y * W + x + 1] == 1) or (fl[(y - 1) * W + x] == 1 and fl[(y + 1) * W + x] == 1)):
+					fl[y * W + x] = 1
+	var seen := PackedByteArray()                          # 和地图边缘连着的岩壁才保留，被地面围住的岩壁岛全部填平
+	seen.resize(W * H)
+	var q: Array = []
+	for y in H:
+		for x in W:
+			if (x == 0 or y == 0 or x == W - 1 or y == H - 1) and fl[y * W + x] == 0:
+				seen[y * W + x] = 1
+				q.append(Vector2i(x, y))
+	while not q.is_empty():
+		var c: Vector2i = q.pop_back()
+		for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + dv
+			if n.x >= 0 and n.y >= 0 and n.x < W and n.y < H and seen[n.y * W + n.x] == 0 and fl[n.y * W + n.x] == 0:
+				seen[n.y * W + n.x] = 1
+				q.append(n)
+	for i in W * H:
+		if fl[i] == 0 and seen[i] == 0:
+			fl[i] = 1
+
 ## 自然地面（岩壁以外的地方，包括上面还压着石块的）。
 func is_floor(x: int, y: int) -> bool:
 	return in_map(x, y) and _layout(floor_n())["floor"][y * width() + x] == 1
@@ -382,8 +412,6 @@ func in_map(x: int, y: int) -> bool:
 func is_dug(x: int, y: int) -> bool:
 	if not in_map(x, y):
 		return false
-	if Vector2i(x, y) == entrance(floor_n()):
-		return true
 	return run().get("dug", {}).has(_key(x, y))
 
 func layer(f: int) -> Dictionary:
@@ -396,8 +424,10 @@ func layer(f: int) -> Dictionary:
 func block(x: int, y: int) -> String:
 	if not in_map(x, y) or not is_floor(x, y):
 		return "granite"
+	if Vector2i(x, y) == entrance(floor_n()):
+		return "ladder"                                    # 入口的梯子：整格都是实心的，只能面对着它互动
 	if is_dug(x, y):
-		return "pit" if Vector2i(x, y) == exit_pos(floor_n()) else ""
+		return ("pit" if floor_n() < max_floor() else "") if Vector2i(x, y) == exit_pos(floor_n()) else ""
 	if _layout(floor_n())["chest"][y * width() + x] == 1:
 		return "chest"
 	if not has_rock(x, y):
@@ -408,22 +438,78 @@ func block(x: int, y: int) -> String:
 func rich(x: int, y: int, f: int = -1) -> bool:
 	return absi(hash([seed_(), floor_n() if f < 0 else f, x / 4, y / 4, "rich"])) % 5 == 0
 
-## 格子里埋着什么："exit"（往下的洞）/ "tnt" / "gold" / "metal" / "chest" / "stone" / ""。
+## ---- 矿石：每口井 100 层，前 20 层 4 种常见矿，之后每 20 层出一种新矿、同时不再出最常见的那种；最后 3 层有稀有矿 ----
+func mine_def(shaft: int) -> Dictionary:
+	for md in _c.get("mines", []):
+		if int(md["id"]) == shaft:
+			return md
+	return {}
+
+## 这口井这一层能挖出的矿 [{"id","chance"}]。
+func ore_pool(shaft: int, f: int) -> Array:
+	var md := mine_def(shaft)
+	var out: Array = []
+	if md.is_empty():
+		return out
+	var removed := mini(3, (f - 1) / 20)                       # 第 21、41、61 层起各少一种（从最常见的开始）
+	var start: Array = md.get("start", [])
+	for i in start.size():
+		if i >= removed:
+			out.append(start[i])
+	for o in md.get("new", []):
+		if f >= int(o["from"]):
+			out.append(o)
+	if f > max_floor() - int(md.get("rare_floors", 3)):
+		for o in md.get("rare", []):
+			out.append(o)
+	return out
+
+func is_ore(id: String) -> bool:
+	return not ore_def(id).is_empty()
+
+## 一种矿在哪些井、哪些层出现：[{"shaft","from","to","rare"}]（物品栏里看矿石信息用）。
+func ore_sources(id: String) -> Array:
+	var out: Array = []
+	for md in _c.get("mines", []):
+		var a := -1
+		var z := -1
+		var rare := false
+		for f in range(1, max_floor() + 1):
+			var here := false
+			for o in ore_pool(int(md["id"]), f):
+				if str(o["id"]) == id:
+					here = true
+					for r in md.get("rare", []):
+						if str(r["id"]) == id:
+							rare = true
+			if here:
+				if a < 0:
+					a = f
+				z = f
+		if a > 0:
+			out.append({"shaft": int(md["id"]), "from": a, "to": z, "rare": rare})
+	return out
+
+func ore_origin_text(id: String) -> String:
+	var parts: Array = []
+	for src in ore_sources(id):
+		parts.append("%d号井 %d-%d层%s" % [int(src["shaft"]), int(src["from"]), int(src["to"]), "（稀有）" if bool(src["rare"]) else ""])
+	return "产地：" + "；".join(parts) if not parts.is_empty() else ""
+
+## 格子里埋着什么：矿的 id（也是物品 id）或 ""（普通石头，什么都没有）。
 func ore(x: int, y: int) -> String:
 	if not in_map(x, y) or Vector2i(x, y) == entrance(floor_n()) or Vector2i(x, y) == exit_pos(floor_n()) or not has_rock(x, y):
 		return ""
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([seed_(), floor_n(), x, y])
-	var r := rng.randf() * float(_c.get("layout", {}).get("ore_scale", 0.4))
+	var r := rng.randf()
 	var k := luck_mul() * (2.2 if rich(x, y) else 1.0)
 	var acc := 0.0
-	for o in _c.get("ores", []):
-		if floor_n() < int(o.get("min_y", 0)):
-			continue
-		var ch := float(o.get("chance", 0.0)) + float(o.get("deep_bonus", 0.0)) * float(floor_n())
-		acc += ch * (k if str(o["id"]) in ["gold", "metal"] else 1.0)
+	var pool := ore_pool(shaft_id(), floor_n())
+	for i in pool.size():
+		acc += float(pool[i]["chance"]) * (k if i > 0 else 1.0)
 		if r < acc:
-			return str(o["id"])
+			return str(pool[i]["id"])
 	return ""
 
 func ore_def(id: String) -> Dictionary:
@@ -463,7 +549,7 @@ func dig_block_reason(dx: int, dy: int) -> String:
 	var b := block(tx, ty)
 	if b == "":
 		return "open"
-	if b in ["granite", "pit", "chest"]:
+	if b in ["granite", "pit", "chest", "ladder"]:
 		return b
 	if pick() <= 0:
 		return "notool"
@@ -548,8 +634,8 @@ func fpos() -> Vector2:
 			return f
 	return Vector2(x + 0.5, y + 0.5)
 
-## 石头只占格子正中一小块（比画出来的石头略小一点），木箱占大半格，洞口、岩壁占满一格。
-const ROCK_HALF := 0.22
+## 石头占格子正中大半格（相邻两块之间的缝比角色窄，挤不过去），木箱占大半格，洞口、岩壁占满一格。
+const ROCK_HALF := 0.33
 const CRATE_HALF := 0.36
 func _free_at(p: Vector2) -> bool:
 	for cy in range(int(floor(p.y - HB.y)), int(floor(p.y + HB.y)) + 1):
@@ -557,7 +643,7 @@ func _free_at(p: Vector2) -> bool:
 			var b := block(cx, cy)
 			if b == "":
 				continue
-			if b in ["granite", "pit"]:
+			if b in ["granite", "pit", "ladder"]:
 				return false
 			var hf := CRATE_HALF if b == "chest" else ROCK_HALF
 			if absf(p.x - (float(cx) + 0.5)) < hf + HB.x and absf(p.y - (float(cy) + 0.5)) < hf + HB.y:
@@ -600,7 +686,12 @@ func move(dx: int, dy: int, now_ms: int = 0) -> bool:
 
 ## ---- 出口和台阶 ----
 func on_entrance() -> bool:
-	return in_run() and pos() == entrance(floor_n())
+	return in_run() and pos() == entrance(floor_n()) + Vector2i(0, 1)
+
+## 面朝入口的梯子（够得到）。
+func ladder_ahead(dx: int, dy: int) -> bool:
+	var t := target(dx, dy)
+	return in_run() and t == entrance(floor_n()) and block(t.x, t.y) == "ladder"
 
 ## 面朝 (dx, dy) 够得到的是不是下一层的洞。
 func exit_ahead(dx: int, dy: int) -> bool:
@@ -612,14 +703,14 @@ func has_elevator() -> bool:
 
 ## 面朝下一层的洞、确认后：下到下一层。
 func descend(dx: int = 0, dy: int = 0) -> bool:
-	if not exit_ahead(dx, dy):
+	if not exit_ahead(dx, dy) or floor_n() >= max_floor():
 		return false
 	stop_dig(0)
 	var f := floor_n() + 1
 	run()["floor"] = f
 	var en := entrance(f)
 	run()["x"] = en.x
-	run()["y"] = en.y
+	run()["y"] = en.y + 1
 	run().erase("fx")
 	run().erase("fy")
 	run()["best"] = maxi(int(run().get("best", 1)), f)
@@ -630,8 +721,8 @@ func descend(dx: int = 0, dy: int = 0) -> bool:
 	return true
 
 ## 站在入口台阶上：返回 "hall"，由界面（二次确认后）调用 end_run 回地面结算。
-func ascend() -> String:
-	if not on_entrance():
+func ascend(dx: int = 0, dy: int = -1) -> String:
+	if not ladder_ahead(dx, dy):
 		return ""
 	stop_dig(0)
 	return "hall"
@@ -698,7 +789,7 @@ func update(now_ms: int) -> Array:
 
 func _breakable(x: int, y: int) -> bool:
 	var b := block(x, y)
-	return b != "" and b not in ["granite", "pit", "chest"]
+	return b != "" and b not in ["granite", "pit", "chest", "ladder"]
 
 ## 炸弹爆炸：半径内的石头全碎（镐等级最多高 1 级）。
 func _detonate(f: int, bx: int, by: int, ev: Array) -> void:
