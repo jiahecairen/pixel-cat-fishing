@@ -324,3 +324,9 @@
 - 版本号画在右下角；`project.godot` / `export_presets.cfg` 版本改成 0.48。
 - 家里的箱子（`storage` 素材）重画成圆顶木箱 + 铁箍 + 金锁；仓库界面的箱子外框没动。
 - 测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR；新增 `test_v048`，改了宝箱占比和船相关测试。没验证：Mac 实机、浪的画面。
+
+## v0.49：尺寸、背包不传送、特效层级、船外观
+- `fish.json` 尺寸范围重写；`Game.give` 改成 扔掉 / 替换 / 极端情况才进仓库（`is_important`），提示"物品栏满了 / 东西扔掉了 / 换掉了旧物品"。
+- 闪光粒子移到面板之前绘制；`boat(level)` 画出 4 种船，`CATFISH_BOATLV` 调试变量。
+- 版本号 0.49。测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR。
+- 岛、岛心湖、蟹笼、工坊只记了规划（D104），没做。

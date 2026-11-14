@@ -839,21 +839,49 @@ func use_item_w(id: String) -> Dictionary:
 	dirty = true
 	return res
 
-## ---- 放进物品栏（放不下就送去仓库）----
-## 返回 "bag" / "warehouse"。送去仓库时给 events 加一条 overflow 事件（界面提示"行李满了"）。
+## ---- 放进物品栏（放不下就扔掉，重要物品换掉不重要的）----
+## 返回 "bag"（放进去了）/ "replaced"（重要物品顶掉了一件普通物品）/ "dropped"（放不下，扔掉了）/ "warehouse"
+## （只有重要物品放不下、又没有普通物品可换时才会送仓库）。东西不会凭空传送进仓库。
+## 重要物品：装备、以及 balance.json 里标了 "important": true 的任务物品。
+func is_important(id: String) -> bool:
+	var d: Dictionary = inventory.by_id.get(id, {})
+	return str(d.get("use", "")) == "gear" or bool(d.get("important", false))
+
 func give(id: String, n: int = 1, events: Array = []) -> String:
 	var moved := inventory.room_for(state, id, n)
 	if moved > 0:
 		inventory.add(state, id, moved)
 	if moved >= n:
 		return "bag"
-	state.warehouse[id] = inventory.count_w(state, id) + (n - moved)
+	var left := n - moved
+	if is_important(id) and inventory.count(state, id) == 0:
+		# 格子满了：顶掉最普通的一种非重要物品（整格）
+		var victim := ""
+		var best := -1.0
+		for k in state.inventory:
+			if int(state.inventory[k]) > 0 and not is_important(str(k)):
+				var w := float(inventory.by_id.get(k, {}).get("weight", 0))
+				if w > best:
+					best = w
+					victim = str(k)
+		if victim != "":
+			state.inventory.erase(victim)
+			inventory.add(state, id, left)
+			state.revision += 1
+			events.append({"type": "replaced", "item": id, "dropped": victim})
+			_overflow_pending = "replaced"
+			return "replaced"
+		state.warehouse[id] = inventory.count_w(state, id) + left
+		state.revision += 1
+		events.append({"type": "overflow", "item": id})
+		_overflow_pending = "warehouse"
+		return "warehouse"
 	state.revision += 1
-	events.append({"type": "overflow", "item": id})
-	_overflow_pending = true
-	return "warehouse"
+	events.append({"type": "dropped", "item": id})
+	_overflow_pending = "dropped"
+	return "dropped"
 
-var _overflow_pending: bool = false
+var _overflow_pending: String = ""
 
 ## 钱包最多 999 金：超出的部分自动放进家里的存钱罐，并让界面提示"钱包满了"。
 func _clamp_wallet() -> void:
@@ -892,9 +920,9 @@ func piggy_use() -> String:
 	return ""
 
 ## 界面每帧问一次：刚才有没有东西因为行李满了被送去仓库（问完清零，用来弹提示）。
-func take_overflow() -> bool:
+func take_overflow() -> String:
 	var r := _overflow_pending
-	_overflow_pending = false
+	_overflow_pending = ""
 	return r
 
 ## ---- 装备（鱼竿 / 鱼线 / 鱼钩都是物品，身上装一件，其余放物品栏或仓库）----

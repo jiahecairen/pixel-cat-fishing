@@ -177,6 +177,7 @@
   "items": [
     {
       "id": "bottle",
+      "important": true,
       "name": "漂流瓶",
       "desc": "里面好像有一封信",
       "sprite": "item_bottle",
@@ -211,6 +212,7 @@
     },
     {
       "id": "map_piece",
+      "important": true,
       "name": "藏宝图碎片",
       "desc": "集齐四片能寻宝",
       "sprite": "item_map_piece",
@@ -223,6 +225,7 @@
     },
     {
       "id": "pearl",
+      "important": true,
       "name": "珍珠",
       "desc": "亮晶晶的很值钱",
       "sprite": "item_pearl",

@@ -630,7 +630,7 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	_draw_boat_basket(bob_y, not in_town)
 	if not in_town:
 		_draw_boat_cat(act, on_break, now, t)
-	m.draw_texture(m.tex["boat"], Vector2(boat_x, bob_y))
+	m.draw_texture(m.tex["boat_%d" % clampi(int(m.game.state.boat_level), 0, 3)] if m.game.state.boat_level > 0 else m.tex["boat"], Vector2(boat_x, bob_y))
 	m.draw_texture(m.tex["boat_head"], Vector2(boat_x - 2, bob_y - 17))
 	_draw_waterline(bob_y, t)
 	if not in_town:

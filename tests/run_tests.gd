@@ -863,20 +863,30 @@ func test_bag_gear_quests(balance: Dictionary, fish: Array) -> void:
 	check(g.state.bag_slots == 8 and g.equipment_name("rod") == "树枝" and int(g.state.gear["rod"]) == 0, "开局 8 格，身上装着树枝竿")
 	# 每格最多叠 10 个
 	check(inv.add(g.state, "pearl", 10) and inv.count(g.state, "pearl") == 10 and not inv.add(g.state, "pearl", 1), "珍珠一格最多 10 个")
-	check(g.give("pearl") == "warehouse" and inv.count_w(g.state, "pearl") == 1 and inv.count(g.state, "pearl") == 10, "放不下的送去仓库")
-	check(g.take_overflow() and not g.take_overflow(), "送去仓库会提示一次")
+	check(g.give("pearl") == "dropped" and inv.count_w(g.state, "pearl") == 0 and inv.count(g.state, "pearl") == 10, "叠满了放不下的重要物品也不会传送到仓库")
+	check(g.take_overflow() == "dropped" and g.take_overflow() == "", "扔掉会提示一次")
 	# 8 种东西占满 8 格，第 9 种放不下
 	var g2 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(72))
 	var kinds := ["bottle", "boot", "pearl", "bell", "lucky_bait", "map_piece", "bait_worm", "bait_shrimp"]
 	for k in kinds:
 		inv.add(g2.state, k)
 	check(inv.slots_used(g2.state) == 8, "八种物品占满 8 格")
-	check(not inv.add(g2.state, "rod_1") and g2.give("rod_1") == "warehouse" and inv.count_w(g2.state, "rod_1") == 1, "第 9 种放不下，进仓库")
+	check(not inv.add(g2.state, "rod_1") and g2.give("rod_1") == "replaced" and inv.count(g2.state, "rod_1") == 1 and inv.slots_used(g2.state) == 8 and inv.count_w(g2.state, "rod_1") == 0, "第 9 种是装备：顶掉一件普通物品，不进仓库")
+	var g2b := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(73))
+	g2b.state.bag_slots = 2
+	inv.add(g2b.state, "bell"); inv.add(g2b.state, "pearl")
+	check(g2b.give("boot") == "dropped" and inv.count(g2b.state, "boot") == 0 and inv.count_w(g2b.state, "boot") == 0, "普通物品放不下：直接扔掉，不进仓库")
+	check(g2b.give("bottle") == "replaced" and inv.count(g2b.state, "bottle") == 1 and inv.count(g2b.state, "bell") == 0 and inv.count(g2b.state, "pearl") == 1, "重要物品顶掉普通物品，不动别的重要物品")
+	var g2c := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(74))
+	for k in ["bottle", "pearl", "map_piece", "rod_1", "rod_2", "rod_3", "rod_4", "rod_5"]:
+		inv.add(g2c.state, k)
+	check(g2c.give("hook_1") == "warehouse" and g2c.give("boot") == "dropped", "全是重要物品时：装备才进仓库，普通物品扔掉")
 	g2.state.wallet_gold = 1000
 	inv.remove(g2.state, "bait_worm", 1)
 	inv.add(g2.state, "rod_2")                   # 把空出来的格子占上
 	check(not g2.can_buy_bait("bait_worm") and not g2.buy_bait("bait_worm") and g2.state.wallet_gold == 1000, "格子满了不能买新鱼饵，不扣钱")
-	check(inv.fetch(g2.state, "rod_1", 1) == 0 and inv.count_w(g2.state, "rod_1") == 1, "身上满了取不出仓库里的新种类")
+	g2.state.warehouse["rod_3"] = 1
+	check(inv.fetch(g2.state, "rod_3", 1) == 0 and inv.count_w(g2.state, "rod_3") == 1, "身上满了取不出仓库里的新种类")
 	# 装备：买鱼竿自动装上，旧的进物品栏；使用物品栏里的装备换回去
 	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(73))
 	g3.state.wallet_gold = 100000
@@ -995,6 +1005,8 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	# 宝箱会开出物品
 	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(33))
 	g3.set_chest_chance(1.0)
+	g3.state.bag_slots = 40                  # 格子和叠加上限放大，这里只看"开出多少 = 收到多少"
+	g3.inventory.stack_default = 100000
 	var ev := _run(g3, g3._clock, 8 * 3600, 1000)
 	var chests: Array = ev.filter(func(e): return e["type"] == "chest")
 	var with_item: Array = chests.filter(func(e): return e["item"] != "")

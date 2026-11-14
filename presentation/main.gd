@@ -38,7 +38,7 @@ const FPS_NORMAL := 30
 const FPS_DRAG := 60
 const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
-const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "wall_clothes", "mannequin", "tree", "stall_back",
+const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
@@ -265,6 +265,8 @@ func _apply_debug_env() -> void:
 		world.call_deferred("bird_start", bk, bi, Time.get_ticks_msec())
 	if OS.has_environment("CATFISH_CHEST"):       # 调试：每一竿都钓到宝箱
 		game.set_chest_chance(1.0)
+	if OS.has_environment("CATFISH_BOATLV"):       # 调试：船的等级（0–3）
+		st.boat_level = OS.get_environment("CATFISH_BOATLV").to_int()
 	if OS.has_environment("CATFISH_BOATX"):        # 调试：船开局停在这个位置（512 = 贴着码头）
 		st.journey["boat_x"] = OS.get_environment("CATFISH_BOATX").to_int()
 		st.journey["line_out"] = 0
@@ -778,8 +780,9 @@ func _process(dt: float) -> void:
 	if game.take_wallet_full():
 		_toast("钱包满了", "多的放进存钱罐")
 		play("deny")
-	if game.take_overflow():
-		_toast("行李满了", "送去了仓库")
+	var _ov: String = game.take_overflow()
+	if _ov != "":
+		_toast("物品栏满了", {"dropped": "东西扔掉了", "replaced": "换掉了旧物品"}.get(_ov, "送去了仓库"))
 		play("deny")
 	for e in game.tick():
 		log.write(e["type"], e)
@@ -1330,6 +1333,9 @@ func _draw() -> void:
 		draw_set_transform(ui_off + Vector2(_hud_dx(), 0))
 		_draw_hud(now)
 		draw_set_transform(ui_off)
+	draw_set_transform(Vector2.ZERO)
+	_draw_particles(t)               # 闪光在顶栏之上、所有面板（物品栏、菜单……）之下
+	draw_set_transform(ui_off)
 	menu.draw()
 	wardrobe.draw()
 	outfit_shop.draw()
@@ -1345,7 +1351,6 @@ func _draw() -> void:
 	if _confirm_quit:
 		_draw_quit_confirm()
 	draw_set_transform(Vector2.ZERO)
-	_draw_particles(t)
 	if not mini or _mini_shown:       # 右下角的版本号
 		var ver: String = str(ProjectSettings.get_setting("application/config/version", ""))
 		_text(ver, Vector2(view.x - ver.length() * 4 - 1, view.y - 6), Color(Pal.L_W, 0.7), true)
