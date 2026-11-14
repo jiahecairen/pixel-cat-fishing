@@ -533,6 +533,16 @@ func _update_roam(dt: float) -> void:
 					world.roam_flip = true
 					if game.cast_line():
 						play("click")
+	if int(game.state.effects.get("lake_resume", 0)) == 1 and j.activity() == Journey.Activity.FISHING:
+		if game.can_land():
+			game.state.effects["lake_resume"] = 0
+			if game.land_on_island():
+				_roam_fx = game.island_land_x()
+				world.roam_flip = true
+				_stand_to = game.lake_spot_x()
+				_stand_cast = true
+		elif not game.at_island_dock():
+			game.state.effects["lake_resume"] = 0
 	if _queued_x != INF:
 		var qa: int = j.activity()
 		if dir != 0 or not (qa == Journey.Activity.WALK_TO_BOAT or qa == Journey.Activity.SAIL_OUT or qa == Journey.Activity.SAIL_BACK or game.can_steer()):
@@ -618,7 +628,10 @@ func _update_roam(dt: float) -> void:
 		world.roam_flip = dir < 0
 		_last_walk_input = t
 	elif j.on_island() and mini:
-		game.leave_island()                  # 迷你窗里不能逛岛：自动回到船上
+		# 迷你窗里不能逛岛：不在钓位就自己走回湖边接着钓
+		if not game.at_lake_spot() and _stand_to == INF and not game.pomodoro.is_break():
+			_stand_to = game.lake_spot_x()
+			_stand_cast = true
 	elif j.activity() == Journey.Activity.ROAM and mini:
 		# 玩家接管后小猫就一直听玩家的，不会自己走开；只有切到迷你悬浮窗才交还给自动流程
 		_end_roam_auto(float(j.roam_x()))
@@ -805,6 +818,7 @@ func _interact_island(x: float) -> void:
 			play("deny")
 		else:
 			play("chest")
+			_toast("打开了木箱", "")
 			world.chest_open_t0 = Time.get_ticks_msec()
 			_float_money(int(cg["gold"]), world.cat_pos + Vector2(34, 8))
 			for iid in cg["items"]:
@@ -817,15 +831,18 @@ func _interact_island(x: float) -> void:
 		else:
 			play("catch")
 			if int(got["gold"]) > 0:
+				_toast("捡到了", "一点铜币")
 				_float_money(int(got["gold"]), world.cat_pos + Vector2(34, 8))
 			else:
 				var idef: Dictionary = game.inventory.by_id.get(str(got["item"]), {})
+				_toast("捡到了", str(idef.get("name", "")))
 				_float("+1", str(idef.get("sprite", "")), world.cat_pos + Vector2(34, 8))
 	elif world.island_near_lake(x):
 		if game.at_lake_spot():
 			if game.pots_ready() > 0 and not game.line_out():
 				var pc: Dictionary = game.collect_pots()
 				play("catch")
+				_toast("收蟹笼", "有收获")
 				_float_money(int(pc["gold"]), world.cat_pos + Vector2(-24, 8))
 				for iid in pc["items"]:
 					_float("+%d" % int(pc["items"][iid]), str(game.inventory.by_id.get(iid, {}).get("sprite", "")), world.cat_pos + Vector2(-24, -6))
@@ -1529,8 +1546,10 @@ func _town_button() -> void:
 		else:
 			play("deny")
 	elif game.journey.on_island():
+		game.state.effects["lake_resume"] = 1          # 卖完鱼回来，直接回湖边接着钓
 		if game.leave_island():
 			play("click")
+			_go_to_town()                              # 一键回镇，不用再点一次
 	elif game.journey.in_town():
 		_go_fishing()
 	else:

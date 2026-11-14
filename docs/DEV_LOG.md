@@ -378,3 +378,8 @@
 - `game.gd`：`lake_spot_x / bridge_built / island_walk_min(桥)`、`craft_pot / collect_pots / pot_*`、`west_chest_*`；任务 `reward_flag`；`drift_count` 随桥解锁 3 处。
 - 数据：木板 plank、pots 配置、west_chest、lighthouse5；素材 item_plank；画面：工作台、湖中蟹笼、桥、木箱。
 - 测试 486 项 ALL TESTS PASS、SIM PASS；新增 `test_v056`。版本号 0.56。
+
+## v0.57：岛上往返与提示
+- `main._town_button`：岛上一键回镇；`effects.lake_resume` + `_update_roam` 里的自动登岛接着钓；迷你窗不再强制离岛（走回钓位）。
+- `world._draw_sky`：太阳在天上时不画月亮；拾取/收笼/木箱的 `_toast`。新增 labels。
+- 测试 486 项 ALL TESTS PASS、SIM PASS。版本号 0.57。

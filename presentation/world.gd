@@ -1246,7 +1246,8 @@ func _draw_sky(cam: Vector2, view: Vector2, t: int) -> void:
 			_disc(Vector2(roundf(sx), roundf(sy)), 8, Color(Pal.L_Y, sa))
 		# 月亮：按月相画亮的那一边；位置按"月亮几点过中天"推（满月整夜都在，新月几乎看不到）
 		var mu: float = sky["moon_u"]
-		if mu > -1.0 and mu < 2.0:
+		var sun_up: bool = su >= 0.0 and su <= 1.0 and dark < 0.3     # 太阳还高高挂着的时候不画月亮
+		if mu > -1.0 and mu < 2.0 and not sun_up:
 			var phase: float = sky["moon_phase"]
 			var mx := cam.x + view.x * lerpf(0.1, 0.9, clampf(mu, -0.1, 1.1))
 			var my: float
