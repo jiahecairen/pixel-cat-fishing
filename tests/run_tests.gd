@@ -1822,7 +1822,8 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	check(mn.update(clock.t).is_empty() and mn.dig_progress(clock.t) > 0.99, "没到时间不会挖开")
 	clock.t += 1
 	var ev: Array = mn.update(clock.t)
-	check(mn.pos() == path[k] and mn.is_dug(path[k].x, path[k].y) and ev.size() >= 1, "挖开后小猫进到那一格")
+	check(mn.pos() == path[k - 1] and mn.is_dug(path[k].x, path[k].y) and ev.size() >= 1, "挖开后小猫留在原地，那块石头没了")
+	check(mn.move(face.x, face.y, clock.t) and mn.pos() == path[k], "挖开后能走过去")
 	check(mn.stamina() == sta0 - 1, "泥土层挖一格体力 -1")
 	var sta_keep: int = mn.stamina()
 	var nb := _stand_next_to_rock(mn)
@@ -1849,12 +1850,25 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 			mn.start_dig(step.x, step.y, clock.t)
 			clock.t += mn.dig_ms(path[j].x, path[j].y) + 1
 			mn.update(clock.t)
+			mn.move(step.x, step.y, clock.t)
 		else:
 			mn.move(step.x, step.y, clock.t)
 		guard += 1
 	check(mn.pos() == ex and mn.on_exit(), "挖开出口，站在了出口上（走了 %d 步）" % guard)
 	check(mn.descend() and mn.floor_n() == 2 and mn.pos() == mn.entrance(2) and not mn.on_exit(), "下到第 2 层，站在新入口")
 	check(mn.ascend() == "hall" and mn.floor_n() == 2 and mn.on_entrance(), "每层入口的梯子都是回地面（不是上一层）")
+	# 顺滑走动：小步走、撞墙停、不会钻进石头和岩壁
+	var p0: Vector2 = mn.fpos()
+	var moved := false
+	for dv in [Vector2(0.1, 0), Vector2(-0.1, 0), Vector2(0, 0.1), Vector2(0, -0.1)]:
+		if not moved and mn.walk(dv.x, dv.y):
+			moved = true
+	check(moved and mn.fpos() != p0 and (mn.fpos() - p0).length() <= 0.11, "顺滑走：一次只挪一小段")
+	var stuck := 0
+	for _i in 200:
+		mn.walk(0.1, 0)
+	var fpw: Vector2 = mn.fpos()
+	check(mn.block(int(floor(fpw.x + 0.41)), int(floor(fpw.y))) != "" and mn.block(mn.pos().x, mn.pos().y) == "", "一直往右走会被挡住，不会穿墙（停在 %.2f）" % fpw.x)
 	# 同一格不会重复发奖励
 	var bag_before: int = mn.bag_n()
 	g.state.mine["run"]["floor"] = 1

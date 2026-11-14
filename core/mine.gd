@@ -548,7 +548,63 @@ func shift(delta_ms: int) -> void:
 	for b in run().get("booms", []):
 		b["t1"] = int(b["t1"]) + delta_ms
 
-## 走进相邻的空格（四个方向都行）。
+## ---- 顺滑走动：位置是小数（以格为单位，格子中心是 x+0.5），碰撞盒比一格小 ----
+const HB := Vector2(0.3, 0.28)
+
+## 小猫脚下的精确位置。存的整数格变了（下楼、测试直接改）就以整数格中心为准。
+func fpos() -> Vector2:
+	var r := run()
+	var x := int(r.get("x", 0))
+	var y := int(r.get("y", 0))
+	if r.has("fx"):
+		var f := Vector2(float(r["fx"]), float(r["fy"]))
+		if int(floor(f.x)) == x and int(floor(f.y)) == y:
+			return f
+	return Vector2(x + 0.5, y + 0.5)
+
+func _free_at(p: Vector2) -> bool:
+	for cy in range(int(floor(p.y - HB.y)), int(floor(p.y + HB.y)) + 1):
+		for cx in range(int(floor(p.x - HB.x)), int(floor(p.x + HB.x)) + 1):
+			if block(cx, cy) != "":
+				return false
+	return true
+
+## 按方向走一小段（单位：格）。撞墙就停；差一点对齐时自动往格子中间挪，好钻进一格宽的路。
+func walk(dx: float, dy: float) -> bool:
+	if not in_run():
+		return false
+	var p := fpos()
+	var p0 := p
+	if dx != 0.0:
+		var q := Vector2(p.x + dx, p.y)
+		if _free_at(q):
+			p = q
+		else:
+			var off: float = (floor(p.y) + 0.5) - p.y
+			if absf(off) < 0.4 and absf(off) > 0.001:
+				var q2 := Vector2(p.x, p.y + signf(off) * minf(absf(off), absf(dx)))
+				if _free_at(q2):
+					p = q2
+	if dy != 0.0:
+		var q := Vector2(p.x, p.y + dy)
+		if _free_at(q):
+			p = q
+		else:
+			var off: float = (floor(p.x) + 0.5) - p.x
+			if absf(off) < 0.4 and absf(off) > 0.001:
+				var q2 := Vector2(p.x + signf(off) * minf(absf(off), absf(dy)), p.y)
+				if _free_at(q2):
+					p = q2
+	if p == p0:
+		return false
+	var r := run()
+	r["fx"] = p.x
+	r["fy"] = p.y
+	r["x"] = int(floor(p.x))
+	r["y"] = int(floor(p.y))
+	return true
+
+## 走进相邻的空格（四个方向都行；一格一格走，测试和旧逻辑用）。
 func move(dx: int, dy: int, now_ms: int = 0) -> bool:
 	var p := pos()
 	var tx := p.x + dx
@@ -559,6 +615,8 @@ func move(dx: int, dy: int, now_ms: int = 0) -> bool:
 		stop_dig(now_ms)
 	run()["x"] = tx
 	run()["y"] = ty
+	run().erase("fx")
+	run().erase("fy")
 	return true
 
 ## ---- 出口和台阶 ----
@@ -581,6 +639,8 @@ func descend() -> bool:
 	var en := entrance(f)
 	run()["x"] = en.x
 	run()["y"] = en.y
+	run().erase("fx")
+	run().erase("fy")
 	run()["best"] = maxi(int(run().get("best", 1)), f)
 	var st := shaft_state(shaft_id())
 	st["best"] = maxi(int(st.get("best", 0)), f)
@@ -629,8 +689,6 @@ func update(now_ms: int) -> Array:
 		var dir: Array = run().get("dir", [0, 0])
 		run()["sta"] = maxi(0, stamina() - dig_cost(x, y))
 		_break_chain(x, y, int(dir[0]), int(dir[1]), ev, 0)
-		run()["x"] = x
-		run()["y"] = y
 		run()["dig"] = {}
 		run()["dir"] = [0, 0]
 	var keep: Array = []

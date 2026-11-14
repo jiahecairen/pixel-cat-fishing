@@ -572,6 +572,10 @@ func _update_roam(dt: float) -> void:
 				dy += 1
 			if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W):
 				dy -= 1
+		if OS.has_environment("CATFISH_WALK") and Time.get_ticks_msec() < 4000:   # 调试：开头几秒自动按住方向键（"dx,dy"）
+			var wv := OS.get_environment("CATFISH_WALK").split(",")
+			dir = wv[0].to_int()
+			dy = wv[1].to_int()
 		mine_view.process(dt, dir, dy)
 		return
 	if interior != "":

@@ -232,3 +232,7 @@
 ## C164（v0.76）
 - Linux 沙盒：run_tests 707 项通过，sim_long_run SIM PASS，无 SCRIPT ERROR；截图目检对话框半身像、矿井地面/石头/崖壁。
 - macOS 真机：半身像清晰度、矿井新画面观感——未运行。
+
+## C165（v0.77）
+- Linux 沙盒：run_tests 710 项通过，sim_long_run SIM PASS，无 SCRIPT ERROR；用调试变量 CATFISH_WALK 截图确认能走、会被石头挡住、面前石头有黄框。
+- macOS 真机：走路手感、转角是否卡、按住空格挖的手感——未运行。

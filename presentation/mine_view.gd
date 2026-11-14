@@ -28,7 +28,10 @@ var isle_moving: bool = false
 var cave_x: float = 60.0
 var cave_flip: bool = false
 var cave_moving: bool = false
-var face: int = 1               # 矿里小猫朝向
+var face: int = 1               # 矿里小猫左右朝向（画图翻转用）
+var face_v := Vector2i(0, 1)     # 矿里小猫面朝的方向（空格挖的就是这个方向的那一格）
+var mine_moving := false
+const MINE_WALK := 4.2           # 矿里走路速度（格/秒），] 加速会乘上去
 var cart_pick: Dictionary = {}     # 每口井选中的起始层
 var _leave_dbg := false
 var _need_release := false      # 爆炸后要先松开方向键
@@ -163,31 +166,38 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 	var now: int = m.game.now_ms()
 	for e in mn.update(now):
 		_on_event(e)
-	if not mn.draft().is_empty():
+	mine_moving = false
+	if not mn.draft().is_empty() or menu != "":
 		mn.stop_dig(now)
 		return
-	_step_cd -= dt
-	if menu != "":
-		mn.stop_dig(now)
-		return
-	if _need_release:                      # 炸弹/连锁炸开之后，要先松开方向键，免得一路冲出去
-		if dx == 0 and dy == 0:
-			_need_release = false
-		mn.stop_dig(now)
-		return
+	# 朝向：最后按的方向；横竖同时按时优先横向
 	if dx != 0:
-		dy = 0
+		face_v = Vector2i(dx, 0)
 		face = dx
-	if dx == 0 and dy == 0:
-		if mn.digging():
-			mn.stop_dig(now)
-		return
-	# 前面是空的就走过去（四个方向都行；挖完一格后按住方向键会接着往前走）
-	if not mn.digging() and _step_cd <= 0.0:
-		if mn.move(dx, dy, now):
-			_step_cd = STEP_S / m.game.move_speed()
+	elif dy != 0:
+		face_v = Vector2i(0, dy)
+	# 按住空格（或 E / 回车）挖面前那一格；松手停下，进度留在石头上
+	var hold: bool = m.get_window().has_focus() and not m.panel_open() and (Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_E) or Input.is_key_pressed(KEY_ENTER))
+	if hold and _diggable_ahead():
+		if dx == 0 and dy == 0:
+			_dig_ahead(now)
 			return
-	var why: String = mn.start_dig(dx, dy, now)
+	if mn.digging() and (not hold or dx != 0 or dy != 0):
+		mn.stop_dig(now)
+	if dx != 0 or dy != 0:
+		var v: Vector2 = Vector2(dx, dy).normalized() * MINE_WALK * m.game.move_speed() * minf(dt, 0.05)
+		mine_moving = mn.walk(v.x, v.y)
+
+## 面前那一格是能挖的石头（不是空地、不是岩壁）。
+func _diggable_ahead() -> bool:
+	var mn = m.game.mine
+	var t: Vector2i = mn.pos() + face_v
+	var b: String = mn.block(t.x, t.y)
+	return b != "" and b != "granite"
+
+func _dig_ahead(now: int) -> void:
+	var mn = m.game.mine
+	var why: String = mn.start_dig(face_v.x, face_v.y, now)
 	match why:
 		"":
 			var t := Time.get_ticks_msec()
@@ -197,10 +207,6 @@ func _process_mine(dt: float, dx: int, dy: int) -> void:
 				var tg: Vector2i = mn.dig_target()
 				_chips(tg.x, tg.y, 2, 55.0)
 				_shake(0.8, 90)
-		"open":
-			pass
-		"granite":
-			_warn("最外圈的花岗岩挖不动")
 		"notool":
 			_warn("没有镐子，去找雾灯岛的老柯要一把")
 		"tool":
@@ -234,7 +240,6 @@ func _float(x: int, y: int, s: String, c: Color) -> void:
 func _on_event(e: Dictionary) -> void:
 	if e["type"] == "boom":
 		_boom_fx(int(e["x"]), int(e["y"]))
-		_need_release = true
 		return
 	if e["type"] != "dug":
 		return
@@ -268,7 +273,6 @@ func _on_event(e: Dictionary) -> void:
 		m.play("catch")
 	if bool(e["chain"]):
 		_float(x, y, "连锁！", Pal.L_C)
-		_need_release = true
 	m.game.dirty = true
 
 func _boom_fx(x: int, y: int) -> void:
@@ -311,13 +315,15 @@ func key(code: int) -> bool:
 			_bomb()
 			return true
 		if act:
-			if mn.on_exit():
+			if _diggable_ahead():
+				pass                              # 面前有石头：按住空格挖（在每帧里处理）
+			elif mn.on_exit():
 				_descend()
 			elif mn.on_entrance():
 				_open("leave")
 				menu_sel = 1                      # 默认停在"再挖一会儿"，免得手滑
 			else:
-				say("找到出口：挖开发光的洞，站上去按空格；回入口梯子按空格回地面")
+				say("面朝石头按住空格挖；出口在发光的箭头下面")
 			return true
 		return code in [KEY_UP, KEY_W, KEY_DOWN, KEY_S]
 	if region == "isle" and act:
@@ -574,7 +580,7 @@ func hint() -> String:
 				return "空格键下一层"
 			if mh.on_entrance():
 				return "空格键回地面（背包换钱）"
-			return "方向键挖  B 放炸弹（有 %d 颗）" % mh.bombs()
+			return "方向键走  空格挖  B 放炸弹（有 %d 颗）" % mh.bombs()
 	return ""
 
 ## ================= 绘制 =================
@@ -924,7 +930,8 @@ func _draw_mine(view: Vector2, t: int) -> void:
 	var p: Vector2i = mn.pos()
 	var mw: float = float(mn.width() * CELL)
 	var mh: float = float(mn.height() * CELL)
-	var target := Vector2(p.x * CELL + 16 - view.x / 2.0, p.y * CELL + 16 - view.y / 2.0)
+	var fp: Vector2 = mn.fpos()
+	var target := Vector2(fp.x * CELL - view.x / 2.0, fp.y * CELL - view.y / 2.0)
 	target.x = clampf(target.x, -16.0, maxf(-16.0, mw + 16.0 - view.x)) if mw + 32.0 > view.x else (mw - view.x) / 2.0
 	target.y = clampf(target.y, -16.0, maxf(-16.0, mh + 16.0 - view.y)) if mh + 32.0 > view.y else (mh - view.y) / 2.0
 	if _mcam == Vector2.INF:
@@ -972,9 +979,9 @@ func _draw_mine(view: Vector2, t: int) -> void:
 					shake = Vector2(roundf(sin(float(t) / 35.0) * (0.5 + f)), 0)
 				m.tex_frame("mine_tiles", pos + shake, TILE.get(b, 0), MINE_FRAMES)
 				var o: String = mn.ore(x, y) if b != "granite" else ""
-				var seen := Vector2(x - p.x, y - p.y).length() <= R + 0.6
+				var seen := Vector2(x + 0.5 - fp.x, y + 0.5 - fp.y).length() <= R + 0.6
 				if o == "exit":
-					if seen or (scout and Vector2(x - p.x, y - p.y).length() <= 6.5):
+					if seen or (scout and Vector2(x + 0.5 - fp.x, y + 0.5 - fp.y).length() <= 6.5):
 						var bob := roundf(sin(float(t) / 160.0) * 1.5)
 						m.tex_frame("mine_tiles", pos + shake + Vector2(0, bob), TILE["exit_mark"], MINE_FRAMES)
 				elif o != "" and seen:
@@ -1001,14 +1008,22 @@ func _draw_mine(view: Vector2, t: int) -> void:
 			var q: Vector2 = d["p"] + d["v"] * age + Vector2(0, 220.0 * age * age)
 			m.draw_rect(Rect2(q.round(), Vector2(3, 3)), d["c"])
 	debris = keep
-	# 小猫（挖的时候挥镐）
-	var cp := Vector2(p.x * CELL - 1, p.y * CELL)
+	# 面前那块能挖的石头：黄色框
+	if _diggable_ahead():
+		var tc: Vector2i = p + face_v
+		var tr := Rect2(tc.x * CELL + 1, tc.y * CELL + 1, CELL - 2, CELL - 2)
+		var blink := 0.55 + 0.35 * sin(float(t) / 140.0)
+		var yc := Color(Pal.L_Y, blink)
+		m.draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1)), yc)
+		m.draw_rect(Rect2(tr.position + Vector2(0, tr.size.y - 1), Vector2(tr.size.x, 1)), yc)
+		m.draw_rect(Rect2(tr.position, Vector2(1, tr.size.y)), yc)
+		m.draw_rect(Rect2(tr.position + Vector2(tr.size.x - 1, 0), Vector2(1, tr.size.y)), yc)
+	# 小猫（脚在 fpos；挖的时候挥镐）
+	var cp := Vector2(roundf(fp.x * CELL - 15.0), roundf(fp.y * CELL - 26.0))
 	var dig: bool = mn.digging()
-	var dirv := dt - p
+	var dirv := face_v
 	var flip := face < 0
-	if dig and dirv.x != 0:
-		flip = dirv.x < 0
-	m.draw_cat(cp, 0, flip)
+	m.draw_cat(cp, 4 if mine_moving else 0, flip)
 	if dig:
 		var sw := (t / 115) % 2 == 0
 		var hx := cp.x + (6.0 if flip else 24.0)
@@ -1023,7 +1038,7 @@ func _draw_mine(view: Vector2, t: int) -> void:
 	# 黑暗：按到小猫的距离一格一格变暗（4 档）
 	for y in range(y0, y1):
 		for x in range(x0, x1):
-			var d2 := Vector2(x - p.x, y - p.y).length()
+			var d2 := Vector2(x + 0.5 - fp.x, y + 0.5 - fp.y).length()
 			var a := clampf((d2 - R + 0.5) / 2.0, 0.0, 1.0)
 			a = floorf(a * 4.0) / 4.0
 			if a > 0.0:
@@ -1045,8 +1060,8 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		var age2 := float(t - int(f2["t"])) / 1000.0
 		if age2 < 1.1:
 			fkeep.append(f2)
-			var fp: Vector2 = f2["p"] - Vector2(m.dyn_text_width(str(f2["s"])) / 2.0, age2 * 30.0)
-			m.dyn_text(str(f2["s"]), fp.round(), Color(f2["c"], clampf(1.6 - age2 * 1.4, 0.0, 1.0)))
+			var fpp: Vector2 = f2["p"] - Vector2(m.dyn_text_width(str(f2["s"])) / 2.0, age2 * 30.0)
+			m.dyn_text(str(f2["s"]), fpp.round(), Color(f2["c"], clampf(1.6 - age2 * 1.4, 0.0, 1.0)))
 	floats = fkeep
 	m.draw_set_transform(Vector2.ZERO)
 	# 屏幕四周暗角
