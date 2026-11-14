@@ -27,7 +27,7 @@ const LIFT := 3
 const ZONE_BLEND := 28.0              # 水域分界处颜色过渡的半宽（像素）                       # 绕到柜台后面时抬高几像素（更靠里）
 const NEAR := 16                      # 离摊位/码头多近算"到了"
 ## 可以进去的房子：[门的中心 x, 名字, 用途]
-const DOORS := [[674, "造船厂", "shipyard"], [828, "服装店", "tailor"], [898, "渔具店", "tackle"], [1410, "小猫的家", "home"]]
+const DOORS := [[674, "造船厂", "shipyard"], [778, "工坊", "workshop"], [828, "服装店", "tailor"], [898, "渔具店", "tackle"], [1410, "小猫的家", "home"]]
 ## 街上散步的居民：[样子, 散步范围左端, 右端, 走一个来回的毫秒数]
 const STROLLERS := [[1, 690, 800, 26000], [2, 850, 980, 34000], [0, 930, 1010, 22000]]
 ## 市场里 NPC 的摊位：[摊位左端 x, 货物, 招牌, 摊主样子]
@@ -38,8 +38,10 @@ const SHOP_SPEED := 26.0       # 顾客走路速度（像素/秒）
 const DWELL_MS := 4200         # 在一个摊位前停留多久
 const BUY_AT_MS := 1500        # 停下后多久付钱拿货
 const CHAT := ["今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看"]
-const HOUSES := [["house_3", 652], ["house_1", 818], ["house_2", 872], ["house_0", 1388]]
-const TREES := [716, 940]
+const Shopfronts := preload("res://presentation/shopfronts.gd")
+var _fronts = null
+const HOUSES := [["house_3", 652], ["house_4", 752], ["house_1", 818], ["house_2", 872], ["house_0", 1388]]
+const TREES := [1010, 940]
 
 # 相对小猫贴图左上角的偏移
 const BRIDGE_H := 9.0                 # 拱桥中间比地面高几像素
@@ -773,8 +775,12 @@ func draw(cam: Vector2, view: Vector2, mini: bool, now: int, t: int) -> void:
 	if not mini:
 		_draw_sky(cam, view, t)
 		_draw_sky_birds(cam, view, t)
+	if _fronts == null:
+		_fronts = Shopfronts.new(self)
+	_fronts.draw_behind(t)
 	for h in HOUSES:
 		m.draw_texture(m.tex[h[0]], Vector2(h[1], GROUND_Y - 60))
+	_fronts.draw_over(t, float(m.game.sky()["dark"]))
 	for x in TREES:
 		m.draw_texture(m.tex["tree"], Vector2(x, GROUND_Y - 36))
 
@@ -1659,9 +1665,10 @@ const ROOMS := {
 	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"], [118, "quest"]]},
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[128, "hats"], [172, "quest"]]},
 	"shipyard": {"keeper": 2, "wall": "w", "spots": [[150, "boats"]]},
+	"workshop": {"keeper": 1, "wall": "w", "spots": [[150, "talk"]]},
 	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [106, "piggy"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船"}
+const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船", "talk": "空格键和师傅聊聊"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false
@@ -1746,6 +1753,12 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 			keeper_pos = Vector2(ox + 156, fy - 31)
 			_draw_keeper(int(room["keeper"]), keeper_pos, ox)
 			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
+		"workshop":
+			m.draw_texture(m.tex["noren_ship"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
+			_draw_workshop_room(ox, fy, t)
+			keeper_pos = Vector2(ox + 156, fy - 31)
+			_draw_keeper(int(room["keeper"]), keeper_pos, ox)
+			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
 		"home":
 			m.draw_texture(m.tex["storage"], Vector2(ox + 35, fy - 18))
 			m.draw_texture(m.tex["bookshelf"], Vector2(ox + 70, fy - 39))
@@ -1779,6 +1792,38 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 	m.draw_rect(Rect2(ox - 2, fy - ROOM_H, 2, ROOM_H + 16), Pal.U_O)
 	m.draw_rect(Rect2(ox + ROOM_W, fy - ROOM_H, 2, ROOM_H + 16), Pal.U_O)
 
+
+## 工坊的屋内：墙上的大齿轮转个不停，炉子里火苗跳，工作台上的铁砧旁散着工具。
+func _draw_workshop_room(ox: float, fy: float, t: int) -> void:
+	var spin := float(t) / 1500.0
+	_fronts_gear(ox + 82.0, fy - 46.0, 10.0, 10, spin, Pal.L_H, Pal.U_H)
+	_fronts_gear(ox + 101.0, fy - 62.0, 6.0, 8, -spin * 1.6 + 0.3, Pal.L_A, Pal.U_A)
+	_fronts_gear(ox + 62.0, fy - 67.0, 5.0, 7, -spin * 1.8, Pal.L_N, Pal.L_O)
+	# 炉子
+	var fx := ox + 176.0
+	m.draw_rect(Rect2(fx - 1, fy - 31, 30, 31), Pal.U_K)
+	m.draw_rect(Rect2(fx, fy - 30, 28, 30), Pal.U_A)
+	m.draw_rect(Rect2(fx + 5, fy - 20, 18, 12), Pal.U_K)
+	var flick := (t / 110) % 3
+	m.draw_rect(Rect2(fx + 6, fy - 16 - flick, 16, 8 + flick), Pal.L_R)
+	m.draw_rect(Rect2(fx + 9, fy - 14 - flick, 10, 6 + flick), Pal.L_Y)
+	m.draw_rect(Rect2(fx + 12, fy - 12, 4, 4), Pal.L_W)
+	# 墙上的工具
+	m.draw_rect(Rect2(ox + 112, fy - 62, 36, 2), Pal.U_O)
+	for k in 4:
+		m.draw_rect(Rect2(ox + 116 + k * 8, fy - 60, 2, 12 + (k % 2) * 3), Pal.L_A)
+		m.draw_rect(Rect2(ox + 114 + k * 8, fy - 48 + (k % 2) * 3, 6, 3), Pal.L_O)
+	# 地上的铁砧和木桶
+	m.draw_rect(Rect2(ox + 56, fy - 8, 20, 8), Pal.U_O)
+	m.draw_rect(Rect2(ox + 54, fy - 14, 24, 6), Pal.U_K)
+	m.draw_rect(Rect2(ox + 55, fy - 13, 22, 4), Pal.L_A)
+	if (t / 700) % 4 == 0:
+		m.tex_frame("sparkle", Vector2(ox + 70, fy - 20), (t / 120) % 2, 2)
+
+func _fronts_gear(cx: float, cy: float, rad: float, teeth: int, ang: float, col: Color, dark: Color) -> void:
+	if _fronts == null:
+		_fronts = Shopfronts.new(self)
+	_fronts._gear(cx, cy, rad, teeth, ang, col, dark)
 
 ## 店主：始终朝着小猫（小猫在店主右边就转向右，否则朝左）。
 func _draw_keeper(kind: int, pos: Vector2, ox: float) -> void:

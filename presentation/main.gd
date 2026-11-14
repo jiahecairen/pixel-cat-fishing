@@ -40,7 +40,7 @@ const FPS_NORMAL := 30
 const FPS_DRAG := 60
 const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
-const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "wall_clothes", "mannequin", "tree", "stall_back",
+const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "house_4", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_bag", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "villager_3", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
@@ -929,6 +929,11 @@ func _interact_inside() -> void:
 		"boats":
 			play("click")
 			shipyard_panel.open_panel()
+		"talk":
+			play("click")
+			var lines: Array = game.shop_chat(interior)
+			if lines.size() >= 2:
+				_toast(str(lines[randi() % lines.size()]), str(lines[randi() % lines.size()]))
 		"bed":
 			if world.napping:
 				pass

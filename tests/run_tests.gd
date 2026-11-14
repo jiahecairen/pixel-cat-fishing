@@ -1572,6 +1572,7 @@ func test_v062(balance: Dictionary, fish: Array) -> void:
 		check(g._pick_pool([["bottle", 50], ["diary_page", 10]]) == "", "池子里只有任务物品时抽不出东西")
 		if g._pick_pool([["bottle", 50], ["diary_page", 10]]) != "":
 			break
+	check(g.shop_chat("workshop").size() >= 2, "工坊师傅有话说")
 	var g2 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(172))
 	check(g2.item_wanted("bottle"), "还有信没收：瓶子会出现")
 	g2.state.quests = {}

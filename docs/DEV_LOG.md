@@ -402,3 +402,6 @@
 
 ## v0.62：自动规则收窄、任务专属物品
 - `_auto_policy`：海上/岛上 >80% 回镇卖；去掉镇上 SOLD_OUT 自动出发与 ROAM 的策略分流。`game.item_wanted/_pick_pool/QUEST_ONLY` 过滤瓶子和日记残页；空瓶不给钱。测试 619 项 ALL TESTS PASS、SIM PASS。版本号 0.62。
+
+## v0.63：工坊与店铺门面
+- `presentation/shopfronts.gd`（新）：造船厂后院两条船+吊机+屋顶大锚、工坊巨齿轮/烟/铁砧火星/蒸汽、服装店大剪刀/彩旗/遮阳篷、渔具店屋顶大鱼/钓竿/灯笼。`house_4` 贴图、`ROOMS.workshop`、`DOORS`/`HOUSES` 增加；`balance.shop_chat.workshop`；树挪到 x=1010。测试 620 项 ALL TESTS PASS、SIM PASS。版本号 0.63。
