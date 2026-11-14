@@ -238,8 +238,8 @@ func island_near_pawn(x: float) -> bool:
 func island_near_trash(x: float) -> bool:
 	return absf(x + 16.0 - m.game.trash_x()) <= 9.0
 
-func island_near_chest(x: float) -> bool:
-	return m.game.bridge_built() and not m.game.west_chest_open() and absf(x + 16.0 - (m.game.west_chest_x() + 8.0)) <= 20.0
+func island_near_post(x: float) -> bool:
+	return m.game.bridge_built() and absf(x + 16.0 - m.game.west_chest_x()) <= 20.0
 
 func island_near_console(x: float) -> bool:
 	return absf(x + 16.0 - (m.game.signal_x() + 5.0)) <= 20.0
@@ -672,12 +672,10 @@ func _draw_island_extras(left: float, right: float, t: int) -> void:
 			if (bx - bx0) % 14 == 0:
 				m.draw_rect(Rect2(bx, dy - 6, 2, 6), Pal.U_O)
 			m.draw_rect(Rect2(bx, dy - 6, 1, 1), Pal.L_O)
-	# 西岸旧营地的木箱
+	# 西岸的邮局（原来放木箱的地方）
 	var cx0: float = g.west_chest_x()
-	if g.bridge_built() and cx0 > left - 30 and cx0 < right + 10:
-		m.tex_frame("chest", Vector2(cx0, GROUND_Y - 14), 1 if g.west_chest_open() else 0, 2)
-		if not g.west_chest_open():
-			m.tex_frame("sparkle", Vector2(cx0 + 4, GROUND_Y - 22 - float((t / 400) % 2)), (t / 250) % 2, 2)
+	if g.bridge_built() and cx0 > left - 40 and cx0 < right + 40:
+		draw_post_office(cx0, float(GROUND_Y), t)
 	# 草丛里的亮点：有东西可以拾
 	for i in g.drift_count():
 		var dx: float = g.drift_x(i)
@@ -1797,6 +1795,32 @@ func enter_room(t: int) -> void:
 	room_flip = false
 	room_moving = false
 	room_t0 = t
+
+## 邮局：奶白的墙、蓝色的屋顶、门边一个红色的信箱，门上挂着信封招牌。x 是门的中心，ground 是脚踩的线。
+func draw_post_office(x: float, ground: float, t: int) -> void:
+	var x0 := x - 20.0
+	var y0 := ground - 30.0
+	m.draw_rect(Rect2(x0 - 1, y0 + 7, 42, 24), Pal.U_K)
+	m.draw_rect(Rect2(x0, y0 + 8, 40, 22), Pal.U_W)
+	m.draw_rect(Rect2(x0 - 3, y0 + 1, 46, 7), Pal.U_K)
+	m.draw_rect(Rect2(x0 - 2, y0 + 2, 44, 5), Pal.L_B)
+	m.draw_rect(Rect2(x0 - 2, y0 + 6, 44, 1), Pal.U_B)
+	m.draw_rect(Rect2(x - 4, y0 + 16, 9, 14), Pal.U_O)                      # 门
+	m.draw_rect(Rect2(x + 2, y0 + 23, 1, 2), Pal.L_Y)
+	m.draw_rect(Rect2(x0 + 3, y0 + 13, 8, 7), Pal.L_C)                      # 窗
+	m.draw_rect(Rect2(x0 + 29, y0 + 13, 8, 7), Pal.L_C)
+	m.draw_rect(Rect2(x - 5, y0 + 9, 11, 6), Pal.U_K)                       # 门上的信封招牌
+	m.draw_rect(Rect2(x - 4, y0 + 10, 9, 4), Pal.L_W)
+	m.draw_rect(Rect2(x - 4, y0 + 10, 1, 1), Pal.L_A)
+	m.draw_rect(Rect2(x + 4, y0 + 10, 1, 1), Pal.L_A)
+	m.draw_rect(Rect2(x - 2, y0 + 11, 1, 1), Pal.L_A)
+	m.draw_rect(Rect2(x + 2, y0 + 11, 1, 1), Pal.L_A)
+	m.draw_rect(Rect2(x, y0 + 12, 1, 1), Pal.L_A)
+	m.draw_rect(Rect2(x + 24, ground - 14, 7, 14), Pal.U_K)                 # 信箱
+	m.draw_rect(Rect2(x + 25, ground - 13, 5, 6), Pal.L_R)
+	m.draw_rect(Rect2(x + 25, ground - 7, 5, 1), Pal.U_R)
+	m.draw_rect(Rect2(x + 27, ground - 4, 1, 4), Pal.U_O)
+	_plate_at(x, ground - 44.0, "邮局")
 
 ## 头顶的聊天气泡（靠近能聊天的人时出现，轻轻上下浮动）。
 func draw_talk_bubble(pos: Vector2, t: int) -> void:

@@ -275,3 +275,7 @@
 ## C174 v0.86
 - run_tests：ALL TESTS PASS（792 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：典当行、垃圾箱、老柯分开；典当行按钮。
 - 未运行：Mac 上走到垃圾箱和老柯面前互动的手感、赎回页空状态的画面、.app 启动。
+
+## C175 v0.87
+- run_tests：ALL TESTS PASS（811 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：两个岛的邮局建筑、寄件页、取件页。新增测试覆盖邮费、距离对称、扣钱、重复提交、到达时间、取件、存档、放不下。
+- 未运行：Mac 上实际寄一次快递再去对岸取（真实等待时间）、快捷键 Z/X、点击目的地文字切换（现在只有一个目的地，没法试）、.app 启动。

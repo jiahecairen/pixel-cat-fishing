@@ -11,6 +11,12 @@ var trash_mode: bool = false  # 在垃圾箱打开的：什么都能扔
 var confirm_id: String = ""   # 扔任务物品要按两次：第一次记在这里
 var wh: bool = false      # 在家里仓库打开的：多了"身上 / 仓库"两页，按钮变成存入 / 取出
 var tab: int = 0          # 仓库模式下：0 = 身上，1 = 仓库
+var mail_mode: bool = false   # 在邮局打开的：寄件 / 取件
+var mail_place_id: String = ""
+var mail_dest: String = ""
+var draft: Dictionary = {}    # 准备寄的东西：物品 id -> 个数（寄出前不会离开物品栏）
+var mail_msg: String = ""
+var mail_msg_t: int = 0
 var fish_view: bool = false   # 鱼篓视图：里面有哪些鱼、各占百分之几
 var fsel: int = 0
 var sel: int = 0          # 选中的是"手里有的物品"列表里的第几个
@@ -31,7 +37,7 @@ func _step() -> int:
 	return 19 if m.mini else 26
 
 func _tabbed() -> bool:
-	return wh or (sell_mode and not ore_mode)
+	return wh or (sell_mode and not ore_mode) or mail_mode
 
 func _redeem() -> bool:
 	return sell_mode and tab == 1
@@ -113,12 +119,25 @@ func sell_selected() -> void:
 func _cells() -> Array:
 	if _redeem():
 		return m.game.pawn_cells()
+	if mail_mode:
+		if tab == 1:
+			return m.game.mail_ready_cells(mail_place_id)
+		var out: Array = []
+		for d in m.game.inventory.defs:
+			var left: int = m.game.inventory.count(m.game.state, d["id"]) - mini(int(draft.get(d["id"], 0)), m.game.inventory.count(m.game.state, d["id"]))
+			var cap: int = m.game.inventory.stack_cap(d["id"])
+			while left > 0:
+				out.append([d["id"], mini(left, cap)])
+				left -= cap
+		return out
 	return m.game.inventory.cells(m.game.state, wh and tab == 1)
 
 func _owned() -> Array:
 	return _cells().map(func(c): return c[0])
 
 func _cnt(id: String) -> int:
+	if mail_mode:
+		return int(m.game.mail_ready(mail_place_id).get(id, 0)) if tab == 1 else m.game.inventory.count(m.game.state, id) - int(draft.get(id, 0))
 	if _redeem():
 		return m.game.pawn_count(id)
 	if wh and tab == 1:
@@ -127,7 +146,7 @@ func _cnt(id: String) -> int:
 
 func _tab_rect(i: int) -> Rect2:
 	var r := rect()
-	return Rect2(r.position.x + ((100 if sell_mode else 46) if not m.mini else 4) + i * 34, r.position.y + 2, 32, 11)
+	return Rect2(r.position.x + ((100 if (sell_mode or mail_mode) else 46) if not m.mini else 4) + i * 34, r.position.y + 2, 32, 11)
 
 func _all_rect() -> Rect2:
 	var u := _use_rect()
@@ -140,10 +159,106 @@ func _wh_use_rect() -> Rect2:
 
 ## 工坊回收：和平时一样的物品栏，但多一个"卖这组"（整堆卖掉）。
 func open_ore() -> void:
+	mail_mode = false
 	open_pawn()
 	ore_mode = true
 
+func open_mail(place: String) -> void:
+	ore_mode = false
+	sell_mode = false
+	trash_mode = false
+	wh = false
+	fish_view = false
+	mail_mode = true
+	mail_place_id = place
+	var others: Array = m.game.mail_others(place)
+	mail_dest = str(others[0]["id"]) if not others.is_empty() else ""
+	draft = {}
+	open = true
+	tab = 0
+	sel = 0
+
+func _mail_dest_cycle() -> void:
+	var others: Array = m.game.mail_others(mail_place_id)
+	if others.size() < 2:
+		return
+	for i in others.size():
+		if str(others[i]["id"]) == mail_dest:
+			mail_dest = str(others[(i + 1) % others.size()]["id"])
+			break
+	m.play("click")
+
+func _mail_say(s: String) -> void:
+	mail_msg = s
+	mail_msg_t = Time.get_ticks_msec()
+
+func mail_add() -> void:
+	var owned := _owned()
+	if sel >= owned.size():
+		m.play("deny")
+		return
+	var id: String = owned[sel]
+	var have: int = m.game.inventory.count(m.game.state, id)
+	var want: int = mini(have, int(draft.get(id, 0)) + _cell_n())
+	if want <= int(draft.get(id, 0)):
+		m.play("deny")
+		return
+	draft[id] = want
+	m.play("click")
+	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
+
+func mail_unadd() -> void:
+	var owned := _owned()
+	var id := ""
+	if sel < owned.size():
+		id = str(owned[sel])
+	if id == "" or not draft.has(id):
+		m.play("deny")
+		return
+	draft.erase(id)
+	m.play("click")
+
+func mail_send_now() -> void:
+	var why: String = m.game.mail_send(mail_place_id, mail_dest, draft, m.game.state.new_id("m"))
+	match why:
+		"":
+			m.play("coin")
+			_mail_say("寄出了，路上要一会儿")
+			draft = {}
+			sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
+		"gold":
+			m.play("deny")
+			_mail_say("钱不够")
+		"none":
+			m.play("deny")
+			_mail_say("先放点东西进包裹")
+		"big":
+			m.play("deny")
+			_mail_say("包裹太大了")
+		_:
+			m.play("deny")
+			_mail_say("寄不出去")
+
+func mail_take_selected(all: bool) -> void:
+	var g = m.game
+	var got := 0
+	if all:
+		for id in g.mail_ready(mail_place_id).keys():
+			got += g.mail_take(mail_place_id, str(id))
+	else:
+		var owned := _owned()
+		if sel < owned.size():
+			got = g.mail_take(mail_place_id, str(owned[sel]), _cell_n())
+	if got > 0:
+		m.play("buy")
+	else:
+		m.play("deny")
+		if not g.mail_ready(mail_place_id).is_empty():
+			_mail_say("背包放不下了")
+	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
+
 func open_pawn() -> void:
+	mail_mode = false
 	ore_mode = false
 	open = true
 	wh = false
@@ -153,6 +268,7 @@ func open_pawn() -> void:
 	sel = 0
 
 func open_trash() -> void:
+	mail_mode = false
 	ore_mode = false
 	open = true
 	wh = false
@@ -197,6 +313,7 @@ func redeem_selected() -> void:
 	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
 
 func open_warehouse() -> void:
+	mail_mode = false
 	open = true
 	wh = true
 	tab = 0
@@ -229,6 +346,7 @@ func move_selected(all: bool) -> void:
 	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
 
 func toggle() -> void:
+	mail_mode = false
 	fish_view = false
 	wh = false
 	sell_mode = false
@@ -245,7 +363,7 @@ func _fish_btn_rect() -> Rect2:
 	return Rect2(r.position.x + (58 if m.mini else 88), r.position.y + 2, 15, 11)
 
 func _plain() -> bool:
-	return not wh and not sell_mode and not trash_mode
+	return not wh and not sell_mode and not trash_mode and not mail_mode
 
 ## 鱼篓里每种鱼：[[id, 条数, 百分比]]，百分比 = 这种鱼占篓里所有鱼的几成。
 func fish_rows() -> Array:
@@ -301,14 +419,29 @@ func click(p: Vector2) -> bool:
 			move_selected(true)
 		elif _wh_use_rect().has_point(p):
 			use_selected()
+	elif mail_mode:
+		if tab == 0:
+			if _use_rect().has_point(p):
+				mail_add()
+			elif _sell_rect().has_point(p):
+				mail_unadd()
+			elif _sell_all_rect().has_point(p):
+				mail_send_now()
+			elif Rect2(rect().position + Vector2(176, 0), Vector2(rect().size.x - 196, 14)).has_point(p):
+				_mail_dest_cycle()
+		else:
+			if _use_rect().has_point(p):
+				mail_take_selected(false)
+			elif _sell_rect().has_point(p):
+				mail_take_selected(true)
 	elif trash_mode:
 		if _use_rect().has_point(p):
 			trash_selected(false)
 		elif _sell_rect().has_point(p):
 			trash_selected(true)
-	elif not sell_mode and _plain_trash_rect(false).has_point(p) and sel < _owned().size():
+	elif _plain() and _plain_trash_rect(false).has_point(p) and sel < _owned().size():
 		trash_selected(false)
-	elif not sell_mode and _plain_trash_rect(true).has_point(p) and sel < _owned().size():
+	elif _plain() and _plain_trash_rect(true).has_point(p) and sel < _owned().size():
 		trash_selected(true)
 	elif _redeem():
 		if _use_rect().has_point(p):
@@ -317,7 +450,7 @@ func click(p: Vector2) -> bool:
 		sell_stack_selected()
 	elif _sellable() and _sell_rect().has_point(p):
 		sell_selected()
-	elif not sell_mode and _use_rect().has_point(p):
+	elif not sell_mode and not mail_mode and _use_rect().has_point(p):
 		use_selected()
 	return true
 
@@ -339,24 +472,39 @@ func key(keycode: int) -> bool:
 			if wh:
 				use_selected()
 		KEY_X:
-			if not wh and not sell_mode and not trash_mode:
+			if mail_mode:
+				if tab == 0:
+					mail_unadd()
+				else:
+					mail_take_selected(true)
+			elif not wh and not sell_mode and not trash_mode:
 				trash_selected(false)
 			elif trash_mode:
 				trash_selected(false)
 			elif _sellable():
 				sell_selected()
 		KEY_Z:
-			if not wh and not sell_mode and not trash_mode:
+			if mail_mode:
+				if tab == 0:
+					mail_send_now()
+				else:
+					mail_take_selected(true)
+			elif not wh and not sell_mode and not trash_mode:
 				trash_selected(true)
 			elif trash_mode:
 				trash_selected(true)
 			elif _sellable():
 				sell_stack_selected()
 		KEY_TAB:
-			if sell_mode:
+			if sell_mode or mail_mode:
 				switch_tab()
 		KEY_SPACE, KEY_ENTER, KEY_E:
-			if wh:
+			if mail_mode:
+				if tab == 0:
+					mail_add()
+				else:
+					mail_take_selected(false)
+			elif wh:
 				move_selected(false)
 			elif trash_mode:
 				trash_selected(false)
@@ -424,6 +572,39 @@ func _draw_chest_frame(r: Rect2) -> void:
 	m.draw_rect(Rect2(lx, r.position.y + 10, 9, 2), Pal.U_H)
 	m.draw_rect(Rect2(lx + 4, r.position.y + 7, 1, 3), Pal.U_K)
 
+func _draw_mail_buttons(r: Rect2, id: String) -> void:
+	var g = m.game
+	if tab == 0:
+		_btn(_use_rect(), "放入", Pal.L_C, Pal.U_B)
+		_btn(_sell_rect(), "取回", Pal.L_A, Pal.U_A)
+		_btn(_sell_all_rect(), "寄出", Pal.L_Y, Pal.U_H)
+	else:
+		_btn(_use_rect(), "领这组", Pal.L_G, Pal.U_G)
+		_btn(_sell_rect(), "全领", Pal.L_G, Pal.U_G)
+
+## 邮局面板顶上一行：寄件时写目的地、件数和邮费；取件时写路上还有多少。
+func _draw_mail_info(r: Rect2) -> void:
+	var g = m.game
+	var t := Time.get_ticks_msec()
+	var x := r.position.x + 176
+	if t - mail_msg_t < 2200 and mail_msg != "":
+		m.dyn_text(mail_msg, Vector2(x, r.position.y + 2), Pal.L_Y)
+		return
+	if tab == 0:
+		var dn: String = str(g.mail_place(mail_dest).get("name", "?"))
+		var n: int = g.mail_item_count(draft)
+		m.dyn_text("寄往 %s  %d 件" % [dn, n], Vector2(x, r.position.y + 2), Pal.L_W)
+		if n > 0:
+			m.draw_money(g.mail_quote(mail_place_id, mail_dest, draft), Vector2(x + m.dyn_text_width("寄往 %s  %d 件" % [dn, n]) + 6, r.position.y + 1), Pal.L_Y)
+		else:
+			m.dyn_text("路上约 %d 秒" % int(g.mail_eta_ms(mail_place_id, mail_dest) / 1000), Vector2(x + m.dyn_text_width("寄往 %s  %d 件" % [dn, n]) + 8, r.position.y + 2), Pal.L_A)
+	else:
+		var inc: Array = g.mail_incoming(mail_place_id)
+		if int(inc[0]) > 0:
+			m.dyn_text("路上还有 %d 件，约 %d 秒" % [int(inc[0]), int(ceil(float(inc[1]) / 1000.0))], Vector2(x, r.position.y + 2), Pal.L_W)
+		else:
+			m.dyn_text("没有在路上的包裹", Vector2(x, r.position.y + 2), Pal.L_A)
+
 func _draw_fish_view(r: Rect2, size: float) -> void:
 	var g = m.game
 	var fr := fish_rows()
@@ -467,7 +648,9 @@ func draw() -> void:
 		m.draw_rect(r, Pal.U_A)
 		m.draw_rect(r.grow(-1), Pal.U_K)
 	if not m.mini:
-		if sell_mode or trash_mode:
+		if mail_mode:
+			m.dyn_text("邮局", r.position + Vector2(5, 2), Pal.L_C)
+		elif sell_mode or trash_mode:
 			m.dyn_text(("收购矿石" if ore_mode else "典当行") if sell_mode else "垃圾箱", r.position + Vector2(5, 2), Pal.L_Y if sell_mode else Pal.L_R)
 		else:
 			m.label("仓库" if wh else "物品栏", r.position + Vector2(5, 3), Pal.L_W)
@@ -477,12 +660,14 @@ func draw() -> void:
 			var tr := _tab_rect(i)
 			m.draw_rect(tr, Pal.L_Y if tab == i else Pal.U_A)
 			m.draw_rect(tr.grow(-1), Pal.L_A if tab == i else Pal.U_K)
-			if sell_mode:
-				var tn := "典当" if i == 0 else "赎回"
+			if sell_mode or mail_mode:
+				var tn := ("典当" if i == 0 else "赎回") if sell_mode else ("寄件" if i == 0 else "取件")
 				m.dyn_text(tn, Vector2(tr.position.x + (tr.size.x - m.dyn_text_width(tn)) / 2.0, tr.position.y - 1), Pal.U_K if tab == i else Pal.L_A)
 			else:
 				m.label_centered("身上" if i == 0 else "仓库", tr.position.x + tr.size.x / 2, tr.position.y + 0, Pal.U_K if tab == i else Pal.L_A)
 	m.tex_frame("btn_close", _close_rect().position, 0, 2)
+	if mail_mode and not m.mini:
+		_draw_mail_info(r)
 	if _plain():                                            # 物品栏旁边的鱼篓按钮
 		var fb := _fish_btn_rect()
 		m.draw_rect(fb, Pal.L_Y if fish_view else Pal.U_A)
@@ -493,10 +678,10 @@ func draw() -> void:
 		return
 	var owned := _owned()
 	var cells := _cols() * _rows()
-	if not ((wh and tab == 1) or _redeem()):
+	if not ((wh and tab == 1) or _redeem() or (mail_mode and tab == 1)):
 		cells = mini(cells, g.state.bag_slots)             # 身上只有这么多格；仓库不限
 		if not m.mini:
-			m.text("%d/%d" % [g.inventory.slots_used(g.state), g.state.bag_slots], r.position + Vector2(118 if wh else (62 if (sell_mode or trash_mode) else 42), 6), Pal.L_Y if wh else Pal.L_A)
+			m.text("%d/%d" % [g.inventory.slots_used(g.state), g.state.bag_slots], r.position + Vector2(118 if wh else (62 if (sell_mode or trash_mode or mail_mode) else 42), 6), Pal.L_Y if wh else Pal.L_A)
 	for i in cells:
 		var p := _slot_pos(i)
 		# 格子：选中的描金边
@@ -515,6 +700,10 @@ func draw() -> void:
 	if owned.is_empty():
 		if _redeem():
 			m.dyn_text("没有典当过的东西", Vector2(r.position.x + 5, dy), Pal.L_A)
+		elif mail_mode:
+			m.dyn_text("没有可取的东西" if tab == 1 else "身上没有东西了", Vector2(r.position.x + 5, dy), Pal.L_A)
+			if tab == 0:
+				_draw_mail_buttons(r, "")
 		elif sell_mode or trash_mode:
 			m.dyn_text("身上没有东西", Vector2(r.position.x + 5, dy), Pal.L_A)
 		else:
@@ -567,19 +756,21 @@ func draw() -> void:
 			var bt: String = "这组" if b[1] == "全部" else str(b[1])
 			m.dyn_text(bt, Vector2(br.position.x + (br.size.x - m.dyn_text_width(bt)) / 2.0, br.position.y - 1 + (0 if m.mini else 1)), Pal.U_K)
 	else:
-		var show_use: bool = usable and not sell_mode and not trash_mode
+		var show_use: bool = usable and not sell_mode and not trash_mode and not mail_mode
 		if show_use:
 			var u := _use_rect()
 			m.draw_rect(u, Pal.L_G if can else Pal.U_A)
 			m.draw_rect(Rect2(u.position.x, u.end.y - 2, u.size.x, 2), Pal.U_G if can else Pal.U_K)
 			m.label_centered("装上" if str(g.inventory.by_id[id].get("use", "")) == "bait" else "使用", u.position.x + u.size.x / 2, u.position.y + (0 if m.mini else 1), Pal.U_K if can else Pal.L_A)
-		if not sell_mode and not trash_mode and sel < _owned().size():
+		if _plain() and sel < _owned().size():
 			var warn0: bool = g.is_important(id) and confirm_id.begins_with(id)
 			_btn(_plain_trash_rect(false), "再按确认" if warn0 else "丢弃", Pal.L_R, Pal.U_R)
 			_btn(_plain_trash_rect(true), "丢这组", Pal.L_R, Pal.U_R)
 			if warn0 and not m.mini:
 				m.dyn_text("这是任务物品，丢了就没了", Vector2(tx, dy + 22), Pal.L_R)
-		if trash_mode:
+		if mail_mode:
+			_draw_mail_buttons(r, id)
+		elif trash_mode:
 			var warn: bool = g.is_important(id) and confirm_id.begins_with(id)
 			_btn(_use_rect(), "再按确认" if warn else "丢弃", Pal.L_R, Pal.U_R)
 			_btn(_sell_rect(), "丢这组", Pal.L_R, Pal.U_R)

@@ -2354,5 +2354,24 @@
         "rare_floors": 3
       }
     ]
+  },
+  "mail": {
+    "places": [
+      {
+        "id": "isle",
+        "name": "雾灯岛",
+        "d": 39
+      },
+      {
+        "id": "mine",
+        "name": "矿山岛",
+        "d": 65
+      }
+    ],
+    "base": 15,
+    "per_item": 3,
+    "per_dist": 0.04,
+    "ms_per_dist": 3000,
+    "max_items": 99
   }
 }

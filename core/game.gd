@@ -1342,6 +1342,130 @@ func sell_item(id: String) -> int:
 	dirty = true
 	return price
 
+## ---- 邮局（每个岛一个）：花钱把物品一起寄到另一个岛，按岛的距离和物品多少算邮费，路上要一会儿 ----
+func mail_places() -> Array:
+	return _cfg.get("mail", {}).get("places", [])
+
+func mail_place(id: String) -> Dictionary:
+	for p in mail_places():
+		if str(p["id"]) == id:
+			return p
+	return {}
+
+## 别的岛（只有两个岛时就是对面那个）。
+func mail_others(from: String) -> Array:
+	return mail_places().filter(func(p): return str(p["id"]) != from)
+
+func mail_item_count(items: Dictionary) -> int:
+	var n := 0
+	for k in items:
+		n += int(items[k])
+	return n
+
+func mail_distance(from: String, to: String) -> int:
+	return absi(int(mail_place(from).get("d", 0)) - int(mail_place(to).get("d", 0)))
+
+## 邮费（铜币）：(起步价 + 每件 × 件数) × (1 + 距离 × 系数)。
+func mail_quote(from: String, to: String, items: Dictionary) -> int:
+	var c: Dictionary = _cfg.get("mail", {})
+	var n := mail_item_count(items)
+	if n <= 0:
+		return 0
+	return int(ceil((float(c.get("base", 15)) + float(c.get("per_item", 3)) * float(n)) * (1.0 + float(mail_distance(from, to)) * float(c.get("per_dist", 0.04)))))
+
+## 路上要多久（毫秒）：只看距离。
+func mail_eta_ms(from: String, to: String) -> int:
+	return mail_distance(from, to) * int(_cfg.get("mail", {}).get("ms_per_dist", 3000))
+
+## 寄出。返回 ""=成功，"none"=没东西，"same"=寄给自己，"have"=身上东西不够，"gold"=钱不够，"big"=太多了。
+## send_id 一样的包裹只会寄一次。
+func mail_send(from: String, to: String, items: Dictionary, send_id: String = "") -> String:
+	if send_id != "":
+		for p in state.mail:
+			if str(p["id"]) == send_id:
+				return ""
+	if mail_place(to).is_empty() or mail_place(from).is_empty() or from == to:
+		return "same"
+	var n := mail_item_count(items)
+	if n <= 0:
+		return "none"
+	if n > int(_cfg.get("mail", {}).get("max_items", 99)):
+		return "big"
+	for k in items:
+		if int(items[k]) <= 0 or inventory.count(state, str(k)) < int(items[k]):
+			return "have"
+	var price := mail_quote(from, to, items)
+	if state.wallet_gold < price:
+		return "gold"
+	for k in items:
+		inventory.remove(state, str(k), int(items[k]))
+	state.wallet_gold -= price
+	var parcel_items := {}
+	for k in items:
+		parcel_items[str(k)] = int(items[k])
+	state.mail.append({"id": send_id if send_id != "" else state.new_id("m"), "from": from, "to": to, "ready_ms": _clock.now_ms() + mail_eta_ms(from, to), "items": parcel_items})
+	state.revision += 1
+	dirty = true
+	return ""
+
+## 已经到了这个邮局、可以取的东西 {物品 id: 个数}。
+func mail_ready(place: String) -> Dictionary:
+	var out := {}
+	var now: int = _clock.now_ms()
+	for p in state.mail:
+		if str(p["to"]) == place and int(p["ready_ms"]) <= now:
+			for k in p["items"]:
+				out[k] = int(out.get(k, 0)) + int(p["items"][k])
+	return out
+
+## 同上，按物品栏的格子拆开 [[id, 个数], ...]。
+func mail_ready_cells(place: String) -> Array:
+	var ready := mail_ready(place)
+	var out: Array = []
+	for d in inventory.defs:
+		var left := int(ready.get(str(d["id"]), 0))
+		var cap := inventory.stack_cap(str(d["id"]))
+		while left > 0:
+			out.append([d["id"], mini(left, cap)])
+			left -= cap
+	return out
+
+## 还在路上、要寄到这个邮局的：[件数, 最久还要几毫秒]。
+func mail_incoming(place: String) -> Array:
+	var n := 0
+	var wait := 0
+	var now: int = _clock.now_ms()
+	for p in state.mail:
+		if str(p["to"]) == place and int(p["ready_ms"]) > now:
+			n += mail_item_count(p["items"])
+			wait = maxi(wait, int(p["ready_ms"]) - now)
+	return [n, wait]
+
+## 取件：把已到的物品放进物品栏，最多 limit 个（0 = 不限），放不下的留在邮局。返回取了几个。
+func mail_take(place: String, id: String, limit: int = 0) -> int:
+	var want := int(mail_ready(place).get(id, 0))
+	if limit > 0:
+		want = mini(want, limit)
+	want = mini(want, inventory.room_for(state, id, want))
+	if want <= 0:
+		return 0
+	inventory.add(state, id, want)
+	var left := want
+	var now: int = _clock.now_ms()
+	for p in state.mail:
+		if left <= 0:
+			break
+		if str(p["to"]) == place and int(p["ready_ms"]) <= now and p["items"].has(id):
+			var take := mini(left, int(p["items"][id]))
+			p["items"][id] = int(p["items"][id]) - take
+			left -= take
+			if int(p["items"][id]) <= 0:
+				p["items"].erase(id)
+	state.mail = state.mail.filter(func(q): return mail_item_count(q["items"]) > 0)
+	state.revision += 1
+	dirty = true
+	return want
+
 ## ---- 典当行（雾灯岛）：什么都能当，当掉的东西可以用两倍的价钱赎回 ----
 func pawn_value(id: String) -> int:
 	var d: Dictionary = inventory.by_id.get(id, {})

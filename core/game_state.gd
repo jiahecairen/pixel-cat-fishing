@@ -39,6 +39,7 @@ var upgrades: Dictionary = {"rod": 0, "bait": 0, "basket": 0, "hook": 0}
 ## 支线任务：{任务 id: "active" / "done"}
 var quests: Dictionary = {}
 var mine: Dictionary = {}          # 矿井进度（见 core/mine.gd）
+var mail: Array = []                 # 在路上和已到邮局的包裹：{id, from, to, ready_ms, items:{物品id: 个数}}
 var story: Dictionary = {}           # 剧情标记（对话里选过什么、聊过什么）：标记名 -> 整数
 ## 鱼钩上装的鱼饵（物品 id）；空字符串 = 面团（无限量，不占物品栏）
 var equipped_bait: String = ""
@@ -61,7 +62,7 @@ func to_dict() -> Dictionary:
 		"processed_sale_ids": processed_sale_ids.duplicate(),
 		"next_seq": next_seq, "pomodoro": pomodoro.duplicate(true),
 		"stats": stats.duplicate(true), "settings": settings.duplicate(true),
-		"upgrades": upgrades.duplicate(true), "quests": quests.duplicate(true), "story": story.duplicate(true), "mine": mine.duplicate(true), "bag_slots": bag_slots, "gear": gear.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
+		"upgrades": upgrades.duplicate(true), "quests": quests.duplicate(true), "story": story.duplicate(true), "mine": mine.duplicate(true), "mail": mail.duplicate(true), "bag_slots": bag_slots, "gear": gear.duplicate(true), "cat": cat.duplicate(true), "equipped_bait": equipped_bait,
 		"window": window.duplicate(true),
 	}
 
@@ -114,6 +115,7 @@ func from_dict(d: Dictionary) -> bool:
 	_merge(gear, d.get("gear"))
 	wallet_gold = mini(99900, wallet_gold + maxi(0, int(d.get("gems", 0))) * 10)   # 旧版宝石折成铜币
 	mine = (d["mine"] as Dictionary).duplicate(true) if d.get("mine") is Dictionary else {}
+	mail = (d["mail"] as Array).duplicate(true) if d.get("mail") is Array else []
 	story.clear()
 	if d.get("story") is Dictionary:
 		for k in d["story"]:

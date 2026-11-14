@@ -70,6 +70,7 @@ func _init() -> void:
 		test_v083(balance, fish)
 		test_unstick(balance, fish)
 		test_island_layout(balance, fish)
+		test_mail(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -2427,3 +2428,45 @@ func test_island_layout(balance: Dictionary, fish: Array) -> void:
 				bad += "%s/%s " % [names[i], names[j]]
 	check(bad == "", "互相至少隔 22 像素（太近的：%s）" % bad)
 	check(g.trash_x() < g.island_land_x() - 20.0, "垃圾箱不在码头上")
+
+func test_mail(balance: Dictionary, fish: Array) -> void:
+	print("v0.87: 邮局寄快递")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(87))
+	g.state.bag_slots = 40
+	g.inventory.add(g.state, "boot", 12)
+	g.inventory.add(g.state, "stone", 3)
+	g.state.wallet_gold = 5000
+	check(g.mail_places().size() == 2 and g.mail_others("isle").size() == 1 and str(g.mail_others("isle")[0]["id"]) == "mine", "两个岛各有一个邮局")
+	var one := {"boot": 1}
+	var many := {"boot": 10, "stone": 3}
+	check(g.mail_quote("isle", "mine", many) > g.mail_quote("isle", "mine", one), "东西越多邮费越贵")
+	check(g.mail_quote("isle", "mine", {}) == 0, "没有东西不收钱")
+	var far := int(g.mail_distance("isle", "mine"))
+	check(far > 0 and g.mail_distance("isle", "mine") == g.mail_distance("mine", "isle"), "距离是对称的（%d）" % far)
+	var price: int = g.mail_quote("isle", "mine", many)
+	var w0: int = g.state.wallet_gold
+	check(g.mail_send("isle", "mine", many, "p1") == "" and g.state.wallet_gold == w0 - price and g.inventory.count(g.state, "boot") == 2 and g.inventory.count(g.state, "stone") == 0, "寄出：扣邮费，物品离开背包（%d 铜）" % price)
+	check(g.mail_send("isle", "mine", many, "p1") == "" and g.state.wallet_gold == w0 - price and g.state.mail.size() == 1, "同一个包裹号重复提交只寄一次")
+	check(g.mail_send("isle", "isle", one, "p2") == "same", "不能寄给自己所在的岛")
+	check(g.mail_send("isle", "mine", {"boot": 99}, "p3") == "have", "身上东西不够寄不了")
+	check(g.mail_send("isle", "mine", {}, "p4") == "none", "空包裹寄不了")
+	g.state.wallet_gold = 1
+	check(g.mail_send("isle", "mine", one, "p5") == "gold", "钱不够寄不了")
+	g.state.wallet_gold = 5000
+	check(g.mail_ready("mine").is_empty() and g.mail_incoming("mine")[0] == 13 and g.mail_incoming("mine")[1] > 0, "刚寄出：还在路上，13 件")
+	check(g.mail_take("mine", "boot") == 0, "没到不能取")
+	check(g.mail_ready("isle").is_empty(), "寄出的岛上什么也取不到")
+	clock.t += g.mail_eta_ms("isle", "mine") + 1
+	check(int(g.mail_ready("mine").get("boot", 0)) == 10 and int(g.mail_ready("mine").get("stone", 0)) == 3, "到了：对岸取得到")
+	check(g.mail_ready_cells("mine").size() == 2, "10 个靴子一格，3 块石头一格")
+	check(g.mail_take("mine", "boot", 4) == 4 and g.inventory.count(g.state, "boot") == 6, "取件可以只取一部分")
+	check(g.mail_take("mine", "boot") == 6 and g.mail_take("mine", "stone") == 3 and g.state.mail.is_empty(), "取完包裹就没了")
+	var s2 := GameState.new()
+	g.inventory.add(g.state, "rope", 2)
+	g.mail_send("mine", "isle", {"rope": 2}, "p6")
+	check(s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict()))) and s2.mail.size() == 1 and int(s2.mail[0]["items"]["rope"]) == 2, "在路上的包裹随存档保存")
+	g.state.bag_slots = 1
+	g.inventory.add(g.state, "boot", 10)
+	clock.t += g.mail_eta_ms("mine", "isle") + 1
+	check(g.mail_take("isle", "rope") == 0 and int(g.mail_ready("isle").get("rope", 0)) == 2, "背包放不下就留在邮局")

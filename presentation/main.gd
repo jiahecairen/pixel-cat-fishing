@@ -433,6 +433,17 @@ func _apply_debug_env() -> void:
 		bag.sel = OS.get_environment("CATFISH_BAGSEL").to_int()
 	if OS.has_environment("CATFISH_WALLET"):      # 调试：钱包铜币数
 		st.wallet_gold = OS.get_environment("CATFISH_WALLET").to_int()
+	if OS.has_environment("CATFISH_POSTX"):       # 调试：去雾灯岛西岸的邮局门口（桥当作已修好）
+		st.effects["bridge"] = 1
+		debug_teleport("island")
+		game.journey.set_roam_x(game.west_chest_x() - 16.0 + OS.get_environment("CATFISH_POSTX").to_float())
+	if OS.has_environment("CATFISH_MAIL"):        # 调试：打开邮局（isle / mine），给几样东西；CATFISH_MAILTAB=1 取件页
+		for id in ["boot", "rope", "stone", "gold_ore"]:
+			game.give(id, 4)
+		st.wallet_gold = 5000
+		bag.open_mail(OS.get_environment("CATFISH_MAIL"))
+		bag.draft = {"boot": 4, "rope": 2}
+		bag.tab = OS.get_environment("CATFISH_MAILTAB").to_int() if OS.has_environment("CATFISH_MAILTAB") else 0
 	if OS.has_environment("CATFISH_SELLMODE"):    # 调试：工坊回收界面（给几样杂物）
 		for id in ["boot", "bait_worm", "rope", "ladder", "stone", "lamp_shell"]:
 			game.give(id, 3)
@@ -1063,17 +1074,10 @@ func _interact_island(x: float) -> void:
 			play("click")
 			signal_panel.open_panel()
 			on_panel_toggled()
-	elif world.island_near_chest(x):
-		var cg: Dictionary = game.open_west_chest()
-		if cg.is_empty():
-			play("deny")
-		else:
-			play("chest")
-			_toast("打开了木箱", "")
-			world.chest_open_t0 = Time.get_ticks_msec()
-			_float_money(int(cg["gold"]), world.cat_pos + Vector2(34, 8))
-			for iid in cg["items"]:
-				_float("+%d" % int(cg["items"][iid]), str(game.inventory.by_id.get(iid, {}).get("sprite", "")), world.cat_pos + Vector2(34, -6))
+	elif world.island_near_post(x):
+		bag.open_mail("isle")
+		play("click")
+		on_panel_toggled()
 	elif world.island_near_drift(x) >= 0:
 		var di: int = world.island_near_drift(x)
 		var got: Dictionary = game.pick_drift(di)
@@ -2490,8 +2494,8 @@ func _island_hint(ix: float) -> String:
 		return "空格键进典当行"
 	if world.island_near_trash(ix):
 		return "空格键扔东西（垃圾箱）"
-	if world.island_near_chest(ix):
-		return "空格键打开木箱"
+	if world.island_near_post(ix):
+		return "空格键进邮局寄快递"
 	if world.island_near_drift(ix) >= 0:
 		return "空格键拾取"
 	if world.island_near_lake(ix):

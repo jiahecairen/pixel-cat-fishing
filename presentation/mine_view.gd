@@ -12,7 +12,7 @@ const MINE_FRAMES := 30
 const CROSS_MS := 4200
 const RIDE_MS := 1500
 const ISLE_W := 560.0
-const SPOT := {"dock": 500.0, "rest": 380.0, "inn": 315.0, "shop": 250.0, "gate": 96.0}
+const SPOT := {"dock": 500.0, "rest": 380.0, "inn": 315.0, "shop": 250.0, "post": 172.0, "gate": 96.0}
 const CAVE_W := 560.0
 const CAVE := {"miner": 150.0, "exit": 40.0, "cart": 250.0, "shaft1": 360.0, "rail2": 440.0, "shaft2": 500.0}
 const STEP_S := 0.055
@@ -523,6 +523,10 @@ func _interact_isle() -> void:
 			m.play("click")
 		"shop", "rest", "inn":
 			_enter_room(_spot())
+		"post":
+			m.bag.open_mail("mine")
+			m.play("click")
+			m.on_panel_toggled()
 
 func _interact_cave() -> void:
 	match _cave_spot():
@@ -689,6 +693,7 @@ func hint() -> String:
 				"dock": return "空格键坐船回雾灯岛"
 				"gate": return "空格键进矿洞"
 				"shop": return "空格键进工具店"
+				"post": return "空格键进邮局寄快递"
 				"rest": return "空格键进饭店"
 			return "方向键走动"
 		"room":
@@ -779,6 +784,7 @@ func _draw_isle(view: Vector2, t: int) -> void:
 	m.draw_texture(m.tex["mine_shop"], Vector2(SPOT["shop"] - 28, fy - 46))
 	m.draw_texture(m.tex["mine_rest"], Vector2(SPOT["rest"] - 28, fy - 46))
 	m.draw_texture(m.tex["mine_inn"], Vector2(SPOT["inn"] - 28, fy - 46))
+	m.world.draw_post_office(SPOT["post"], fy, t)
 	if (t / 300) % 2 == 0:                                         # 饭店烟囱冒烟
 		m.draw_rect(Rect2(SPOT["rest"] + 14, fy - 52 - (t / 300) % 6, 3, 3), Color(Pal.U_W, 0.7))
 	for sx in [SPOT["shop"], SPOT["inn"], SPOT["rest"], SPOT["gate"]]:
@@ -1259,7 +1265,7 @@ func _draw_overlay(view: Vector2, t: int) -> void:
 		m.dyn_text(_wallet_text(), Vector2(view.x - w + 8, 7), Pal.L_Y)
 		var h := hint()
 		if h != "" and menu == "":
-			m.dyn_text(h, Vector2(8, 28), Pal.L_W if region != "isle" else Pal.U_K)
+			m.dyn_text(h, Vector2(8, 28), Pal.L_W if (region != "isle" or float(m.game.sky()["dark"]) > 0.35) else Pal.U_K)
 	if t - _full_t < 2600:
 		var al := clampf(float(2600 - (t - _full_t)) / 900.0, 0.0, 1.0)
 		var fw: float = m.dyn_text_width("背包满了") + 10.0
