@@ -127,8 +127,8 @@ func draw() -> void:
 		elif owned:
 			m.label("已有", Vector2(ROW_X + 32, y), Pal.L_A)
 		else:
-			m.money_right(g.cat_price(kind, i), ROW_X + 51, y + 3, Pal.L_Y if g.state.wallet_gold >= g.cat_price(kind, i) else Pal.L_R)
+			m.money_full_right(g.cat_price(kind, i), ROW_X + 51, y + 3, Pal.L_Y if g.state.wallet_gold >= g.cat_price(kind, i) else Pal.L_R)
 	if Time.get_ticks_msec() - note_t0 < 1500:
 		m.label(note, Vector2(19, 82), Pal.L_R)
 	else:
-		m.draw_money(int(g.state.wallet_gold), Vector2(19, 83), Pal.L_Y)
+		m.draw_money_full(int(g.state.wallet_gold), Vector2(19, 83), Pal.L_Y)

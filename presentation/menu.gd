@@ -35,6 +35,12 @@ func _init(main) -> void:
 func _tab_rect(i: int) -> Rect2:
 	return Rect2(17 + i * 23, 30, 23, 12)
 
+## 面板范围：完整窗口里状态页高一点（钱写全了要占位置，"钓到"另起一行）。
+func _panel_rect() -> Rect2:
+	if tab == 4 and not m.mini:
+		return Rect2(RECT.position, RECT.size + Vector2(0, 11))
+	return RECT
+
 func _book_btn_rect() -> Rect2:      # 状态页标题右边：任务、图鉴两个文字按钮（没有边框）
 	return Rect2(68, 31, 24, 10)
 
@@ -53,7 +59,7 @@ func _set_rect(row: int, x: float = 99) -> Rect2:
 # ------------------------------------------------------------------ 输入
 ## 处理点击。返回 true 表示点在了菜单上（主节点不应再把它当成拖动）。
 func click(p: Vector2) -> bool:
-	if not open or not RECT.has_point(p):
+	if not open or not _panel_rect().has_point(p):
 		return false
 	if CLOSE_RECT.has_point(p):
 		open = false
@@ -115,8 +121,8 @@ func click(p: Vector2) -> bool:
 func draw() -> void:
 	if not open:
 		return
-	m.draw_rect(RECT, Pal.U_A)
-	m.draw_rect(RECT.grow(-1), Pal.U_K)
+	m.draw_rect(_panel_rect(), Pal.U_A)
+	m.draw_rect(_panel_rect().grow(-1), Pal.U_K)
 	var r := _tab_rect(0)
 	m.label(TABS[tab], r.position + Vector2(2, 0), Pal.L_W)
 	m.draw_rect(Rect2(r.position.x + 2, 41, 19, 1), Pal.L_R)
@@ -147,14 +153,16 @@ func _draw_shop() -> void:
 			desc = UPGRADES[i][2]
 		m.label(UPGRADES[i][1], Vector2(19, y), Pal.L_W)
 		var lv: int = g.upgrades.level(g.state, id)
-		for k in g.upgrades.max_level(id):
-			m.tex_frame("pips", Vector2(42 + k * 5, y + 3), 1 if k < lv else 0, 2)
 		var cost: int = g.upgrades.next_cost(g.state, id)
+		# 价格写全（几金几银几铜）可能很宽：放不下的行不画等级点，免得叠在一起
+		if cost < 0 or 98.0 - m.money_full_width(cost) >= 42.0 + float(g.upgrades.max_level(id)) * 5.0 + 3.0:
+			for k in g.upgrades.max_level(id):
+				m.tex_frame("pips", Vector2(42 + k * 5, y + 3), 1 if k < lv else 0, 2)
 		if cost < 0:
 			m.label("已满级", Vector2(72, y), Pal.L_Y)
 		else:
 			var ok: bool = g.upgrades.can_buy(g.state, id)
-			m.money_right(cost, 96, y + 3, Pal.L_Y if ok else Pal.L_A)
+			m.money_full_right(cost, 98, y + 3, Pal.L_Y if ok else Pal.L_A)
 			m.tex_frame("btn_plus", _plus_rect(i).position, 0, 2, Color.WHITE if ok else Color(1, 1, 1, 0.35))
 	m.label(desc, Vector2(19, 81), Pal.L_A)
 
@@ -175,7 +183,7 @@ func _draw_bait_shop() -> void:
 		if open:
 			m.text("x%d" % g.inventory.count(g.state, id), Vector2(44, y + 3), Pal.L_A)
 			var ok: bool = g.can_buy_bait(id)
-			m.money_right(int(d["price"]), 96, y + 3, Pal.L_Y if ok else Pal.L_A)
+			m.money_full_right(int(d["price"]), 98, y + 3, Pal.L_Y if ok else Pal.L_A)
 			m.tex_frame("btn_plus", _plus_rect(i).position, 0, 2, Color.WHITE if ok else Color(1, 1, 1, 0.35))
 		else:
 			m.draw_texture(m.tex["lock"], Vector2(99, y), Color(1, 1, 1, 0.8))
@@ -281,9 +289,12 @@ func _draw_status() -> void:
 		m.label(nm, Vector2(56, 73), Pal.L_Y)
 		m.text("x%d" % g.inventory.count(g.state, bid), Vector2(56 + m.label_width(nm) + 3, 76), Pal.L_W)
 	m.draw_rect(Rect2(17, 84, 94, 1), Pal.U_A)
-	m.draw_money(g.state.wallet_gold, Vector2(19, 85), Pal.L_Y)
-	m.label("钓到", Vector2(62, 85), Pal.L_A)
-	m.text(str(int(g.state.stats["total_fish"])), Vector2(83, 88), Pal.L_W)
+	m.draw_money_full(g.state.wallet_gold, Vector2(19, 85), Pal.L_Y)
+	var fish_x: float = 19.0 if not m.mini else 19.0 + m.money_full_width(g.state.wallet_gold) + 5.0
+	var fish_y: float = 96.0 if not m.mini else 85.0
+	if not m.mini or fish_x + 32.0 <= 110.0:      # 迷你窗里钱写得太宽就不显示"钓到"（图鉴里有）
+		m.label("钓到", Vector2(fish_x, fish_y), Pal.L_A)
+		m.text(str(int(g.state.stats["total_fish"])), Vector2(fish_x + 21.0, fish_y + 3.0), Pal.L_W)
 
 
 ## 迷你窗里的任务页：进行中的任务和每项要求（有几个/要几个），最多 4 行。

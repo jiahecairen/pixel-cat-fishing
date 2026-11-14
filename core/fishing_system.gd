@@ -11,6 +11,7 @@ var state_start_ms: int = 0
 var deadline_ms: int = 0
 var wait_multiplier: float = 1.0
 const JUNK_PREFIX := "junk:"       # 钓上来的是杂物（漂流瓶、旧靴子…）时，hooked_fish 是 "junk:物品id"：这次咬钩只有杂物，没有鱼
+var _pending: Dictionary = {}       # 这次等待结束时要咬钩的东西（鱼/杂物/宝箱和大小），等待开始时就定下，好让小鱼咬得快
 var junk_roller: Callable = Callable()   # 咬钩时问一次：返回杂物物品 id 或 ""（由 Game 设置）
 const CHEST := "chest"            # 钓上来的不是鱼而是宝箱时，hooked_fish 取这个值
 
@@ -66,6 +67,7 @@ func start(now_ms: int) -> void:
 
 func stop(now_ms: int) -> void:
 	hooked_fish = ""
+	_pending = {}
 	_enter(State.IDLE, now_ms, 0)
 
 ## 0..1，当前状态的进度，给动画用。
@@ -93,7 +95,8 @@ func advance(now_ms: int) -> String:
 			stage = 0
 			var lo := float(_cfg["bite_min_ms"])
 			var hi := float(_cfg["bite_max_ms"])
-			_enter(State.WAITING, now_ms, int(_rng.randf_range(lo, hi) * wait_multiplier))
+			_plan_bite()
+			_enter(State.WAITING, now_ms, int(_rng.randf_range(lo, hi) * _bite_scale() * wait_multiplier))
 		State.WAITING:
 			_enter(State.TWITCH, now_ms, int(_cfg.get("twitch_ms", 1400)))
 		State.TWITCH:
@@ -119,17 +122,11 @@ func _begin_baiting(now_ms: int) -> void:
 func _after_twitch(now_ms: int) -> void:
 	var chances: Array = _cfg.get("bite_chance", [1.0, 1.0, 1.0])
 	if _rng.randf() < float(chances[clampi(stage, 0, chances.size() - 1)]):
-		hooked_size = 0
-		# chest_chance 为 0 时不消耗随机数，保持没有宝箱时的随机序列不变
-		if chest_chance > 0.0 and _rng.randf() < chest_chance:
-			hooked_fish = CHEST
-		else:
-			var junk: String = str(junk_roller.call()) if junk_roller.is_valid() else ""
-			if junk != "":
-				hooked_fish = JUNK_PREFIX + junk
-			else:
-				hooked_fish = _roll_fish()
-				hooked_size = _roll_size(hooked_fish)
+		if _pending.is_empty():
+			_plan_bite()                 # 从存档断点接着等时没有预先定好，现在补定
+		hooked_fish = str(_pending["id"])
+		hooked_size = int(_pending["size"])
+		_pending = {}
 		_enter(State.HOOKED, now_ms, int(_cfg["hooked_ms"]))
 		return
 	stage += 1
@@ -139,7 +136,34 @@ func _after_twitch(now_ms: int) -> void:
 		return
 	var gaps: Array = _cfg.get("gap_ms", [[4000, 10000], [2500, 5000]])
 	var g: Array = gaps[clampi(stage - 1, 0, gaps.size() - 1)]
-	_enter(State.WAITING, now_ms, int(_rng.randf_range(float(g[0]), float(g[1]))))
+	_plan_bite()
+	_enter(State.WAITING, now_ms, int(_rng.randf_range(float(g[0]), float(g[1])) * _bite_scale()))
+
+## 决定这次咬钩的是什么：宝箱 / 杂物 / 鱼（和大小）。
+func _plan_bite() -> void:
+	var id := ""
+	var size := 0
+	# chest_chance 为 0 时不消耗随机数，保持没有宝箱时的随机序列不变
+	if chest_chance > 0.0 and _rng.randf() < chest_chance:
+		id = CHEST
+	else:
+		var junk: String = str(junk_roller.call()) if junk_roller.is_valid() else ""
+		if junk != "":
+			id = JUNK_PREFIX + junk
+		else:
+			id = _roll_fish()
+			size = _roll_size(id)
+	_pending = {"id": id, "size": size}
+
+## 等待时长的缩放：鱼越小越快咬钩（占的单位越少倍率越低），最小鱼约 0.4 倍、最大鱼 1 倍；宝箱和杂物 1 倍。
+func _bite_scale() -> float:
+	var id := str(_pending.get("id", ""))
+	var u := 1.8
+	for f in _fish:
+		if f["id"] == id:
+			u = float(f.get("units", 1.0))
+	var max_u: float = float(_cfg.get("bite_units_max", 1.8))
+	return lerpf(float(_cfg.get("bite_small_scale", 0.4)), 1.0, clampf(u / max_u, 0.0, 1.0))
 
 func _enter(s: int, now_ms: int, duration_ms: int) -> void:
 	state = s

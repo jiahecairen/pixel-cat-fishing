@@ -308,3 +308,11 @@
 - `journey.remember_fish_spot / fish_spot`，WALK_TO_BOAT 结束时手动靠岸的船改开回钓鱼点。
 - 测试 ALL TESTS PASS、SIM PASS；新增 `test_v046`。教训：测试输出里出现 SCRIPT ERROR 时，"ALL TESTS PASS" 也不算过——这次先发现并修了测试里调用不存在的 FakeClock.advance。
 - 没验证：提竿画面里杂物图标、收杆动画是否不再触发、仓库按钮实际点击、对话画面，全部待 Mac。
+
+## v0.47：完整价格、鱼篓百分比、造船厂
+- 价格：`draw_money_full / money_full_right`，商店、衣帽店、状态页、鱼饵价格全部显示金银铜，不再去尾；面板有重叠处做了调整。
+- 鱼篓：`fish.json` 每种鱼有 `units`；`Economy.basket_used/basket_percent`；`basket_capacity` 改浮点（基础 10，每级 +2）；HUD 和船上鱼篓显示百分比；字体加了 `% . ( )`。
+- 咬钩：`FishingSystem._plan_bite/_bite_scale`，先决定这一口是鱼/杂物/宝箱，小鱼等待时间乘 0.4–1.0。
+- 造船厂：`house_3`、门帘/蓝图/铁锚/帆船模型素材，`ROOMS.shipyard`，`presentation/shipyard_panel.gd`；`GameState.boat_level`；`Game.boat_levels/boat_price/buy_boat_upgrade`（只能买当前级+1，重复提交不扣钱），`wave_zone()` 取当前船级；调试变量 `CATFISH_SHIPYARD=铜币数`。
+- 测试 ALL TESTS PASS、SIM PASS、启动无 SCRIPT ERROR；新增 `test_v047`。Linux 截图看过造船厂外观/室内/面板；Mac 实机全部待验，升级后浪区的画面没截图。
+- 咬钩最短等待从 20 秒降到约 8 秒（见 D95）。

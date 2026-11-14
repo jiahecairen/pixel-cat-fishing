@@ -37,7 +37,7 @@ var dirty: bool = false     # 有需要落盘的变化
 var _clock
 var _cfg: Dictionary
 var _pomo_cfg: Dictionary
-var _base_capacity: int = 10
+var _base_capacity: float = 10.0
 var _free_multiplier: float = 2.0
 var _last_cp_state: int = 0
 var _rng: RandomNumberGenerator
@@ -63,7 +63,7 @@ func _init(balance: Dictionary, fish_table: Array, game_state: GameState, clock,
 	_cfg = balance
 	_clock = clock
 	state = game_state
-	_base_capacity = int(balance.get("basket_capacity", 10))
+	_base_capacity = float(balance.get("basket_capacity", 10))
 	fish_list = fish_table
 	for f in fish_table:
 		fish_by_id[f["id"]] = f
@@ -387,7 +387,33 @@ func boat_limits() -> Vector2:
 ## 水域最左侧的浪区：x 在 wave_x 以内浪越来越大把船往回推，最远只能划到 wave_stop 附近
 ## （以后升级船只才能出得更远）。返回 Vector2(wave_x, wave_stop)。
 func wave_zone() -> Vector2:
+	var lv := boat_info(state.boat_level)
+	if not lv.is_empty():
+		return Vector2(float(lv.get("wave_x", 92)), float(lv.get("wave_stop", 56)))
 	return Vector2(float(_water.get("wave_x", 92)), float(_water.get("wave_stop", 56)))
+
+## ---- 船坞：船的等级 ----
+func boat_levels() -> Array:
+	return _water.get("boat_levels", [])
+
+func boat_info(level: int) -> Dictionary:
+	var l := boat_levels()
+	return l[level] if level >= 0 and level < l.size() else {}
+
+func boat_price(level: int) -> int:
+	return int(boat_info(level).get("price", 0))
+
+## 买下第 level 级的船。只能一级一级买（level 必须正好是当前级别 + 1），所以重复提交不会重复扣钱。
+func buy_boat_upgrade(level: int) -> bool:
+	if level != state.boat_level + 1 or level >= boat_levels().size():
+		return false
+	var price := boat_price(level)
+	if state.wallet_gold < price:
+		return false
+	state.wallet_gold -= price
+	state.boat_level = level
+	dirty = true
+	return true
 
 ## 船在 x 处受到的向右推力占比：浪区入口 0，到 wave_stop 为 1。
 func wave_push(x: float) -> float:
@@ -1165,7 +1191,7 @@ func _clamp_setting(key: String, v: int) -> int:
 	return clampi(v, int(lim[0]), int(lim[1]))
 
 func _apply_upgrades() -> void:
-	state.basket_capacity = _base_capacity + upgrades.level(state, "basket") * int(upgrades.param("basket", "capacity_per_level", 0))
+	state.basket_capacity = _base_capacity + float(upgrades.level(state, "basket")) * float(upgrades.param("basket", "capacity_per_level", 0))
 	var hook_bonus: Array = _cfg.get("hook_rarity_bonus", [])
 	var hook_lv := int(state.gear.get("hook", 0))
 	_base_rarity = upgrades.level(state, "bait") * upgrades.param("bait", "rarity_bonus_per_level", 0.0) + (float(hook_bonus[hook_lv]) if hook_lv >= 0 and hook_lv < hook_bonus.size() else 0.0)

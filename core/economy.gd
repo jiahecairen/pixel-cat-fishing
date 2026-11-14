@@ -5,11 +5,13 @@ const GameState := preload("res://core/game_state.gd")
 
 var _prices: Dictionary = {}
 var _rarity: Dictionary = {}
+var _units: Dictionary = {}       # 每种鱼占鱼篓多少单位（大鱼多、小鱼少）
 
 func _init(fish_table: Array) -> void:
 	for f in fish_table:
 		_prices[f["id"]] = int(f["price"])
 		_rarity[f["id"]] = int(f.get("rarity", 0))
+		_units[f["id"]] = float(f.get("units", 1.0))
 
 func price_of(fish_id: String) -> int:
 	return int(_prices.get(fish_id, 0))
@@ -20,8 +22,23 @@ func value_of(fish_ids: Array) -> int:
 		total += price_of(id)
 	return total
 
+func units_of(fish_id: String) -> float:
+	return float(_units.get(fish_id, 1.0))
+
+## 鱼篓里的鱼一共占了多少单位。
+func basket_used(s: GameState) -> float:
+	var total := 0.0
+	for id in s.basket:
+		total += units_of(id)
+	return total
+
+## 鱼篓装了百分之几（0..100，最多显示 100；最后一条大鱼可以超出一点，算 100）。
+func basket_percent(s: GameState) -> int:
+	return clampi(int(basket_used(s) / maxf(0.1, s.basket_capacity) * 100.0), 0, 100)
+
+## 装满了：占用的单位达到容量。最后一条鱼可以超出一点点，所以大鱼不会被"卡在门外"。
 func basket_full(s: GameState) -> bool:
-	return s.basket.size() >= s.basket_capacity
+	return basket_used(s) >= s.basket_capacity - 0.0001
 
 ## 记录一次鱼获。to_haul=true 进入番茄渔获（不限量），否则进鱼篓（受容量限制）。
 func add_catch(s: GameState, catch_id: String, fish_id: String, to_haul: bool) -> bool:

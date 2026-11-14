@@ -7,8 +7,9 @@ const MAX_PROCESSED_IDS := 300
 var save_version: int = SAVE_VERSION
 var revision: int = 0
 var wallet_gold: int = 0          # 铜币数（显示时换算成金/银/铜，见 core/money.gd）
+var boat_level: int = 0           # 船坞里升到第几级的船
 var piggy: int = 0                # 家里存钱罐里的铜币
-var basket_capacity: int = 10
+var basket_capacity: float = 10.0    # 鱼篓容量（单位，每种鱼占的单位不同，见 fish.json 的 units）
 var basket: Array = []            # 自由挂机钓到的鱼 id
 var session_haul: Array = []      # 当前专注番茄内钓到的鱼 id（"木箱"，不限量）
 var processed_catch_ids: Array = []
@@ -48,7 +49,7 @@ func new_id(prefix: String) -> String:
 func to_dict() -> Dictionary:
 	return {
 		"save_version": save_version, "revision": revision,
-		"wallet_gold": wallet_gold, "piggy": piggy, "basket_capacity": basket_capacity,
+		"wallet_gold": wallet_gold, "piggy": piggy, "boat_level": boat_level, "basket_capacity": basket_capacity,
 		"journey": journey.duplicate(true), "inventory": inventory.duplicate(true), "warehouse": warehouse.duplicate(true), "effects": effects.duplicate(true), "fishing_checkpoint": fishing_checkpoint.duplicate(true),
 		"basket": basket.duplicate(), "session_haul": session_haul.duplicate(),
 		"processed_catch_ids": processed_catch_ids.duplicate(),
@@ -66,7 +67,8 @@ func from_dict(d: Dictionary) -> bool:
 	revision = int(d.get("revision", 0))
 	wallet_gold = max(0, int(d.get("wallet_gold", 0)))
 	piggy = max(0, int(d.get("piggy", 0)))
-	basket_capacity = max(1, int(d.get("basket_capacity", 10)))
+	boat_level = clampi(int(d.get("boat_level", 0)), 0, 99)
+	basket_capacity = maxf(1.0, float(d.get("basket_capacity", 10.0)))
 	basket = _str_array(d.get("basket"))
 	session_haul = _str_array(d.get("session_haul"))
 	processed_catch_ids = _str_array(d.get("processed_catch_ids"))

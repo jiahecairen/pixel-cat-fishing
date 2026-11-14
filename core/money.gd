@@ -21,3 +21,24 @@ static func icon(copper: int) -> String:
 		"gold": return "coin"
 		"silver": return "coin_silver"
 	return "coin_copper"
+
+## 完整写法：[[档位, 数量], ...]，从大到小，数量为 0 的档不写；一分钱都没有就是 [["copper", 0]]。
+## 189 铜 → [["gold", 1], ["silver", 8], ["copper", 9]]。商品价格和状态页的钱包都用这个。
+static func parts(copper: int) -> Array:
+	var out: Array = []
+	var g := copper / PER_GOLD
+	var s := (copper % PER_GOLD) / PER_SILVER
+	var c := copper % PER_SILVER
+	if g > 0:
+		out.append(["gold", g])
+	if s > 0:
+		out.append(["silver", s])
+	if c > 0 or out.is_empty():
+		out.append(["copper", c])
+	return out
+
+static func icon_of(tier_name: String) -> String:
+	match tier_name:
+		"gold": return "coin"
+		"silver": return "coin_silver"
+	return "coin_copper"

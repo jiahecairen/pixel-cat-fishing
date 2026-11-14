@@ -388,6 +388,12 @@
     "boat_min_x": 30,
     "wave_x": 92,
     "wave_stop": 56,
+    "boat_levels": [
+      {"name": "小木船", "price": 0, "wave_x": 92, "wave_stop": 56},
+      {"name": "加固船", "price": 1200, "wave_x": 76, "wave_stop": 46},
+      {"name": "快桨船", "price": 4000, "wave_x": 58, "wave_stop": 38},
+      {"name": "远洋船", "price": 12000, "wave_x": 0, "wave_stop": 0}
+    ],
     "boat_max_x": 512,
     "zones": [
       {

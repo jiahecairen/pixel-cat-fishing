@@ -51,6 +51,7 @@ func _init() -> void:
 		test_dock_shoal(balance, fish)
 		test_money_waves(balance, fish)
 		test_v046(balance, fish)
+		test_v047(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -82,11 +83,13 @@ func test_economy(fish: Array) -> void:
 	check(not eco.add_catch(s, "c1", "bass", false), "同一 catch_id 不重复入篓")
 	check(not eco.add_catch(s, "c2", "shark", false), "未知鱼种被拒绝")
 	check(s.basket.size() == 1, "鱼篓只有 1 条")
-	for i in 20:
+	for i in 40:
 		eco.add_catch(s, "x%d" % i, "crucian", false)
-	check(s.basket.size() == 10, "鱼篓不超过容量 10")
+	# 容量 10 单位：鲈鱼 1.0 + 小鲫鱼每条 0.4，装到第 23 条鲫鱼时 10.2 ≥ 10，满了就不再收
+	check(s.basket.size() == 24 and eco.basket_full(s) and eco.basket_percent(s) == 100, "鱼篓按单位装满 (%d 条)" % s.basket.size())
+	check(abs(eco.units_of("arowana") - 1.8) < 0.001 and abs(eco.units_of("loach") - 0.2) < 0.001, "大鱼占得多、小鱼占得少")
 	var gold := eco.sell_basket(s, "s1")
-	check(gold == 12 + 9 * 5, "卖鱼金额正确 (%d)" % gold)
+	check(gold == 12 + 23 * 5, "卖鱼金额正确 (%d)" % gold)
 	check(eco.sell_basket(s, "s1") == 0 and s.wallet_gold == gold, "同一 sale_id 不重复加钱")
 	eco.add_catch(s, "h1", "koi", true)
 	eco.add_catch(s, "h2", "koi", true)
@@ -149,9 +152,9 @@ func test_fishing(balance: Dictionary, fish: Array) -> void:
 			break
 	check(catches == 1500, "跑出 1500 次鱼获")
 	check(order_ok and seen_twitch, "流程：上饵 → 抛竿 → 等 → 动漂")
-	check(waits.min() >= 20000 and waits.max() <= 60000, "第一次动漂前等待 20–60 秒 (%d..%d)" % [waits.min(), waits.max()])
-	check(gaps[0].min() >= 4000 and gaps[0].max() <= 10000, "第二次动漂在 10 秒内 (%d..%d)" % [gaps[0].min(), gaps[0].max()])
-	check(gaps[1].min() >= 2500 and gaps[1].max() <= 5000, "第三次动漂在 5 秒内 (%d..%d)" % [gaps[1].min(), gaps[1].max()])
+	check(waits.min() >= 8000 and waits.max() <= 60000, "第一次动漂前等待 8–60 秒（小鱼更快，最小 0.4 倍） (%d..%d)" % [waits.min(), waits.max()])
+	check(gaps[0].min() >= 1600 and gaps[0].max() <= 10000, "第二次动漂在 10 秒内 (%d..%d)" % [gaps[0].min(), gaps[0].max()])
+	check(gaps[1].min() >= 1000 and gaps[1].max() <= 5000, "第三次动漂在 5 秒内 (%d..%d)" % [gaps[1].min(), gaps[1].max()])
 	var tot := float(bites[0] + bites[1] + bites[2])
 	check(float(bites[0]) / tot > 0.45 and float(bites[0]) / tot < 0.62, "约一半在第一次动漂就咬钩 (%.2f)" % (float(bites[0]) / tot))
 	check(tangles > 0 and float(tangles) / float(casts) < 0.06, "三次都没咬的空军很少见 (%d/%d)" % [tangles, casts])
@@ -277,10 +280,11 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 		g2.economy.add_catch(g2.state, "k%d" % i, "koi", false)
 	var c2 = g2._clock
 	var ev_k := _run(g2, c2, 20 * 60, 1000)
-	check(g2.state.basket.size() == 10 and _count(ev_k, "ate") == 0, "鱼篓里全是稀有鱼时不偷吃")
+	check(g2.state.basket.size() == 9 and g2.economy.basket_full(g2.state) and _count(ev_k, "ate") == 0, "鱼篓里全是稀有鱼时不偷吃")
 	check(g2.journey.activity() == Journey.Activity.IDLE_FULL, "一直满着等玩家")
 	# 点击出发：航行 30s → 走 8s → 摆摊 → 走 8s → 返航 30s
 	var expect := g2.economy.value_of(g2.state.basket)
+	var n_before: int = g2.state.basket.size()
 	check(g2.go_to_town() and not g2.go_to_town(), "出发，且不能重复出发")
 	var trip := _run(g2, c2, 29)
 	check(g2.journey.activity() == Journey.Activity.SAIL_OUT and trip.is_empty(), "29 秒时还在航行")
@@ -299,7 +303,7 @@ func test_game_free_mode(balance: Dictionary, fish: Array) -> void:
 		for e in g2.tick():
 			if e["type"] == "sale":
 				gaps.append(c2.t - last); last = c2.t; sold += 1
-	check(sold == 10 and g2.state.basket.is_empty(), "10 条鱼一条条卖完")
+	check(sold == n_before and g2.state.basket.is_empty(), "%d 条鱼一条条卖完" % n_before)
 	check(gaps.min() >= 8000 and gaps.max() <= 20500, "每条间隔 8–20 秒 (%d..%d)" % [gaps.min(), gaps.max()])
 	check(g2.state.wallet_gold == expect, "收入 = 鱼价之和 (%d)" % expect)
 	check(g2.journey.activity() == Journey.Activity.SOLD_OUT, "卖光后停在摊位前等玩家，不自己去钓鱼")
@@ -455,7 +459,7 @@ func test_upgrades_and_settings(balance: Dictionary, fish: Array) -> void:
 	check(_types(g3.tick()).has("focus_done"), "5 分钟番茄按新时长完成")
 	# 满篓闲置时升级鱼篓：有了空位就继续钓
 	var g6 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(4))
-	for i in 10:
+	for i in 25:
 		g6.economy.add_catch(g6.state, "f%d" % i, "crucian", false)
 	_run(g6, g6._clock, 2)
 	check(g6.journey.activity() == Journey.Activity.IDLE_FULL, "满篓闲置")
@@ -990,7 +994,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 	# 宝箱会开出物品
 	var g3 := Game.new(balance, fish, GameState.new(), FakeClock.new(), _rng(33))
 	g3.set_chest_chance(1.0)
-	var ev := _run(g3, g3._clock, 4 * 3600, 1000)
+	var ev := _run(g3, g3._clock, 8 * 3600, 1000)
 	var chests: Array = ev.filter(func(e): return e["type"] == "chest")
 	var with_item: Array = chests.filter(func(e): return e["item"] != "")
 	var rate := float(with_item.size()) / float(chests.size())
@@ -1206,6 +1210,37 @@ func test_money_waves(balance: Dictionary, fish: Array) -> void:
 	check(g.wave_push(w.x + 5.0) == 0.0 and g.wave_push(w.y) == 1.0 and g.wave_push((w.x + w.y) / 2.0) > 0.0, "浪区推力：入口 0，最深处 1")
 
 
+func test_v047(balance: Dictionary, fish: Array) -> void:
+	print("v047: 船坞——船只等级、浪区范围、幂等购买")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(91))
+	var levels: Array = g.boat_levels()
+	check(levels.size() >= 3, "至少有三级以上的船 (%d)" % levels.size())
+	var z0 := g.wave_zone()
+	check(g.state.boat_level == 0 and z0.x == float(levels[0]["wave_x"]), "初始是 0 级船，浪区取 0 级的数值")
+	# 钱不够不能买；不能跳级；不能买已有的
+	check(not g.buy_boat_upgrade(1), "没钱买不了")
+	g.state.wallet_gold = 90000
+	check(not g.buy_boat_upgrade(2), "不能跳级购买")
+	check(not g.buy_boat_upgrade(0), "不能重复买 0 级")
+	var before: int = g.state.wallet_gold
+	check(g.buy_boat_upgrade(1), "买 1 级成功")
+	check(g.state.wallet_gold == before - g.boat_price(1), "只扣一次 1 级的价钱")
+	check(not g.buy_boat_upgrade(1) and g.state.wallet_gold == before - g.boat_price(1), "重复提交 1 级不会再扣钱")
+	var z1 := g.wave_zone()
+	check(z1.x < z0.x and z1.y <= z0.y, "升级后浪区向左缩小 (%s -> %s)" % [z0, z1])
+	# 船出得更远：同样位置浪的推力更小
+	check(g.wave_push(70.0) < GameState.new().boat_level + 1.0 and g.wave_push(70.0) < Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(92)).wave_push(70.0), "升级后同一位置受到的浪推力更小")
+	# 逐级买到顶，最高级没有浪
+	while g.state.boat_level < levels.size() - 1:
+		g.state.wallet_gold = 90000
+		check(g.buy_boat_upgrade(g.state.boat_level + 1), "逐级购买")
+	check(g.wave_zone().x <= 0.0 and g.wave_push(31.0) == 0.0, "最高级的船没有浪区")
+	check(not g.buy_boat_upgrade(levels.size()), "超过最高级不能买")
+	# 存档往返
+	var st2 := GameState.new()
+	check(st2.from_dict(g.state.to_dict()) and st2.boat_level == g.state.boat_level, "船的等级存进存档再读回来")
+	check(GameState.new().from_dict({"save_version": GameState.new().save_version}) , "旧存档没有 boat_level 也能读") 
+
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")
 	# 杂物概率 1：每次咬钩都只有杂物，没有鱼
@@ -1245,3 +1280,34 @@ func test_v046(balance: Dictionary, fish: Array) -> void:
 	check(g3.journey.boat_x() == 300, "手动靠岸后回船，船开回上次钓到鱼的地方 (%d)" % g3.journey.boat_x())
 	# 店主默认的话
 	check(not g3.shop_chat("tackle").is_empty() and not g3.shop_chat("tailor").is_empty(), "店主有默认的话")
+
+	# 小鱼咬钩更快：第一次等待结束就咬钩的鱼，按占的单位分组比平均等待
+	var fs3 := Fishing.new(balance["fishing"], fish, _rng(91))
+	fs3.zone = "normal"
+	var t3 := 0
+	fs3.start(t3)
+	var sums := {"small": 0.0, "big": 0.0}
+	var ns := {"small": 0, "big": 0}
+	var last_wait := 0
+	var fdefs := {}
+	for f in fish:
+		fdefs[f["id"]] = f
+	for i in 3000000:
+		t3 += 100
+		var bf := fs3.state
+		fs3.advance(t3)
+		fs3.baiting_started = false
+		fs3.tangled_flag = false
+		if bf == Fishing.State.CASTING and fs3.state == Fishing.State.WAITING:
+			last_wait = fs3.deadline_ms - t3
+		if bf == Fishing.State.TWITCH and fs3.state == Fishing.State.HOOKED and fs3.stage == 0 and fdefs.has(fs3.hooked_fish):
+			var u: float = float(fdefs[fs3.hooked_fish]["units"])
+			var key := "small" if u <= 0.4 else ("big" if u >= 1.4 else "")
+			if key != "":
+				sums[key] += last_wait
+				ns[key] += 1
+		if int(ns["small"]) >= 150 and int(ns["big"]) >= 150:
+			break
+	var ms: float = float(sums["small"]) / maxf(1.0, float(ns["small"]))
+	var mb: float = float(sums["big"]) / maxf(1.0, float(ns["big"]))
+	check(ns["small"] >= 100 and ns["big"] >= 100 and ms < mb * 0.8, "小鱼上钩更快：平均等待 小 %d ms / 大 %d ms" % [int(ms), int(mb)])

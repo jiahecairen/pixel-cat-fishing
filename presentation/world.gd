@@ -27,7 +27,7 @@ const LIFT := 3
 const ZONE_BLEND := 28.0              # 水域分界处颜色过渡的半宽（像素）                       # 绕到柜台后面时抬高几像素（更靠里）
 const NEAR := 16                      # 离摊位/码头多近算"到了"
 ## 可以进去的房子：[门的中心 x, 名字, 用途]
-const DOORS := [[674, "小猫的家", "home"], [828, "服装店", "tailor"], [898, "渔具店", "tackle"]]
+const DOORS := [[674, "小猫的家", "home"], [828, "服装店", "tailor"], [898, "渔具店", "tackle"], [779, "造船厂", "shipyard"]]
 ## 街上散步的居民：[样子, 散步范围左端, 右端, 走一个来回的毫秒数]
 const STROLLERS := [[1, 690, 800, 26000], [2, 850, 980, 34000], [0, 930, 1010, 22000]]
 ## 市场里 NPC 的摊位：[摊位左端 x, 货物, 招牌, 摊主样子]
@@ -38,7 +38,7 @@ const SHOP_SPEED := 26.0       # 顾客走路速度（像素/秒）
 const DWELL_MS := 4200         # 在一个摊位前停留多久
 const BUY_AT_MS := 1500        # 停下后多久付钱拿货
 const CHAT := ["今天的鱼真新鲜", "听说金锦鲤很稀有", "专注时鱼更值钱", "别让小猫饿着了", "天气真好呀", "你的帽子真好看"]
-const HOUSES := [["house_0", 652], ["house_1", 818], ["house_2", 872]]
+const HOUSES := [["house_0", 652], ["house_1", 818], ["house_2", 872], ["house_3", 752]]
 const TREES := [716, 940]
 
 # 相对小猫贴图左上角的偏移
@@ -464,6 +464,8 @@ func _draw_pier_feet(left: float, right: float, t: int) -> void:
 ## 水域最左侧的浪区：浪头高出海面，越往左越高，白色的浪尖不停翻滚；小船划进去会被推回来。
 func _draw_waves(left: float, right: float, bottom: float, t: int) -> void:
 	var wz: Vector2 = m.game.wave_zone()
+	if wz.x <= 0.0:
+		return                                  # 远洋船：没有浪区
 	var wend: float = wz.x + 18.0
 	if left >= wend:
 		return
@@ -648,8 +650,7 @@ func _draw_boat_basket(bob_y: float, show_fish: bool) -> void:
 	var g = m.game
 	var size: int = g.state.basket.size() if show_fish else 0
 	if size > 0:
-		var cap: int = maxi(1, g.state.basket_capacity)
-		var slots: int = clampi(ceili(float(BASKET_SLOTS) * float(size) / float(cap)), 1, BASKET_SLOTS)
+		var slots: int = clampi(ceili(float(BASKET_SLOTS) * float(g.economy.basket_percent(g.state)) / 100.0), 1, BASKET_SLOTS)
 		for s in slots:
 			var fish_id: String = g.state.basket[(s * size) / slots]
 			var p := Vector2(o.x + 2 + (s % 4) * 3 + (s / 4) % 2, o.y - 3 - (s / 4) * 2)
@@ -1345,9 +1346,10 @@ const ROOM_DOOR_X := 14          # 门的中心
 const ROOMS := {
 	"tackle": {"keeper": 1, "wall": "h", "spots": [[150, "shop"], [118, "quest"]]},
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[128, "hats"], [172, "quest"]]},
+	"shipyard": {"keeper": 2, "wall": "w", "spots": [[150, "boats"]]},
 	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [106, "piggy"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱"}
+const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false
@@ -1419,6 +1421,19 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 			m.draw_texture(m.tex["rug"], Vector2(ox + 108, fy + 3))
 			keeper_pos = Vector2(ox + 176, fy - 21)
 			_draw_keeper(int(room["keeper"]), keeper_pos, ox)
+		"shipyard":
+			m.draw_texture(m.tex["noren_ship"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
+			m.draw_texture(m.tex["blueprint"], Vector2(ox + 54, fy - 62))
+			m.draw_texture(m.tex["blueprint"], Vector2(ox + 80, fy - 60))
+			m.draw_texture(m.tex["anchor"], Vector2(ox + 110, fy - 50))
+			m.draw_rect(Rect2(ox + 172, fy - 38, 36, 3), Pal.L_O)
+			m.draw_texture(m.tex["ship_model"], Vector2(ox + 177, fy - 56))
+			m.draw_texture(m.tex["lantern"], Vector2(ox + 134 + roundf(sin(float(t) / 900.0)), fy - ROOM_H))
+			m.draw_texture(m.tex["barrel_rods"], Vector2(ox + 190, fy - 26))
+			m.draw_texture(m.tex["barrel_rods"], Vector2(ox + 62, fy - 26))
+			keeper_pos = Vector2(ox + 156, fy - 31)
+			_draw_keeper(int(room["keeper"]), keeper_pos, ox)
+			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
 		"home":
 			m.draw_texture(m.tex["storage"], Vector2(ox + 34, fy - 20))
 			m.draw_texture(m.tex["bookshelf"], Vector2(ox + 70, fy - 39))

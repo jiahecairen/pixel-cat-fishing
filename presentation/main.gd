@@ -22,6 +22,7 @@ const Labels := preload("res://presentation/labels.gd")
 const Menu := preload("res://presentation/menu.gd")
 const Wardrobe := preload("res://presentation/wardrobe.gd")
 const OutfitShop := preload("res://presentation/outfit_shop.gd")
+const ShipyardPanel := preload("res://presentation/shipyard_panel.gd")
 const QuestPanel := preload("res://presentation/quest_panel.gd")
 const World := preload("res://presentation/world.gd")
 const Bag := preload("res://presentation/bag.gd")
@@ -32,18 +33,18 @@ const MINI_VIEW := Vector2i(128, 96)
 const FULL_MIN_H := 180          # 全画面至少能看到这么高的世界
 const FULL_MIN_W := 256
 const FULL_DEFAULT := Vector2i(960, 540)
-const FONT_ORDER := "0123456789:/+x-cm"
+const FONT_ORDER := "0123456789:/+x-cm%.()"
 const FPS_NORMAL := 30
 const FPS_DRAG := 60
 const SFX := ["click", "cast", "twitch", "bite", "reel", "catch", "rare", "coin", "buy", "deny", "done", "break_end"]
 const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
-const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "wall_clothes", "mannequin", "tree", "stall_back",
+const SPRITES := ["boat", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
 	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
-	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish"]
+	"btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "noren_ship", "ship_model", "blueprint", "anchor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish"]
 const CAT_LAYERS := ["fur_base", "fur_shade", "fur_light", "pat_white", "pat_stripe", "fixed", "rain_gear"]
 const CAT_FRAMES := 6
 
@@ -78,6 +79,7 @@ var clock: Clock
 var menu: Menu
 var wardrobe: Wardrobe
 var outfit_shop: OutfitShop
+var shipyard_panel: ShipyardPanel
 var _toast_t0: int = -100000       # 屏幕左侧的两行小提示（行李满了、水太浅了……）
 var _toast_l1: String = ""
 var _toast_l2: String = ""
@@ -179,6 +181,7 @@ func _ready() -> void:
 	menu = Menu.new(self)
 	wardrobe = Wardrobe.new(self)
 	outfit_shop = OutfitShop.new(self)
+	shipyard_panel = ShipyardPanel.new(self)
 	quest_panel = QuestPanel.new(self)
 	game.set_cat_cfg(cat_cfg)
 	bag = Bag.new(self)
@@ -250,6 +253,7 @@ func _apply_debug_env() -> void:
 				st.cat["outfit"] = parts[3].to_int()
 			wardrobe.open = false
 			outfit_shop.open = false
+			shipyard_panel.close()
 			quest_panel.open = false
 	if OS.has_environment("CATFISH_FILL"):
 		var ids: Array = game.fish_by_id.keys()
@@ -271,6 +275,7 @@ func _apply_debug_env() -> void:
 			game.inventory.add(st, d["id"], OS.get_environment("CATFISH_ITEMS").to_int())
 		wardrobe.open = false
 		outfit_shop.open = false
+		shipyard_panel.close()
 		quest_panel.open = false
 		bag.open = true
 	if OS.has_environment("CATFISH_WH"):          # 调试：物品各给 N 个，一半存进仓库，并打开仓库面板
@@ -279,6 +284,7 @@ func _apply_debug_env() -> void:
 			game.inventory.stash(st, d["id"], OS.get_environment("CATFISH_WH").to_int() / 2)
 		wardrobe.open = false
 		outfit_shop.open = false
+		shipyard_panel.close()
 		quest_panel.open = false
 		bag.open_warehouse()
 	if OS.has_environment("CATFISH_QSTATE"):      # 调试：keeper,tailor 进行中、keeper2 已完成（也给一点材料）
@@ -287,6 +293,8 @@ func _apply_debug_env() -> void:
 		game.inventory.add(st, "boot", 1)
 	if OS.has_environment("CATFISH_BAGSEL"):      # 调试：物品栏选中第 N 个
 		bag.sel = OS.get_environment("CATFISH_BAGSEL").to_int()
+	if OS.has_environment("CATFISH_WALLET"):      # 调试：钱包铜币数
+		st.wallet_gold = OS.get_environment("CATFISH_WALLET").to_int()
 	if OS.has_environment("CATFISH_ADMIN"):       # 调试：直接打开后台，钱包给点钱
 		st.wallet_gold = 23456
 		st.piggy = 12345
@@ -313,6 +321,7 @@ func _apply_debug_env() -> void:
 		st.stats["total_fish"] = 77
 		wardrobe.open = false
 		outfit_shop.open = false
+		shipyard_panel.close()
 		quest_panel.open = false
 		book.open_page(OS.get_environment("CATFISH_BOOK").to_int())
 	if OS.has_environment("CATFISH_AUTOFOCUS"):
@@ -345,6 +354,7 @@ func _apply_debug_env() -> void:
 	if OS.has_environment("CATFISH_MENU"):
 		wardrobe.open = false
 		outfit_shop.open = false
+		shipyard_panel.close()
 		quest_panel.open = false
 		menu.open = true
 		menu.tab = OS.get_environment("CATFISH_MENU").to_int()
@@ -559,6 +569,7 @@ func _toggle_dev_mode() -> void:
 		bag.open = false
 		book.open = false
 		outfit_shop.close()
+		shipyard_panel.close()
 		quest_panel.close()
 		wardrobe.open = true
 		wardrobe.dev = true
@@ -657,6 +668,9 @@ func _interact_inside() -> void:
 		"hats":
 			play("click")
 			outfit_shop.open_kind("hat")
+		"boats":
+			play("click")
+			shipyard_panel.open_panel()
 		"bed":
 			if world.napping:
 				pass
@@ -789,6 +803,9 @@ func _process(dt: float) -> void:
 		if OS.has_environment("CATFISH_OUTFITSHOP"):   # 调试：进屋后直接打开货架（hat / outfit）
 			game.state.wallet_gold = 150
 			outfit_shop.open_kind(OS.get_environment("CATFISH_OUTFITSHOP"))
+		if OS.has_environment("CATFISH_SHIPYARD"):     # 调试：进造船厂后直接打开升级面板，值为钱包铜币数
+			game.state.wallet_gold = int(OS.get_environment("CATFISH_SHIPYARD"))
+			shipyard_panel.open_panel()
 		if OS.has_environment("CATFISH_NAP"):     # 调试：进屋后直接走到床边按一下
 			world.room_x = 156.0
 			_interact_inside()
@@ -1054,9 +1071,16 @@ func _unhandled_input(event: InputEvent) -> void:
 					_update_polygon()
 				else:
 					quest_panel.key(event.keycode)
+			elif shipyard_panel.open:
+				if event.keycode == KEY_ESCAPE:
+					shipyard_panel.close()
+					_update_polygon()
+				else:
+					shipyard_panel.key(event.keycode)
 			elif outfit_shop.open:
 				if event.keycode == KEY_ESCAPE:
 					outfit_shop.close()
+					shipyard_panel.close()
 					quest_panel.close()
 					_update_polygon()
 				else:
@@ -1121,7 +1145,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_confirm_quit = true      # 先问一句，不直接退出
 	elif Rect2(PANEL_POS, PANEL_SIZE).has_point(hp):
 		pass
-	elif admin.click(p) or book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or quest_panel.click(p):
+	elif admin.click(p) or book.click(p) or bag.click(p) or menu.click(p) or wardrobe.click(p) or outfit_shop.click(p) or shipyard_panel.click(p) or quest_panel.click(p):
 		pass
 	elif world.bubble_rect(Time.get_ticks_msec()).has_point(v + cam):
 		_town_button()
@@ -1139,7 +1163,7 @@ func _quit_button_visible() -> bool:
 
 ## 有任何面板（菜单、换形象、物品栏）开着。
 func panel_open() -> bool:
-	return menu.open or wardrobe.open or outfit_shop.open or quest_panel.open or bag.open or book.open or admin.open
+	return menu.open or wardrobe.open or outfit_shop.open or shipyard_panel.open or quest_panel.open or bag.open or book.open or admin.open
 
 
 ## 小猫状态页（菜单的第 5 页）：已经开着就关，否则打开。
@@ -1149,6 +1173,7 @@ func toggle_status() -> void:
 	if wardrobe.open:
 		wardrobe.close()
 	outfit_shop.close()
+	shipyard_panel.close()
 	quest_panel.close()
 	bag.open = false
 	if menu.open and menu.tab == 4:
@@ -1168,6 +1193,7 @@ func open_book(page: int) -> void:
 	if wardrobe.open:
 		wardrobe.close()
 	outfit_shop.close()
+	shipyard_panel.close()
 	quest_panel.close()
 	book.open_page(page)
 	_update_polygon()
@@ -1180,6 +1206,7 @@ func toggle_bag() -> void:
 	if wardrobe.open:
 		wardrobe.close()
 	outfit_shop.close()
+	shipyard_panel.close()
 	quest_panel.close()
 	bag.toggle()
 	_update_polygon()
@@ -1306,6 +1333,7 @@ func _draw() -> void:
 	menu.draw()
 	wardrobe.draw()
 	outfit_shop.draw()
+	shipyard_panel.draw()
 	quest_panel.draw()
 	if Time.get_ticks_msec() - _toast_t0 < 3000:
 		label(_toast_l1, Vector2(17, 63), Pal.L_R)
@@ -1389,7 +1417,7 @@ func _draw_hud(now: int) -> void:
 	else:
 		draw_texture(tex["basket"], Vector2(56, 14))
 		var full: bool = game.economy.basket_full(game.state)
-		_text("%d/%d" % [game.state.basket.size(), game.state.basket_capacity], Vector2(69, 17),
+		_text("%d%%" % game.economy.basket_percent(game.state), Vector2(69, 17),
 				Pal.L_R if full else Pal.L_W)
 	if game.move_speed() != 1.0 and not mini:
 		_text("x%d" % int(game.move_speed()), Vector2(17, 66), Pal.L_Y)      # 移动倍速（] 加快 / [ 减慢）
@@ -1530,6 +1558,25 @@ func money_right(copper: int, right_x: float, y: float, color: Color) -> void:
 	var n := str(Money.tier(copper)[1])
 	draw_texture(tex[Money.icon(copper)], Vector2(right_x - n.length() * 4 - 10, y - 2))
 	_text(n, Vector2(right_x - n.length() * 4 + 1, y), color)
+
+## 完整的价格/金额：几金几银几铜，每一档一个图标加数字，不去尾。pos 是第一个图标的左上角。
+func draw_money_full(copper: int, pos: Vector2, color: Color) -> void:
+	var x := pos.x
+	for part in Money.parts(copper):
+		draw_texture(tex[Money.icon_of(part[0])], Vector2(x, pos.y))
+		var n := str(part[1])
+		_text(n, Vector2(x + 11, pos.y + 2), color)
+		x += 11.0 + n.length() * 4.0 + 2.0
+
+func money_full_width(copper: int) -> float:
+	var w := 0.0
+	for part in Money.parts(copper):
+		w += 11.0 + str(part[1]).length() * 4.0 + 2.0
+	return w - 2.0
+
+## 同上，靠右对齐到 right_x；y 是数字的纵坐标（图标自动对齐）。
+func money_full_right(copper: int, right_x: float, y: float, color: Color) -> void:
+	draw_money_full(copper, Vector2(right_x - money_full_width(copper), y - 2.0), color)
 
 func text_right(s: String, right_x: float, y: float, color: Color) -> void:
 	_text(s, Vector2(right_x - s.length() * 4 + 1, y), color)
