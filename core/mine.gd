@@ -41,7 +41,10 @@ func checkpoint_every() -> int:
 	return maxi(1, int(_c.get("checkpoint_every", 5)))
 
 ## 第一次进矿：建好存档里的永久部分。
+var _now: int = 0               # 最近一次传进来的时间（算菜的增益还剩多久）
+
 func ensure(now_ms: int) -> void:
+	_now = now_ms
 	var d := m()
 	if not d.has("shafts"):
 		d["shafts"] = {"1": {"cp": 1, "best": 0}, "2": {"fixed": 0, "cp": 1, "best": 0}}
@@ -169,16 +172,13 @@ func begin_run(id: int, now_ms: int, start_floor: int = 1) -> bool:
 		return false
 	var runs := int(m().get("runs", 0)) + 1
 	m()["runs"] = runs
-	var dish := str(m().get("dish", ""))
-	m()["dish"] = ""
+	_now = now_ms
 	m()["run"] = {
 		"shaft": id, "seed": 1 + absi(hash([now_ms, runs, _s.next_seq])) % 2000000000,
-		"floor": start_floor, "x": 0, "y": 0, "dug": {}, "partial": {}, "dish": dish,
+		"floor": start_floor, "x": 0, "y": 0, "dug": {}, "partial": {},
 		"dig": {}, "dir": [0, 0], "n": 0, "best": start_floor, "booms": [],
 		"bag": {"n": 0, "coins": 0, "stone": 0, "metal": 0},
 	}
-	if int(dish_by_id(dish).get("stamina", 0)) > 0:      # 出发前吃的菜：体力加成（可以超过上限）
-		m()["sta"] = minf(float(stamina_max()) * float(_c.get("stamina", {}).get("cap_mult", 1.3)), stamina_f() + float(dish_by_id(dish).get("stamina", 0)))
 	var en := entrance(start_floor)
 	run()["x"] = en.x
 	run()["y"] = en.y + 1                                   # 站在梯子下面一格
@@ -197,8 +197,14 @@ func pos() -> Vector2i:
 	var r := run()
 	return Vector2i(int(r.get("x", 0)), int(r.get("y", 0)))
 
+## 身上的菜：吃下去就开始算时间，时间到了增益就没了（在不在矿里都一样走）。
 func dish_def() -> Dictionary:
-	return dish_by_id(str(run().get("dish", "")))
+	if _now >= int(m().get("dish_until", 0)):
+		return {}
+	return dish_by_id(str(m().get("dish", "")))
+
+func dish_left_ms() -> int:
+	return maxi(0, int(m().get("dish_until", 0)) - _now) if not dish_def().is_empty() else 0
 
 func dish_by_id(id: String) -> Dictionary:
 	for d in _c.get("dishes", []):
@@ -240,7 +246,7 @@ func speed_mul() -> float:
 	return 1.0 + float(dish_def().get("speed", 0.0))
 
 func light_radius() -> float:
-	return float(lamp_def().get("radius", 1.6)) + float(dish_def().get("light", 0.0))
+	return float(lamp_def().get("radius", 1.6))
 
 func luck_mul() -> float:
 	return 1.0 + float(dish_def().get("luck", 0.0))
@@ -356,7 +362,7 @@ func _layout(f: int) -> Dictionary:
 	# 补给木箱：地面上空着的地方，一层 1-3 个
 	var ck := PackedByteArray()
 	ck.resize(W * H)
-	var n_chest: int = 1 + rng.randi() % 3
+	var n_chest: int = 1 if rng.randf() < float(lc.get("crate_chance", 0.35)) else 0     # 木箱不常见：大约三层有一层有一个
 	var tries := 0
 	while n_chest > 0 and tries < 200:
 		tries += 1
@@ -578,6 +584,7 @@ func dig_progress(now_ms: int) -> float:
 	return progress_at(t.x, t.y, now_ms)
 
 func start_dig(dx: int, dy: int, now_ms: int) -> String:
+	_now = now_ms
 	var why := dig_block_reason(dx, dy)
 	if why != "":
 		return why
@@ -751,6 +758,7 @@ func live_bombs() -> Array:
 ## ---- 推进时间 ----
 ## 事件：{"type":"dug","x","y","ore","gold","item","n","lost","chest"}、{"type":"boom","x","y"}
 func update(now_ms: int) -> Array:
+	_now = now_ms
 	var ev: Array = []
 	if not in_run():
 		return ev
@@ -923,6 +931,7 @@ func rest_progress(now_ms: int) -> float:
 
 ## 休息中体力一点点涨；到点结束，返回 true。
 func rest_update(now_ms: int) -> bool:
+	_now = now_ms
 	var r := rest_info()
 	if r.is_empty():
 		return false
@@ -977,16 +986,18 @@ func buy_bomb() -> String:
 	m()["bombs"] = bombs() + 1
 	return ""
 
-## ---- 饭店：消耗鱼和钱做一道菜，下一局生效 ----
+## ---- 饭店：消耗鱼和钱做一道菜，吃下去马上开始算时间 ----
 func dishes() -> Array:
 	return _c.get("dishes", [])
 
 ## 返回 ""=做好了，"have"=已经有一道没吃，"gold"=钱不够，"fish"=鱼不够（稀有鱼不会被拿去做菜）。
-func cook(dish_id: String, econ) -> String:
+func cook(dish_id: String, econ, now_ms: int = -1) -> String:
+	if now_ms >= 0:
+		_now = now_ms
 	var d := dish_by_id(dish_id)
 	if d.is_empty():
 		return "none"
-	if str(m().get("dish", "")) != "":
+	if not dish_def().is_empty():
 		return "have"
 	if _s.wallet_gold < int(d.get("price", 0)):
 		return "gold"
@@ -1002,4 +1013,7 @@ func cook(dish_id: String, econ) -> String:
 		econ.eat_cheapest(_s)
 	_s.wallet_gold -= int(d.get("price", 0))
 	m()["dish"] = dish_id
+	m()["dish_until"] = _now + int(float(d.get("minutes", 10)) * 60000.0)
+	if int(d.get("stamina", 0)) > 0:                       # 体力加成马上到账（可以超过上限）
+		m()["sta"] = minf(float(stamina_max()) * float(_c.get("stamina", {}).get("cap_mult", 1.3)), stamina_f() + float(d.get("stamina", 0)))
 	return ""

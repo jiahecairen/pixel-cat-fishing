@@ -76,6 +76,23 @@ func _warn(s: String) -> void:         # 提示别刷屏
 		say(s)
 
 ## ---- 切换 ----
+var room_kind: String = ""       # 在哪间屋子里（region == "room"）
+const ROOM_OF := {"shop": "m_tools", "rest": "m_diner", "inn": "m_inn"}
+
+func _enter_room(spot: String) -> void:
+	room_kind = ROOM_OF[spot]
+	go("room")
+	m.world.enter_room(Time.get_ticks_msec())
+	m.play("buy")
+
+func _leave_room() -> void:
+	var back: String = {"m_tools": "shop", "m_diner": "rest", "m_inn": "inn"}[room_kind]
+	room_kind = ""
+	go("isle")
+	isle_x = SPOT[back] - 16.0
+	isle_flip = false
+	m.play("click")
+
 func go(r: String) -> void:
 	region = r
 	t0 = Time.get_ticks_msec()
@@ -152,6 +169,13 @@ func process(dt: float, dx: int, dy: int) -> void:
 			if dx != 0:
 				isle_flip = dx < 0
 				isle_x = clampf(isle_x + dx * WALK_SPEED * m.game.move_speed() * dt, 20.0, ISLE_W - 40.0)
+		"room":
+			if menu != "":
+				return
+			m.world.room_moving = dx != 0
+			if dx != 0:
+				m.world.room_flip = dx < 0
+				m.world.room_x = clampf(m.world.room_x + dx * WALK_SPEED * m.game.move_speed() * dt, m.world.ROOM_MIN_X, m.world.ROOM_MAX_X)
 		"cave":
 			if menu != "":
 				return
@@ -284,9 +308,9 @@ func _on_event(e: Dictionary) -> void:
 	if str(e["item"]) != "" and not bool(e["lost"]):
 		var nm: String = str(m.game.inventory.by_id.get(e["item"], {}).get("name", e["item"]))
 		_float(x, y - 1, "%s +%d" % [nm, int(e["n"])], Pal.L_W)
-	if o == "gold":
+	if o in ["gold_ore", "sun_gold"]:
 		m.play("coin")
-	elif o == "metal" or o == "stone":
+	elif o in ["metal", "stone", "coal"]:
 		m.play("buy")
 	else:
 		m.play("catch")
@@ -340,6 +364,14 @@ func key(code: int) -> bool:
 		return true
 	if region == "cave" and act:
 		_interact_cave()
+		return true
+	if region == "room":
+		if act:
+			match m.world.room_spot(room_kind):
+				"exit": _leave_room()
+				"mshop": _open("shop")
+				"mcook": _open("cook")
+				"minn": _open("inn")
 		return true
 	return region.begins_with("cross") or region.begins_with("ride")
 
@@ -425,6 +457,16 @@ func _open(name: String) -> void:
 	menu_sel = 0
 	m.play("click")
 
+## 山腰上挥镐的小鼹鼠：4×4 的几个像素（身子一小团、镐一举一落）。
+func _tiny_mole(p: Vector2, f: int) -> void:
+	m.draw_rect(Rect2(p + Vector2(0, 1), Vector2(3, 3)), Pal.U_O)          # 身子
+	m.draw_rect(Rect2(p + Vector2(0, 0), Vector2(2, 1)), Pal.L_A)          # 头灯安全帽
+	m.draw_rect(Rect2(p + Vector2(2, 2), Vector2(1, 1)), Pal.L_P)          # 鼻子
+	if f == 0:
+		m.draw_rect(Rect2(p + Vector2(3, 0), Vector2(1, 2)), Pal.L_A)      # 镐举起来
+	else:
+		m.draw_rect(Rect2(p + Vector2(3, 2), Vector2(1, 2)), Pal.L_A)      # 镐砸下
+
 func _spot() -> String:
 	var cx := isle_x + 16.0
 	for k in SPOT:
@@ -449,12 +491,8 @@ func _interact_isle() -> void:
 			cave_x = CAVE["exit"] + 10.0
 			cave_flip = false
 			m.play("click")
-		"shop":
-			_open("shop")
-		"rest":
-			_open("cook")
-		"inn":
-			_open("inn")
+		"shop", "rest", "inn":
+			_enter_room(_spot())
 
 func _interact_cave() -> void:
 	match _cave_spot():
@@ -598,7 +636,7 @@ func _cook(i: int) -> void:
 	var ds: Array = mn.dishes()
 	if i >= ds.size():
 		return
-	var why: String = mn.cook(str(ds[i]["id"]), m.game.economy)
+	var why: String = mn.cook(str(ds[i]["id"]), m.game.economy, m.game.now_ms())
 	match why:
 		"":
 			m.play("done")
@@ -617,16 +655,19 @@ func hint() -> String:
 	match region:
 		"isle":
 			match _spot():
-				"inn": return "空格键进旅店休息"
+				"inn": return "空格键进旅店"
 				"dock": return "空格键坐船回雾灯岛"
 				"gate": return "空格键进矿洞"
-				"shop": return "空格键看工具店"
-				"rest": return "空格键让厨师做菜"
+				"shop": return "空格键进工具店"
+				"rest": return "空格键进饭店"
 			return "方向键走动"
+		"room":
+			var sp: String = m.world.room_spot(room_kind)
+			return m.world.SPOT_HINT.get(sp, "方向键走动")
 		"cave":
 			match _cave_spot():
 				"exit": return "空格键回岛上"
-				"miner": return "空格键和老钻聊聊"
+				"miner": return ""
 				"cart": return "空格键坐矿车"
 				"rail2": return "空格键看 2 号井"
 			return "方向键走动"
@@ -689,7 +730,7 @@ func _draw_isle(view: Vector2, t: int) -> void:
 		var mx := float(i) * 160.0 + par - 40.0
 		m.draw_texture(m.tex["mine_mtn"], Vector2(mx, fy - 58))
 		var hole: Array = [[40, 34], [92, 28], [128, 38]][i % 3]
-		m.tex_frame("mole_miner", Vector2(mx + hole[0] + 6, fy - 58 + hole[1] - 16), ((t + i * 250) / 420) % 2, 2)
+		_tiny_mole(Vector2(mx + hole[0] + 8, fy - 58 + hole[1] - 4), ((t + i * 250) / 420) % 2)
 	# 地面和海
 	m.draw_rect(Rect2(0, fy, ISLE_W - 60, view.y - fy), Pal.L_N)
 	m.draw_rect(Rect2(0, fy, ISLE_W - 60, 3), Pal.L_G)
@@ -711,8 +752,6 @@ func _draw_isle(view: Vector2, t: int) -> void:
 	m.draw_texture(m.tex["mine_inn"], Vector2(SPOT["inn"] - 28, fy - 46))
 	if (t / 300) % 2 == 0:                                         # 饭店烟囱冒烟
 		m.draw_rect(Rect2(SPOT["rest"] + 14, fy - 52 - (t / 300) % 6, 3, 3), Color(Pal.U_W, 0.7))
-	m.tex_frame("mole_0", Vector2(SPOT["shop"] + 30, fy - 22), (t / 900) % 2, 2)
-	m.tex_frame("mole_1", Vector2(SPOT["rest"] + 30, fy - 22), (t / 1100) % 2, 2)
 	for sx in [SPOT["shop"], SPOT["inn"], SPOT["rest"], SPOT["gate"]]:
 		var name: String = {SPOT["shop"]: "工具店", SPOT["inn"]: "旅店", SPOT["rest"]: "饭店", SPOT["gate"]: "矿洞"}[sx]
 		var w: float = m.dyn_text_width(name) + 6.0
@@ -731,6 +770,10 @@ func draw(view: Vector2, t: int) -> void:
 			_draw_cross(view, t)
 		"isle":
 			_draw_isle(view, t)
+		"room":
+			m.draw_set_transform(Vector2.ZERO)
+			m.world.draw_interior(room_kind, view, t)
+			_draw_menu(view)
 		"cave", "ride_in", "ride_back":
 			_draw_cave(view, t)
 		"mine":
@@ -856,8 +899,8 @@ func _draw_menu(view: Vector2) -> void:
 			for d in mn.dishes():
 				rows2.append(["%s   鱼×%d  %s" % [str(d["name"]), int(d["fish"]), _price(int(d["price"]))], str(d["desc"])])
 			var waiting: String = str(mn.dish_by_id(str(mn.m().get("dish", ""))).get("name", ""))
-			var foot := ("已备好：%s" % waiting) if waiting != "" else ("鱼篓里有 %d 条鱼" % m.game.state.basket.size())
-			_panel(view, "鼹鼠饭店  下一次下井生效", _wallet_text(), rows2, foot + "   空格点菜  Esc离开", 20.0 + rows2.size() * 28.0 + 20.0)
+			var foot := ("%s 还剩 %d 分" % [waiting, int(ceil(float(mn.dish_left_ms()) / 60000.0))]) if not mn.dish_def().is_empty() else ("鱼篓里有 %d 条鱼" % m.game.state.basket.size())
+			_panel(view, "鼹鼠饭店  吃下去按时间算", _wallet_text(), rows2, foot + "   空格点菜  Esc离开", 20.0 + rows2.size() * 28.0 + 20.0)
 		"cart":
 			var crow: Array = []
 			for id in range(1, mn.shaft_count() + 1):
@@ -970,6 +1013,8 @@ func _draw_cave(view: Vector2, t: int) -> void:
 		m.draw_cat(Vector2(cart_x - 14, fy - 46 + sway), 0, region == "ride_back")
 	else:
 		m.draw_cat(Vector2(roundf(cave_x), fy - 32), 4 if cave_moving else 0, cave_flip)
+	if _cave_spot() == "miner" and menu == "":
+		m.world.draw_talk_bubble(Vector2(CAVE["miner"] + 2, fy - 40), t)
 	m.draw_set_transform(Vector2.ZERO)
 	# 四周暗角
 	for i in 5:
@@ -1065,8 +1110,8 @@ func _draw_mine(view: Vector2, t: int) -> void:
 			var q: Vector2 = d["p"] + d["v"] * age + Vector2(0, 220.0 * age * age)
 			m.draw_rect(Rect2(q.round(), Vector2(3, 3)), d["c"])
 	debris = keep
-	# 面前那块能挖的石头：黄色框
-	if _diggable_ahead() or _special_ahead() != "":
+	# 洞口、木箱、梯子：面朝着时画黄色框（石头不画框）
+	if _special_ahead() != "":
 		var tc: Vector2i = mn.target(face_v.x, face_v.y)
 		var tr := Rect2(tc.x * CELL + 1, tc.y * CELL + 1, CELL - 2, CELL - 2)
 		var blink := 0.55 + 0.35 * sin(float(t) / 140.0)
@@ -1124,7 +1169,7 @@ func _draw_mine(view: Vector2, t: int) -> void:
 	var words: Array = []
 	var dn: String = str(mn.dish_def().get("name", ""))
 	if dn != "":
-		words.append("【%s】" % dn)
+		words.append("【%s %d分】" % [dn, int(ceil(float(mn.dish_left_ms()) / 60000.0))])
 	var lines: Array = []
 	var cur := ""
 	for wd in words:

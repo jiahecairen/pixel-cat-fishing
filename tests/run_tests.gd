@@ -67,6 +67,7 @@ func _init() -> void:
 		test_v068_sell(balance, fish)
 		test_v078(balance, fish)
 		test_v082(balance, fish)
+		test_v083(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -1766,11 +1767,22 @@ func test_v078(balance: Dictionary, fish: Array) -> void:
 	# 补给木箱
 	mn.begin_run(1, clock.t)
 	var crate := Vector2i(-1, -1)
-	for yy in mn.height():
-		for xx in mn.width():
-			if crate.x < 0 and mn.block(xx, yy) == "chest":
-				crate = Vector2i(xx, yy)
-	check(crate.x >= 0, "每层有补给木箱")
+	var crate_floors := 0
+	var crate_floor := 1
+	for ff in range(1, 41):                  # 木箱不是每层都有：40 层里大约三分之一的层有一个
+		mn.m()["run"]["floor"] = ff
+		var found := Vector2i(-1, -1)
+		for yy in mn.height():
+			for xx in mn.width():
+				if found.x < 0 and mn.block(xx, yy) == "chest":
+					found = Vector2i(xx, yy)
+		if found.x >= 0:
+			crate_floors += 1
+			if crate.x < 0:
+				crate = found
+				crate_floor = ff
+	check(crate.x >= 0 and crate_floors >= 6 and crate_floors <= 24, "木箱不常见：40 层里 %d 层有木箱" % crate_floors)
+	mn.m()["run"]["floor"] = crate_floor
 	var cdir := Vector2i.ZERO
 	for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		var nc: Vector2i = crate + dv
@@ -2157,13 +2169,22 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	g.state.wallet_gold = 1000
 	g.state.basket = ["crucian", "loach", "bream"]
 	g.state.basket_sizes = [10, 10, 10]
-	check(mn.cook("skewer", g.economy) == "" and g.state.basket.size() == 2 and g.state.wallet_gold == 980 and str(g.state.mine["dish"]) == "skewer", "烤鱼串：1 条鱼 + 20 铜")
-	check(mn.cook("soup", g.economy) == "have", "已经有一道菜不能再做")
-	mn.begin_run(1, clock.t + 9)
-	check(absf(mn.speed_mul() - 1.2) < 0.001 and str(g.state.mine["dish"]) == "", "下井吃掉菜：挖速 +20%，菜用掉")
+	var t_cook: int = clock.t + 10
+	g.state.mine["sta"] = 20.0
+	check(mn.cook("skewer", g.economy, t_cook) == "" and g.state.basket.size() == 2 and g.state.wallet_gold == 980 and str(g.state.mine["dish"]) == "skewer", "烤鱼串：1 条鱼 + 20 铜")
+	check(absf(mn.stamina_f() - 30.0) < 0.01, "吃下去体力马上 +10")
+	check(mn.cook("soup", g.economy, t_cook + 1000) == "have", "已经有一道菜不能再做")
+	check(absf(mn.speed_mul() - 1.2) < 0.001, "吃下去马上生效：挖速 +20%（不用等下井）")
+	mn.begin_run(1, t_cook + 9000)
+	check(absf(mn.speed_mul() - 1.2) < 0.001 and mn.dish_left_ms() > 0, "下井以后还在算时间")
+	mn.update(t_cook + 10 * 60000 - 1)
+	check(absf(mn.speed_mul() - 1.2) < 0.001, "10 分钟还没到，增益还在")
+	mn.update(t_cook + 10 * 60000)
+	check(absf(mn.speed_mul() - 1.0) < 0.001 and mn.dish_def().is_empty(), "10 分钟到了，增益没了")
+	check(mn.light_radius() == float(mn.lamp_def().get("radius", 1.6)), "菜不再加光圈")
 	mn.end_run()
 	g.state.wallet_gold = 0
-	check(mn.cook("bento", g.economy) == "gold", "钱不够做不了")
+	check(mn.cook("bento", g.economy, t_cook + 11 * 60000) == "gold", "钱不够做不了")
 	# 2 号井：材料 + 酒馆里雇的工人
 	g.state.effects["workers"] = 0
 	g.state.inventory["metal"] = 40
@@ -2337,3 +2358,30 @@ func test_v082(balance: Dictionary, fish: Array) -> void:
 
 func _count_mines(mn) -> int:
 	return mn.cfg().get("mines", []).size()
+
+
+func test_v083(balance: Dictionary, fish: Array) -> void:
+	print("v0.83: 全部卖/存/丢只算选中的那一格、菜按时间算")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(83))
+	g.state.bag_slots = 40
+	g.inventory.add(g.state, "boot", 25)
+	var cells: Array = g.inventory.cells(g.state)
+	check(cells.size() == 3 and int(cells[0][1]) == 10 and int(cells[2][1]) == 5, "25 个靴子叠成 10 + 10 + 5 三格")
+	check(g.stash_item("boot", true, 10) == 10 and g.inventory.count(g.state, "boot") == 15, "全部存：只存选中那一格的 10 个")
+	check(g.fetch_item("boot", true, 10) == 10 and g.inventory.count(g.state, "boot") == 25, "全部取：只取选中那一格")
+	var w0: int = g.state.wallet_gold
+	var got: int = g.pawn_sell_stack("boot", 10)
+	check(got > 0 and g.inventory.count(g.state, "boot") == 15 and g.state.wallet_gold == w0 + got, "全部卖：只卖选中那一格的 10 个")
+	check(g.trash_item("boot", true, 10) == 10 and g.inventory.count(g.state, "boot") == 5, "全部丢：只丢选中那一格")
+	check(g.trash_item("boot", true) == 5 and g.inventory.count(g.state, "boot") == 0, "不指定格数时仍是全部")
+	g.inventory.add(g.state, "stone", 12)
+	var o: int = g.ore_sell("stone", true, 10)
+	check(o > 0 and g.inventory.count(g.state, "stone") == 2, "老钻收矿石：全部卖也只算一格")
+	var found_sets := 0
+	for d in g.mine.dishes():
+		check(not d.has("light"), "菜 %s 没有光照增益" % d["id"])
+		if float(d.get("minutes", 0)) > 0:
+			found_sets += 1
+	check(found_sets == 3, "三道菜都有持续时间（分钟）")
+	check(float(g.mine.cfg()["layout"].get("crate_chance", 1.0)) < 0.5, "木箱概率调低了")

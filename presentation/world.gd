@@ -783,7 +783,9 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 	if kx > left - 30 and kx < right + 4:
 		m.tex_frame_flipped("villager_3", Vector2(kx, GROUND_Y - 19), 0, 2)
 		var qid: String = m.game.room_quest("lighthouse")
-		if qid != "" and (m.game.quest_state(qid) == "" or m.game.can_turn_in(qid)):
+		if island_near_keeper(float(m.game.journey.roam_x())) and not m.mini:
+			draw_talk_bubble(Vector2(kx + 1, GROUND_Y - 44), t)
+		elif qid != "" and (m.game.quest_state(qid) == "" or m.game.can_turn_in(qid)):
 			var by: float = GROUND_Y - 36.0 - float((t / 400) % 2)
 			m.draw_rect(Rect2(kx + 5, by - 1, 4, 9), Pal.U_K)
 			m.draw_rect(Rect2(kx + 6, by, 2, 5), Pal.L_Y)
@@ -1781,9 +1783,12 @@ const ROOMS := {
 	"tailor": {"keeper": 0, "wall": "w", "spots": [[172, "quest"]]},       # 主角形象固定后不卖衣帽（D152）
 	"shipyard": {"keeper": 2, "wall": "w", "spots": [[150, "boats"]]},
 	"workshop": {"keeper": 1, "wall": "w", "spots": [[150, "talk"]]},
+	"m_tools": {"keeper": 0, "mole": 0, "wall": "w", "spots": [[150, "mshop"]]},
+	"m_diner": {"keeper": 0, "mole": 1, "wall": "h", "spots": [[150, "mcook"]]},
+	"m_inn": {"keeper": 0, "mole": 0, "wall": "w", "spots": [[150, "minn"]]},
 	"home": {"keeper": -1, "wall": "w", "spots": [[46, "storage"], [84, "dex"], [106, "piggy"], [128, "stats"], [172, "bed"]]},
 }
-const SPOT_HINT := {"exit": "空格键出门", "quest": "空格键和店主聊聊", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船", "talk": "空格键和师傅聊聊"}
+const SPOT_HINT := {"exit": "空格键出门", "shop": "空格键看货", "hats": "空格键看衣帽", "dex": "空格键看图鉴", "stats": "空格键看统计", "bed": "空格键小睡", "storage": "空格键开仓库", "piggy": "空格键存取钱", "boats": "空格键升级船", "mshop": "空格键看工具", "mcook": "空格键让厨师做菜", "minn": "空格键住宿休息"}
 
 var room_x: float = 0.0          # 小猫贴图左边缘（屋内坐标）
 var room_flip: bool = false
@@ -1796,6 +1801,10 @@ func enter_room(t: int) -> void:
 	room_flip = false
 	room_moving = false
 	room_t0 = t
+
+## 头顶的聊天气泡（靠近能聊天的人时出现，轻轻上下浮动）。
+func draw_talk_bubble(pos: Vector2, t: int) -> void:
+	m.draw_texture(m.tex["bubble_talk"], Vector2(pos.x, pos.y - float((t / 350) % 2)))
 
 ## 小猫此刻站在屋里的什么位置："exit" / "shop" / "mirror" / "dex" / "stats" / ""。
 func room_spot(kind: String) -> String:
@@ -1874,6 +1883,39 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 			keeper_pos = Vector2(ox + 156, fy - 31)
 			_draw_keeper(int(room["keeper"]), keeper_pos, ox)
 			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
+		"m_tools":
+			m.draw_texture(m.tex["noren_ship"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
+			_draw_workshop_room(ox, fy, t)
+			keeper_pos = Vector2(ox + 156, fy - 31)
+			_draw_mole(int(room["mole"]), keeper_pos, ox)
+			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
+		"m_diner":
+			m.draw_texture(m.tex["noren_tackle"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
+			m.draw_texture(m.tex["lantern"], Vector2(ox + 112 + roundf(sin(float(t) / 900.0)), fy - ROOM_H))
+			m.draw_texture(m.tex["shelf_tackle"], Vector2(ox + 70, fy - 62))
+			m.draw_texture(m.tex["bait_jars"], Vector2(ox + 112, fy - 14))
+			m.draw_texture(m.tex["barrel_rods"], Vector2(ox + 62, fy - 26))
+			var sx := ox + 180.0                                   # 灶台：火苗和冒出来的热气
+			m.draw_rect(Rect2(sx - 1, fy - 25, 28, 25), Pal.U_K)
+			m.draw_rect(Rect2(sx, fy - 24, 26, 24), Pal.U_A)
+			m.draw_rect(Rect2(sx + 4, fy - 20, 18, 4), Pal.U_K)
+			m.draw_rect(Rect2(sx + 7 + (t / 150) % 3, fy - 21, 4, 3), Pal.L_Y)
+			m.draw_rect(Rect2(sx + 13, fy - 21 - (t / 200) % 2, 3, 3), Pal.L_R)
+			if (t / 300) % 2 == 0:
+				m.draw_rect(Rect2(sx + 10, fy - 32 - (t / 300) % 4, 3, 3), Color(Pal.U_W, 0.7))
+			keeper_pos = Vector2(ox + 156, fy - 31)
+			_draw_mole(int(room["mole"]), keeper_pos, ox)
+			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
+		"m_inn":
+			m.draw_texture(m.tex["noren_ship"], Vector2(ox + ROOM_DOOR_X - 9, fy - 29))
+			m.draw_texture(m.tex["lantern"], Vector2(ox + 100 + roundf(sin(float(t) / 900.0)), fy - ROOM_H))
+			m.draw_texture(m.tex["bed"], Vector2(ox + 56, fy - 19))
+			m.draw_texture(m.tex["bed"], Vector2(ox + 92, fy - 19))
+			m.draw_texture(m.tex["rug"], Vector2(ox + 74, fy + 3))
+			m.draw_texture(m.tex["calendar"], Vector2(ox + 124, fy - 50))
+			keeper_pos = Vector2(ox + 156, fy - 31)
+			_draw_mole(int(room["mole"]), keeper_pos, ox)
+			m.draw_texture(m.tex["counter"], Vector2(ox + 134, fy - 17))
 		"home":
 			m.draw_texture(m.tex["storage"], Vector2(ox + 35, fy - 18))
 			m.draw_texture(m.tex["bookshelf"], Vector2(ox + 70, fy - 39))
@@ -1894,6 +1936,8 @@ func draw_interior(kind: String, view: Vector2, t: int) -> void:
 		if not room_moving and keeper_pos != Vector2.INF and room_spot(kind) == "quest":
 			flip = keeper_pos.x + 8.0 < ox + room_x + 16.0      # 站在任务点：小猫面对店主
 		m.draw_cat(pos, (4 + (t / 180) % 2) if room_moving else 0, flip)
+	if keeper_pos != Vector2.INF and t - room_t0 >= 3000 and not room_moving and room_spot(kind) in ["quest", "talk"]:
+		draw_talk_bubble(Vector2(keeper_pos.x + 2, keeper_pos.y - 15), t)
 	# 店主进门时打招呼
 	if keeper_pos != Vector2.INF and t - room_t0 < 3000:
 		var w: float = m.label_width("欢迎光临") + 6
@@ -1939,6 +1983,13 @@ func _fronts_gear(cx: float, cy: float, rad: float, teeth: int, ang: float, col:
 	if _fronts == null:
 		_fronts = Shopfronts.new(self)
 	_fronts._gear(cx, cy, rad, teeth, ang, col, dark)
+
+## 鼹鼠店主（矿山岛的屋子）。
+func _draw_mole(role: int, pos: Vector2, ox: float) -> void:
+	if ox + room_x + 16.0 > pos.x + 8.0:
+		m.tex_frame_flipped("mole_%d" % role, pos + Vector2(0, 2), (Time.get_ticks_msec() / 900) % 2, 2)
+	else:
+		m.tex_frame("mole_%d" % role, pos + Vector2(0, 2), (Time.get_ticks_msec() / 900) % 2, 2)
 
 ## 店主：始终朝着小猫（小猫在店主右边就转向右，否则朝左）。
 func _draw_keeper(kind: int, pos: Vector2, ox: float) -> void:

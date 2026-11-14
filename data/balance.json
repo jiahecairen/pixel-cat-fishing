@@ -1780,17 +1780,19 @@
         "fish": 1,
         "price": 20,
         "speed": 0.2,
-        "desc": "下一局挖得快 20%，体力 +10",
-        "stamina": 10
+        "desc": "10 分钟内挖得快 20%，体力 +10",
+        "stamina": 10,
+        "minutes": 10
       },
       {
         "id": "soup",
         "name": "鲜鱼汤",
         "fish": 2,
         "price": 50,
-        "light": 1.0,
-        "desc": "下一局光圈 +1，体力 +10",
-        "stamina": 10
+        "desc": "15 分钟内矿多 15%，体力 +20",
+        "stamina": 20,
+        "minutes": 15,
+        "luck": 0.15
       },
       {
         "id": "bento",
@@ -1799,8 +1801,9 @@
         "price": 150,
         "speed": 0.3,
         "luck": 0.3,
-        "desc": "下一局挖快 30%、矿多 30%，体力 +25",
-        "stamina": 25
+        "desc": "30 分钟内挖快 30%、矿多 30%，体力 +25",
+        "stamina": 25,
+        "minutes": 30
       }
     ],
     "repair2": {
@@ -1831,7 +1834,8 @@
       "rock": 0.16,
       "rock_rich": 0.55,
       "ore_scale": 0.55,
-      "exit_far": 0.7
+      "exit_far": 0.7,
+      "crate_chance": 0.35
     },
     "shafts": 5,
     "chest_loot": [

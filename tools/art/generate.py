@@ -856,6 +856,17 @@ def room_door():
     return c
 
 
+def bubble_talk():
+    """头顶的"可以聊天"气泡：白底灰边，里面三个点。"""
+    c = Canvas(13, 12)
+    c.rect(1, 0, 11, 9, "a"); c.rect(0, 1, 12, 8, "a")
+    c.rect(1, 1, 11, 8, "W")
+    c.rect(5, 10, 7, 10, "a"); c.set(6, 10, "W"); c.set(6, 11, "a")
+    for x in (3, 6, 9):
+        c.set(x, 5, "A")
+    return c
+
+
 def room_window():
     c = Canvas(24, 20)
     c.rect(1, 1, 22, 18, "O")
@@ -2124,6 +2135,7 @@ def build():
         "splash": save(splash(), "splash"),
         "hold": save(hold(), "hold"),
         "room_door": save(room_door(), "room_door"),
+        "bubble_talk": save(bubble_talk(), "bubble_talk"),
         "room_window": save(room_window(), "room_window"),
         "counter": save(counter(), "counter"),
         "shelf_tackle": save(shelf("tackle"), "shelf_tackle"),

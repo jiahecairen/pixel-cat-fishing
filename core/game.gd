@@ -1087,14 +1087,17 @@ func lucky_remaining_ms() -> int:
 	return maxi(0, int(state.effects["lucky_until_ms"]) - _clock.now_ms())
 
 ## 在家里把物品存进仓库 / 从仓库取出。all 为真时整堆搬。返回实际搬了几个。
-func stash_item(id: String, all: bool = false) -> int:
-	var n := inventory.stash(state, id, inventory.count(state, id) if all else 1)
+## limit > 0：只搬这么多（选中的那一格，不是这种物品的全部格子）。
+func stash_item(id: String, all: bool = false, limit: int = 0) -> int:
+	var want := inventory.count(state, id) if all else 1
+	var n := inventory.stash(state, id, mini(want, limit) if limit > 0 else want)
 	if n > 0:
 		dirty = true
 	return n
 
-func fetch_item(id: String, all: bool = false) -> int:
-	var n := inventory.fetch(state, id, inventory.count_w(state, id) if all else 1)
+func fetch_item(id: String, all: bool = false, limit: int = 0) -> int:
+	var want := inventory.count_w(state, id) if all else 1
+	var n := inventory.fetch(state, id, mini(want, limit) if limit > 0 else want)
 	if n > 0:
 		dirty = true
 	return n
@@ -1373,9 +1376,9 @@ func pawn_sell(id: String) -> int:
 	dirty = true
 	return price
 
-func pawn_sell_stack(id: String) -> int:
+func pawn_sell_stack(id: String, limit: int = 0) -> int:
 	var total := 0
-	for i in inventory.count(state, id):
+	for i in (mini(inventory.count(state, id), limit) if limit > 0 else inventory.count(state, id)):
 		var got := pawn_sell(id)
 		if got <= 0:
 			break
@@ -1403,11 +1406,11 @@ func pawn_redeem(id: String) -> String:
 	return ""
 
 ## 矿洞大厅的老钻收矿石：只收石头、金属、金矿石，不记赎回。
-func ore_sell(id: String, all: bool = false) -> int:
+func ore_sell(id: String, all: bool = false, limit: int = 0) -> int:
 	if not mine.is_ore(id):
 		return 0
 	var total := 0
-	for i in (inventory.count(state, id) if all else 1):
+	for i in ((mini(inventory.count(state, id), limit) if limit > 0 else inventory.count(state, id)) if all else 1):
 		var price := pawn_value(id)
 		if price <= 0 or not inventory.remove(state, id, 1):
 			break
@@ -1420,12 +1423,14 @@ func ore_sell(id: String, all: bool = false) -> int:
 	return total
 
 ## 垃圾箱：任何东西都能扔（包括任务物品），扔掉就没了。返回扔了几个。
-func trash_item(id: String, all: bool = false) -> int:
+func trash_item(id: String, all: bool = false, limit: int = 0) -> int:
 	var n := inventory.count(state, id)
 	if n <= 0:
 		return 0
 	if not all:
 		n = 1
+	elif limit > 0:
+		n = mini(n, limit)
 	if not inventory.remove(state, id, n):
 		return 0
 	state.revision += 1

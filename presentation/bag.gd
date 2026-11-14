@@ -69,12 +69,16 @@ func _sell_all_rect() -> Rect2:
 	var sr := _sell_rect()
 	return Rect2(sr.position.x - (sr.size.x + 3), sr.position.y, sr.size.x, sr.size.y)
 
+## 普通物品栏里的"丢弃"和"全部丢"（随时随地能扔东西）。
+func _plain_trash_rect(all: bool) -> Rect2:
+	return _sell_all_rect() if all else _sell_rect()
+
 func sell_stack_selected() -> void:
 	var owned := _owned()
 	if sel >= owned.size():
 		m.play("deny")
 		return
-	var got: int = m.game.ore_sell(str(owned[sel]), true) if ore_mode else m.game.pawn_sell_stack(str(owned[sel]))
+	var got: int = m.game.ore_sell(str(owned[sel]), true, _cell_n()) if ore_mode else m.game.pawn_sell_stack(str(owned[sel]), _cell_n())
 	if got <= 0:
 		m.play("deny")
 		return
@@ -168,7 +172,7 @@ func trash_selected(all: bool) -> void:
 		m.play("click")
 		return
 	confirm_id = ""
-	var n: int = m.game.trash_item(id, all)
+	var n: int = m.game.trash_item(id, all, _cell_n())
 	if n <= 0:
 		m.play("deny")
 		return
@@ -203,13 +207,18 @@ func switch_tab() -> void:
 	m.play("click")
 
 ## 仓库里搬东西：存入 / 取出 1 个，或整堆。
+## 选中那一格有几个（"全部"只算这一格）。
+func _cell_n() -> int:
+	var cells := _cells()
+	return int(cells[sel][1]) if sel < cells.size() else 0
+
 func move_selected(all: bool) -> void:
 	var owned := _owned()
 	if sel >= owned.size():
 		m.play("deny")
 		return
 	var id: String = owned[sel]
-	var n: int = m.game.stash_item(id, all) if tab == 0 else m.game.fetch_item(id, all)
+	var n: int = m.game.stash_item(id, all, _cell_n()) if tab == 0 else m.game.fetch_item(id, all, _cell_n())
 	if n <= 0:
 		m.play("deny")
 		return
@@ -263,6 +272,10 @@ func click(p: Vector2) -> bool:
 			trash_selected(false)
 		elif _sell_rect().has_point(p):
 			trash_selected(true)
+	elif not sell_mode and _plain_trash_rect(false).has_point(p) and sel < _owned().size():
+		trash_selected(false)
+	elif not sell_mode and _plain_trash_rect(true).has_point(p) and sel < _owned().size():
+		trash_selected(true)
 	elif _redeem():
 		if _use_rect().has_point(p):
 			redeem_selected()
@@ -292,12 +305,16 @@ func key(keycode: int) -> bool:
 			if wh:
 				use_selected()
 		KEY_X:
-			if trash_mode:
+			if not wh and not sell_mode and not trash_mode:
+				trash_selected(false)
+			elif trash_mode:
 				trash_selected(false)
 			elif _sellable():
 				sell_selected()
 		KEY_Z:
-			if trash_mode:
+			if not wh and not sell_mode and not trash_mode:
+				trash_selected(true)
+			elif trash_mode:
 				trash_selected(true)
 			elif _sellable():
 				sell_stack_selected()
@@ -483,6 +500,12 @@ func draw() -> void:
 			m.draw_rect(u, Pal.L_G if can else Pal.U_A)
 			m.draw_rect(Rect2(u.position.x, u.end.y - 2, u.size.x, 2), Pal.U_G if can else Pal.U_K)
 			m.label_centered("装上" if str(g.inventory.by_id[id].get("use", "")) == "bait" else "使用", u.position.x + u.size.x / 2, u.position.y + (0 if m.mini else 1), Pal.U_K if can else Pal.L_A)
+		if not sell_mode and not trash_mode and sel < _owned().size():
+			var warn0: bool = g.is_important(id) and confirm_id.begins_with(id)
+			_btn(_plain_trash_rect(false), "再按确认" if warn0 else "丢弃", Pal.L_R, Pal.U_R)
+			_btn(_plain_trash_rect(true), "全部丢", Pal.L_R, Pal.U_R)
+			if warn0 and not m.mini:
+				m.dyn_text("这是任务物品，丢了就没了", Vector2(tx, dy + 22), Pal.L_R)
 		if trash_mode:
 			var warn: bool = g.is_important(id) and confirm_id.begins_with(id)
 			_btn(_use_rect(), "再按确认" if warn else "丢弃", Pal.L_R, Pal.U_R)

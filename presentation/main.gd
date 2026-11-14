@@ -45,7 +45,7 @@ const VOLUME_DB := [-80.0, -22.0, -12.0, -5.0]   # 音效档位 0(静音)..3
 const SPRITES := ["boat", "boat_1", "boat_2", "boat_3", "sea", "ground", "pier", "house_0", "house_1", "house_2", "house_3", "house_4", "scene_wreck", "wall_clothes", "mannequin", "tree", "stall_back",
 	"stall_front", "bird_fly", "bird_perch", "boat_head", "boat_basket_back", "boat_basket", "market_gate", "stall_back_fruit", "stall_back_veg", "stall_back_bread", "stall_back_flower",
 	"goods_fruit", "goods_veg", "goods_bread", "goods_flower", "ico_fruit", "ico_bag", "ico_veg", "ico_bread", "ico_flower", "villager_0", "villager_1", "villager_2", "villager_3", "gameboy", "bubble", "bubble_sold", "cloud", "hills",
-	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "room_window", "counter", "shelf_tackle",
+	"tomato", "coin", "coin_silver", "coin_copper", "umbrella", "piggy", "basket", "hold", "chest", "btn_bag", "room_door", "bubble_talk", "room_window", "counter", "shelf_tackle",
 	"shelf_hats", "mirror", "bookshelf", "calendar", "bed", "rug", "bobber", "bang", "tangle", "zzz", "font", "dots", "panel", "pips", "labels",
 	"sparkle", "splash", "btn_play", "btn_stop", "btn_skip", "btn_close", "btn_menu", "btn_plus",
 	"btn_dest", "lighthouse", "btn_minus", "btn_left", "btn_right", "btn_gear", "btn_town", "btn_fish", "btn_view", "btn_cat", "anger", "storage", "lock", "lantern", "noren_tackle", "noren_tailor", "noren_ship", "ship_model", "blueprint", "anchor", "wall_bobbers", "specimen_0", "specimen_1", "barrel_rods", "bait_jars", "wall_hats", "hat_stand", "fabric_rolls", "ishidoro", "deco_crate_fruit", "deco_board_fruit", "deco_nobori_fruit", "deco_crate_veg", "deco_board_veg", "deco_nobori_veg", "deco_crate_bread", "deco_board_bread", "deco_nobori_bread", "deco_crate_flower", "deco_board_flower", "deco_nobori_flower", "deco_crate_fish", "deco_board_fish", "deco_nobori_fish",
@@ -229,6 +229,12 @@ func _ready() -> void:
 		mine_view.restore(mat)         # 重启前在矿山岛：回到原处（在矿里这一局还在）
 	if OS.has_environment("CATFISH_REGION"):      # 调试：直接进矿山岛的某个区域
 		mine_view.go(OS.get_environment("CATFISH_REGION"))
+		if OS.has_environment("CATFISH_CAVEX"):       # 调试：大厅里小猫站的位置
+			mine_view.cave_x = OS.get_environment("CATFISH_CAVEX").to_float()
+		if OS.has_environment("CATFISH_ROOM"):        # 调试：直接走进矿山岛的屋子（shop / rest / inn）
+			mine_view._enter_room(OS.get_environment("CATFISH_ROOM"))
+			if OS.has_environment("CATFISH_ROOMX"):
+				world.room_x = OS.get_environment("CATFISH_ROOMX").to_float()
 		if OS.has_environment("CATFISH_MINEMENU"):    # 调试：直接打开岛上/大厅的某个菜单
 			mine_view._open(OS.get_environment("CATFISH_MINEMENU"))
 		if OS.has_environment("CATFISH_RUN"):     # 调试：直接开一局（给第一把镐），站在入口；CATFISH_DIG=朝下挖；CATFISH_AT="x,y"站到那格
@@ -2466,7 +2472,7 @@ func _island_hint(ix: float) -> String:
 	if world.island_near_pier(ix):
 		return "空格键回船"
 	if world.island_near_keeper(ix):
-		return "空格键和看守聊聊"
+		return ""                                     # 头顶有聊天气泡，不写字
 	if world.island_near_console(ix):
 		return "空格键开信号灯"
 	if world.island_near_repair(ix):
