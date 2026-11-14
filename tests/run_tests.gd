@@ -61,6 +61,7 @@ func _init() -> void:
 		test_v056(balance, fish)
 		test_v059(balance, fish)
 		test_v061(balance, fish)
+		test_v062(balance, fish)
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -972,7 +973,7 @@ func test_inventory(balance: Dictionary, fish: Array) -> void:
 		g.state.quests[q["id"]] = "done"      # 任务都完成后，漂流瓶里只有零钱
 	inv.add(g.state, "bottle")
 	var r := g.use_item("bottle")
-	check(r["ok"] and r["gold"] >= 10 and r["gold"] <= 60 and g.state.wallet_gold == r["gold"], "漂流瓶开出 10–60 金币 (%d)" % r["gold"])
+	check(r["ok"] and r["gold"] == 0 and g.state.wallet_gold == 0, "没有新任务的漂流瓶是空的，不给钱")
 	check(inv.count(g.state, "bottle") == 0 and not g.state.inventory.has("bottle"), "用掉后从物品栏消失")
 	# 藏宝图碎片：集齐 4 片才能用
 	inv.add(g.state, "map_piece", 3)
@@ -1558,6 +1559,33 @@ func test_v061(balance: Dictionary, fish: Array) -> void:
 	check(g3.pots_ready() >= 1, "蟹笼到时间了")
 	var got := g3.collect_pots()
 	check(int(got["gold"]) > 0 and g3.pots_ready() == 0, "收完蟹笼得到铜币，笼子重新下好")
+
+func test_v062(balance: Dictionary, fish: Array) -> void:
+	print("v062: 漂流瓶/日记残页只在有任务需要时出现")
+	var g := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(171))
+	g.state.quests = {}
+	for q in g._quest_cfg_list():
+		g.state.quests[str(q["id"])] = "done"
+	check(not g.item_wanted("bottle") and not g.item_wanted("diary_page"), "没有任务需要：瓶子和日记残页都不要")
+	check(g.item_wanted("pearl"), "普通物品不受影响")
+	for i in 80:
+		check(g._pick_pool([["bottle", 50], ["diary_page", 10]]) == "", "池子里只有任务物品时抽不出东西")
+		if g._pick_pool([["bottle", 50], ["diary_page", 10]]) != "":
+			break
+	var g2 := Game.new(balance.duplicate(true), fish, GameState.new(), FakeClock.new(), _rng(172))
+	check(g2.item_wanted("bottle"), "还有信没收：瓶子会出现")
+	g2.state.quests = {}
+	for q in g2._quest_cfg_list():
+		g2.state.quests[str(q["id"])] = "done"
+	g2.state.quests["lighthouse3"] = "active"
+	check(g2.item_wanted("diary_page"), "日记任务进行中：残页会出现")
+	g2.inventory.add(g2.state, "diary_page", 3)
+	check(not g2.item_wanted("diary_page"), "收够了就不再出现")
+	g2.state.quests["lighthouse3"] = "done"
+	check(not g2.item_wanted("diary_page"), "任务结束后不再出现")
+	g2.state.inventory["bottle"] = 1
+	var r: Dictionary = g2.use_item("bottle")
+	check(int(r["gold"]) == 0, "没有新任务的空瓶不给钱")
 
 func test_v046(balance: Dictionary, fish: Array) -> void:
 	print("v046: 杂物和鱼不同时出现、仓库直接用、上次钓鱼点、店主默认的话")

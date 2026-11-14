@@ -648,7 +648,7 @@ func _update_roam(dt: float) -> void:
 		pass                                 # 迷你窗里也留在岛上当前的位置（在钓位就继续钓）
 	elif j.activity() == Journey.Activity.ROAM and mini:
 		# 玩家接管后小猫就一直听玩家的，不会自己走开；只有切到迷你悬浮窗才交还给自动流程
-		_end_roam_auto(float(j.roam_x()), true)
+		_end_roam_auto(float(j.roam_x()))
 
 
 ## 自动航行：加速到巡航速度，进港前平滑减速，到了就停。
@@ -2127,11 +2127,11 @@ func _auto_policy() -> void:
 	var j: Journey = game.journey
 	var pct: int = game.economy.basket_percent(game.state)
 	var has_fish: bool = not game.state.basket.is_empty()
-	var fish_pct: int = int(game.auto_cfg().get("fish_pct", 50))
+	var fish_pct: int = int(game.auto_cfg().get("fish_pct", 80))
 	match j.activity():
 		Journey.Activity.FISHING:
-			if has_fish and pct >= fish_pct:
-				_go_to_town()
+			if has_fish and pct > fish_pct:
+				_go_to_town()                        # 海上超过 80%：自己回去卖鱼
 			elif game.fishing_blocked():
 				start_auto_sail(game.auto_fish_x())
 			elif not game.line_out():
@@ -2143,7 +2143,7 @@ func _auto_policy() -> void:
 			if has_fish and pct > isl_pct:
 				_town_button()                       # 超过 80%：走到码头上船，回镇卖鱼
 			elif not game.at_lake_spot() and not game.island_spot_reachable(float(j.roam_x())):
-				_town_button()                       # 10 秒内走不到钓位：离岛去别的水域（回镇路上再安排）
+				pass                                 # 10 秒内走不到钓位：原地等玩家
 			elif not game.at_lake_spot():
 				_stand_to = game.nearest_spot_x(float(j.roam_x()))       # 岛上别的位置：走去钓位接着钓
 				_stand_cast = true
@@ -2151,9 +2151,7 @@ func _auto_policy() -> void:
 				world.roam_flip = true
 				if game.cast_line():
 					play("cast")
-		Journey.Activity.SOLD_OUT:
-			game.journey.set_fish_spot(game.pick_water_x())
-			_go_fishing()
+		# 小镇上（卖完鱼）不再自己出发：等玩家点钓鱼
 
 ## 在钓位上收好了的蟹笼：钱、物品飘字，不影响正在钓的鱼线。
 func _collect_pots_fx() -> void:

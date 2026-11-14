@@ -574,16 +574,9 @@ func pick_drift(i: int) -> Dictionary:
 	if not journey.on_island() or not drift_ready(i) or pomodoro.is_break():
 		return {}
 	var cfg: Dictionary = _cfg.get("drift", {})
-	var total := 0.0
-	for e in cfg.get("pool", []):
-		total += float(e[1])
-	var r := _rng.randf() * total
-	var pick := "gold"
-	for e in cfg["pool"]:
-		r -= float(e[1])
-		if r < 0.0:
-			pick = str(e[0])
-			break
+	var pick := _pick_pool(cfg.get("pool", []))
+	if pick == "":
+		pick = "gold"
 	var out := {"item": "", "gold": 0}
 	if pick == "gold":
 		var gr: Array = cfg.get("gold", [10, 30])
@@ -659,16 +652,10 @@ func collect_pots() -> Dictionary:
 		economy.grant_gold(state, state.new_id("p"), gold)
 		out["gold"] = int(out["gold"]) + gold
 		if _rng.randf() < float(cfg.get("item_chance", 0.4)):
-			var total := 0.0
-			for e in cfg.get("pool", []):
-				total += float(e[1])
-			var r := _rng.randf() * total
-			for e in cfg["pool"]:
-				r -= float(e[1])
-				if r < 0.0:
-					give(str(e[0]), 1)
-					out["items"][str(e[0])] = int(out["items"].get(str(e[0]), 0)) + 1
-					break
+			var got := _pick_pool(cfg.get("pool", []))
+			if got != "":
+				give(got, 1)
+				out["items"][got] = int(out["items"].get(got, 0)) + 1
 		state.effects["pot_%d" % i] = _clock.now_ms() + int(cfg.get("ready_min", 25)) * 60000
 	if int(out["gold"]) > 0:
 		dirty = true
@@ -1002,7 +989,15 @@ func _tick_birds(now: int, events: Array) -> void:
 		_bird_item = ""
 	else:
 		_bird_kind = "gift"
-		_bird_item = "bottle" if _rng.randf() < float(_birds["bottle_chance"]) and inventory.by_id.has("bottle") else inventory.roll(_rng)
+		_bird_item = "bottle" if _rng.randf() < float(_birds["bottle_chance"]) and inventory.by_id.has("bottle") and item_wanted("bottle") else ""
+		var tries := 0
+		while _bird_item == "" and tries < 12:
+			tries += 1
+			var cand := inventory.roll(_rng)
+			if cand != "" and item_wanted(cand):
+				_bird_item = cand
+		if _bird_item == "":
+			_bird_kind = "none"
 	e["bird_act_ms"] = now + int(_birds["act_after_ms"])
 	events.append({"type": "bird_visit", "kind": _bird_kind, "item": _bird_item})
 	dirty = true
@@ -1072,19 +1067,9 @@ func _roll_junk() -> String:
 	var cfg: Dictionary = _cfg.get("lake_junk" if journey.on_island() else "junk", {})
 	if cfg.is_empty() or _rng.randf() >= float(cfg.get("chance", 0.0)):
 		return ""
-	var total := 0.0
-	for e in cfg.get("pool", []):
-		total += float(e[1])
-	if total <= 0.0:
-		return ""
-	var r := _rng.randf() * total
-	for e in cfg["pool"]:
-		r -= float(e[1])
-		if r < 0.0:
-			_last_junk = str(e[0])
-			break
+	_last_junk = _pick_pool(cfg.get("pool", []))
 	if _last_junk == "":
-		_last_junk = str(cfg["pool"][-1][0])
+		return ""
 	if not inventory.by_id.has(_last_junk):
 		_last_junk = ""
 	return _last_junk
@@ -1171,13 +1156,10 @@ func use_item(id: String) -> Dictionary:
 	var quest := ""
 	match str(d["use"]):
 		"letter":
-			# 漂流瓶：第一次打开是渔具店老板的信，开启支线；之后的瓶子里只有一点零钱
+			# 漂流瓶：里面是任务的信；没有新任务就是空瓶，不再给钱（也不会再出现新的瓶子）
 			quest = next_quest_letter()
 			if quest != "":
 				state.quests[quest] = "active"
-			else:
-				gold = _rng.randi_range(int(d.get("gold_min", 10)), int(d.get("gold_max", 60)))
-				state.wallet_gold += gold
 		"gold":
 			gold = _rng.randi_range(int(d["gold_min"]), int(d["gold_max"]))
 			state.wallet_gold += gold
@@ -1370,6 +1352,42 @@ func gear_stat(id: String) -> Array:
 		"line":
 			return ["暂无加成", ""]
 	return []
+
+## 只在有任务需要时才会出现的物品：没有任务要它，就不会捡到、钓到、收到。
+const QUEST_ONLY := ["bottle", "diary_page"]
+
+func item_wanted(id: String) -> bool:
+	if not QUEST_ONLY.has(id):
+		return true
+	if id == "bottle" and next_quest_letter() != "":
+		return true
+	for q in _quest_cfg_list():
+		var qid := str(q["id"])
+		if quest_state(qid) != "active":
+			continue
+		for n in quest_needs(qid):
+			if str(n[0]) == id and int(n[1]) < int(n[2]):
+				return true
+	return false
+
+## 按权重从 [[id, 权重], ...] 里抽一个；任务才用得到的物品没人要时跳过。池子空了返回 ""。
+func _pick_pool(pool: Array) -> String:
+	var total := 0.0
+	for e in pool:
+		if item_wanted(str(e[0])):
+			total += float(e[1])
+	if total <= 0.0:
+		return ""
+	var r := _rng.randf() * total
+	var last := ""
+	for e in pool:
+		if not item_wanted(str(e[0])):
+			continue
+		last = str(e[0])
+		r -= float(e[1])
+		if r < 0.0:
+			return last
+	return last
 
 ## 下一封漂流瓶里的信是哪个任务（前置任务没完成的不出，没有了返回 ""）。
 func next_quest_letter() -> String:

@@ -399,3 +399,6 @@
 ## v0.61：拱桥、正面钓鱼、图鉴翻页、自动规则
 - 新增正面小猫三帧（抛竿/钓鱼/收杆，帽子衣服层共用）；`world.bridge_lift` 拱桥；`game.bridge_spot_x/at_bridge_spot/nearest_spot_x/island_spot_reachable`。
 - `balance.auto` 加 island_fish_pct 80、reach_s 10、walk_px_s 70；`end_roam` 改为 ≤30% 去钓；提示文字改“空格键钓鱼”；蟹笼随时可收；`book.gd` 图鉴分页。测试 532 项 ALL TESTS PASS、SIM PASS。版本号 0.61。
+
+## v0.62：自动规则收窄、任务专属物品
+- `_auto_policy`：海上/岛上 >80% 回镇卖；去掉镇上 SOLD_OUT 自动出发与 ROAM 的策略分流。`game.item_wanted/_pick_pool/QUEST_ONLY` 过滤瓶子和日记残页；空瓶不给钱。测试 619 项 ALL TESTS PASS、SIM PASS。版本号 0.62。
