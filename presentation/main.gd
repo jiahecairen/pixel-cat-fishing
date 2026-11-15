@@ -79,6 +79,9 @@ var adapter
 var saver: SaveService
 var log: EventLog
 var _save_retry_at: int = 0     # 存档失败后下次重试的时刻
+var _save_fail_t0: int = 0      # 本轮连续写失败从什么时候开始（0 = 没在失败中）
+var _save_fail_toast: int = -100000   # 上次因写失败提醒玩家的时刻
+var _bak_notice_at: int = 0     # 读档回退的提示什么时候弹（0 = 不弹）
 var _low_power: bool = false
 const FPS_HIDDEN := 5            # 窗口最小化时的帧率
 var clock: Clock
@@ -194,6 +197,11 @@ func _ready() -> void:
 	log.write("app_start", {"version": ProjectSettings.get_setting("application/config/version", ""), "os": OS.get_name()})
 	var state := GameState.new()
 	var saved := saver.load_data()
+	if saver.last_source == "bak":
+		# 正式档读不出来、读的是上一份备份 —— 这就是丢了一段进度，得让玩家听见，不能悄悄糊过去
+		log.write("load_from_backup", {"path": saver.path})
+		push_warning("已回退到更早的一份存档（正式存档读不出来）")
+		_bak_notice_at = Time.get_ticks_msec() + 3400   # 晚点弹，理由见 _update_save_notice()
 	if not saved.is_empty() and not state.from_dict(saved):
 		push_warning("存档版本不兼容，已使用新存档（旧档保留为 .bak）")
 		state = GameState.new()
@@ -1286,6 +1294,15 @@ func _notification(what: int) -> void:
 func _quit() -> void:
 	_save_retry_at = 0
 	_save()
+	# 关窗口这一下要是没写进去，这一轮的进度就白干了：再补试两次，每次隔 200 毫秒
+	var tries := 0
+	while game != null and game.dirty and tries < 2:
+		OS.delay_msec(200)
+		_save_retry_at = 0
+		_save()
+		tries += 1
+	if game != null and game.dirty:
+		log.write("save_lost_on_quit", {"revision": game.state.revision, "why": saver.last_error})
 	log.write("app_quit", {"gold": game.state.wallet_gold if game != null else 0})
 	get_tree().quit()
 
@@ -1298,11 +1315,33 @@ func _save() -> void:
 		return
 	if saver.save(game.state.to_dict()):
 		game.dirty = false
+		if _save_fail_t0 != 0:
+			log.write("save_recovered", {"lost_seconds": (t - _save_fail_t0) / 1000.0, "revision": game.state.revision})
+			_save_fail_t0 = 0
+			_toast("存档补上了", "")
 	else:
 		# 写盘失败：内存里的进度保留（dirty 不清），5 秒后再试，不每帧硬写
 		_save_retry_at = t + 5000
-		log.write("save_failed", {"revision": game.state.revision})
+		if _save_fail_t0 == 0:
+			_save_fail_t0 = t
+			log.write("save_failed", {"revision": game.state.revision, "why": saver.last_error})
+		# 一直写不进去就每 20 秒提醒一次：不然玩家以为已经存好了，一关窗口全没
+		if t - _save_fail_toast > 20000:
+			_save_fail_toast = t
+			_toast("存档没写进去", "进度还在内存里，别关窗口")
 
+
+
+## 读档回退的提示晚几秒再弹：启动那一帧还有「收到一份礼物」的同款提示在排队，
+## 两个 call_deferred 挤在同一帧，后弹的会把先弹的顶掉（实测：回退提示一个像素都没画出来）。
+func _update_save_notice() -> void:
+	if _bak_notice_at == 0:
+		return
+	if Time.get_ticks_msec() < _bak_notice_at:
+		return
+	_bak_notice_at = 0
+	_bak_notice_at = 0
+	_toast("上次的存档没读出来", "已读更早的一份备份")
 
 ## 窗口最小化时降到 5 帧并停止重绘；逻辑照常推进（靠时间戳，不靠帧数）。
 func _update_power() -> void:
@@ -1378,6 +1417,7 @@ func _process(dt: float) -> void:
 	_track_window()
 	_update_mini_hover()
 	_layout()
+	_update_save_notice()
 	world.update(game.now_ms(), Time.get_ticks_msec())
 	_update_camera(dt)
 	if game.dirty:

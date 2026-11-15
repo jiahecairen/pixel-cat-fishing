@@ -79,6 +79,7 @@ func _init() -> void:
 		test_v097_no_helper_cycles()
 		test_v098_perf_hygiene()
 		test_v099_label_atlas_coverage()
+		test_v100_save_safety()
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -3226,3 +3227,61 @@ func test_v099_label_atlas_coverage() -> void:
 						bad_list += " %s:%s" % [fn, t]
 	check(lit >= 20, "静态扫到 %d 处写死的中文标签" % lit)
 	check(bad == 0, "写死的中文标签全都在图集里%s" % (("；漏了：" + bad_list) if bad > 0 else ""))
+
+
+func test_v100_save_safety() -> void:
+	print("v1.00: 存档不许悄悄丢（回退要吭声、写失败要说原因、失败别把唯一备份删了。下面出现的 WARNING 是预期的）")
+	var SS := preload("res://io/save_service.gd")
+	var sub := "t100"
+	var p := "user://" + sub + "/save.json"
+	# 建目录要用静态方法 + user:// 全路径：实例方法 DirAccess.open("user://").make_dir_recursive_absolute("t100")
+	# 会把相对路径按进程当前目录解释，结果在项目里凭空造个目录、user:// 那边却没建（io/event_log.gd 用的就是静态版）。
+	DirAccess.make_dir_recursive_absolute(p.get_base_dir())
+	var dir := DirAccess.open("user://")
+	check(DirAccess.open("user://" + sub) != null, "临时存档目录建在 user:// 里（不碰玩家真存档）")
+	var s1 = SS.new(p)
+	check(s1.load_data().is_empty() and s1.last_source == "", "空目录里读不到存档也不会瞎报来源")
+	check(s1.save({"save_version": 1, "gold": 7}), "第一次写盘成功")
+	var d1: Dictionary = s1.load_data()
+	check(d1.get("gold") == 7 and s1.last_source == "main", "读到的是正式档（last_source=main）")
+	check(not DirAccess.open("user://" + sub).file_exists(p.get_file() + ".bak"), "第一次写没有旧档，不该冒出 .bak")
+	check(s1.save({"save_version": 1, "gold": 9}), "第二次写盘成功")
+	var bak: String = FileAccess.get_file_as_string(p + ".bak")
+	check(s1.load_data().get("gold") == 9, "正式档是最新那份")
+	check(bak.contains("\"gold\":7") or bak.contains("\"gold\": 7"), "上一份留在 .bak 里（回退时有东西可读）")
+	var w := FileAccess.open(p, FileAccess.WRITE)
+	w.store_string('{"save_version": 1, "gold": '); w.close()   # 半截 JSON，模拟断电
+	var d2: Dictionary = s1.load_data()
+	check(d2.get("gold") == 7 and s1.last_source == "bak", "正式档写坏了会自动回退 .bak（读到的是上一份 7 金，不是最新的 9 金）")
+	var w2 := FileAccess.open(p + ".bak", FileAccess.WRITE)
+	w2.store_string("不是 JSON"); w2.close()
+	check(s1.load_data().is_empty() and s1.last_source == "", "两份都坏时返回空档、不崩、也不谎称读到了")
+	# 写不进去的情况：把"目录"做成一个普通文件，任何写入都该失败
+	var f := FileAccess.open("user://" + sub + "/afile", FileAccess.WRITE)
+	f.store_string("x"); f.close()
+	var bad = SS.new("user://" + sub + "/afile/save.json")
+	check(not bad.save({"save_version": 1}), "写不进去时 save() 返回 false（不是默默成功）")
+	check(bad.last_error.length() > 0, "写失败会带上原因：%s" % bad.last_error)
+	check(bad.last_error.contains("/afile/save.json.tmp"), "失败原因里说清楚是哪个文件没写成")
+	# 上层要真的把这三件事告诉玩家（提示文字必须在图集里，否则等于没说）
+	var main: String = FileAccess.get_file_as_string("res://presentation/main.gd")
+	check(main.contains("last_source == \"bak\""), "读到备份时会走提示分支")
+	# 实测教训：这条提示最早用 call_deferred 在 _ready 里弹，被同一帧排队的「收到一份礼物」顶掉，
+	# 整条提示一个像素都没画出来（坏档/好档两张截图的差异全是小猫走动的水纹噪声）。所以改成延后弹。
+	check(not main.contains('call_deferred("_toast", "上次的存档没读出来"'), "回退提示不再用 call_deferred（会被礼物提示顶掉）")
+	check(main.contains("_bak_notice_at = Time.get_ticks_msec() + 3400"), "回退提示延后 3.4 秒弹，躲开礼物提示")
+	check(main.contains("func _update_save_notice()"), "回退提示有专门的计时函数（用时间戳，不用帧数）")
+	check(main.contains("\"load_from_backup\"") and main.contains("\"save_recovered\"") and main.contains("\"save_lost_on_quit\""),
+		"回退、补写成功、退出时仍没写进去 三件事都写进事件日志")
+	check(main.contains("OS.delay_msec(200)"), "关窗口前会补试存档（不是一次失败就放弃）")
+	var labels: Dictionary = preload("res://presentation/labels.gd").RECTS
+	for t in ["上次的存档没读出来", "已读更早的一份备份", "存档没写进去", "进度还在内存里，别关窗口", "存档补上了"]:
+		check(labels.has(t), "存档提示文字在图集里: %s" % t)
+	var d := DirAccess.open("user://" + sub)
+	if d != null:
+		for fn in d.get_files():
+			d.remove(str(fn))
+	dir.remove(sub + "/save.json"); dir.remove(sub + "/save.json.bak"); dir.remove(sub + "/save.json.tmp")
+	dir.remove(sub + "/afile")
+	DirAccess.open("user://").remove(sub)
+	check(not DirAccess.open("user://").file_exists(sub), "测试把自己的临时存档目录清干净了（不碰玩家真存档）")

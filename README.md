@@ -328,6 +328,13 @@ macOS 上都在 `~/Library/Application Support/Godot/app_userdata/CatFishing/`�
 - `save.json`、`save.json.bak`：存档与上一份备份
 - `logs/events.log`：事件日志（一行一条 JSON；超过 512KB 轮转为 `events.log.1`）
 
+## 存档坏了 / 写不进去会怎样（v1.00 起）
+
+- **正式存档读不出来**：自动改读上一份备份 `save.json.bak`，同时事件日志记 `load_from_backup`，并在画面左上方弹两行红字「上次的存档没读出来／已读更早的一份备份」（开局约 3.4 秒后出现，停 3 秒）。下一次正常退出时坏档会被新档替换，**存档会自己修好**。
+- **存档写不进去**（磁盘满、目录不可写等）：进度仍留在内存里，每 20 秒提醒一次「存档没写进去／进度还在内存里，别关窗口」，写回去之后补一句「存档补上了」；事件日志里第一次失败记 `save_failed`（带原因）、恢复记 `save_recovered`。
+- **关窗口那一下正好写失败**：会自动补试两次（隔 200 毫秒）才放弃，实在没写进去记 `save_lost_on_quit`。
+- 任何一步失败，磁盘上都至少留着一份完整旧档：改名顺序是「先把正式档挪成 `.bak`，挪不动才删旧备份」，最后一步失败还会把旧档放回原位。
+
 ## 第三方素材
 
 界面中文标签用 [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 10px 预渲染成图集，字体以 SIL OFL 1.1 许可发布，许可文本在 `tools/art/fonts/OFL.txt`。新增文字时把它加到 `tools/art/generate.py` 的 `LABELS` 列表后重新生成。
