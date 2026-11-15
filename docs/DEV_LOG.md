@@ -484,3 +484,10 @@
 - 修理厂已完工项目不再绘制材料图标和数量。
 - Codex 开发副本使用 `_codex` 后缀；`build_codex.command` 会生成稳定路径 `build/CatFishing.app` 和版本副本 `build/CatFishing_v0.88_codex.app`。
 - 自动测试和画面目检状态见 C176。
+
+## v0.89：雾灯岛行业建筑与老柯立绘
+- 邮局确认寄件按钮显示完整应付金额（金/银/铜），费用汇总也显示精确拆分金额。
+- 为中年灯塔管理员老柯绘制专属工作服角色图，并用于岛上行走和对话立绘。
+- 修理厂、典当行、酒馆换成对应行业的像素外观：铁皮工具工坊、天平金币招牌、渔港木酒馆。素材仍由 `tools/art/generate.py` 按项目调色板生成。
+- `build_codex.command` 将按版本号生成 `CatFishing_v0.89_codex.app` 和稳定测试入口 `CatFishing.app`。
+- 自动测试及实机画面验证状态见 C177。

@@ -230,7 +230,7 @@ func _portrait(who: String, pos: Vector2, scale: float, lit: bool, flip: bool) -
 		var bt: Texture2D = m.tex["cat/portrait_bust"]
 		m.draw_texture(bt, Vector2(-bt.get_width() if flip else 0, 0), tint)
 	else:
-		var tex_name := "villager_%d" % int(_d.get("faces", {}).get(who, 1))
+		var tex_name := "keeper_ko" if who == "keeper" else "villager_%d" % int(_d.get("faces", {}).get(who, 1))
 		if m.tex.has(tex_name):
 			m.tex_frame(tex_name, Vector2(-16 if flip else 0, 0), 0, 2, tint)
 	m.draw_set_transform_matrix(Transform2D(Vector2(1, 0), Vector2(0, 1), m.ui_off))

@@ -284,3 +284,9 @@
 - 静态检查：`data/balance.json` 可解析，`git diff --check` 通过。
 - Godot 导入和 macOS Release 导出：由 `build_codex.command` 执行；输出 `build/CatFishing.app` 与 `build/CatFishing_v0.88_codex.app`。
 - 未运行：run_tests、sim_long_run、画面截图和实际启动操作。
+
+## C177 v0.89：邮费显示、老柯立绘、雾灯岛行业建筑
+- 素材生成：`tools/art/generate.py` 输出的 214 张素材通过 24 色调色板校验；新增老柯、修理厂、典当行、酒馆图样已在像素放大预览中检查。
+- Godot 4.7.2 导入与 macOS Release 导出：成功，生成 `build/CatFishing.app` 和 `build/CatFishing_v0.89_codex.app`；两者 `Info.plist` 版本均为 0.89。
+- `git diff --check`、`data/balance.json` JSON 解析：通过。
+- 未运行：run_tests、sim_long_run、实际启动游戏和游戏内画面截图。

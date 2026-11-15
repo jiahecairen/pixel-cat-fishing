@@ -607,6 +607,117 @@ def lighthouse():
     return c
 
 
+def keeper_ko():
+    """老柯：中年灯塔管理员，灰发雨帽、反光工作服和腰挂信号灯。16×22×2。"""
+    frames = []
+    for step in range(2):
+        c = Canvas(16, 22)
+        # 防水工作帽与鬓角里的灰发
+        c.rect(5, 1, 10, 2, "A"); c.rect(4, 2, 11, 3, "a")
+        c.rect(4, 3, 5, 5, "A"); c.rect(10, 3, 11, 5, "A")
+        c.rect(5, 3, 10, 9, "h"); c.rect(6, 3, 9, 4, "n")
+        c.rect(3, 3, 12, 4, "b"); c.rect(4, 2, 11, 2, "c")
+        c.rect(2, 5, 13, 5, "y")                 # 雨帽反光帽檐
+        c.pts([(6, 6), (9, 6)], "K")
+        c.pts([(6, 8), (7, 9), (8, 9), (9, 8)], "A")  # 修整过的灰胡茬
+        c.rect(6, 7, 9, 7, "h")
+        # 厚实的海事工作夹克：高领、反光肩带、胸前灯塔徽章
+        c.rect(6, 10, 9, 11, "n")
+        c.rect(4, 11, 11, 18, "B"); c.rect(5, 11, 10, 12, "b")
+        c.pts([(4, 12), (5, 12), (6, 13), (7, 14), (8, 14), (9, 15)], "y")
+        c.rect(7, 12, 8, 12, "c")
+        c.pts([(6, 15), (9, 16), (9, 17)], "b")
+        c.rect(3, 12, 4, 16, "A"); c.rect(11, 12, 12, 16, "A")
+        c.pts([(5, 19), (6, 19), (9, 19), (10, 19)], "K")
+        c.rect(5, 20, 7, 20, "A"); c.rect(9, 20, 11, 20, "A")
+        c.rect(4, 21, 7, 21, "K"); c.rect(9, 21, 12, 21, "K")
+        # 腰间信号灯，一帧轻轻摆动
+        lx = 11 if step == 0 else 12
+        c.rect(lx, 16, lx + 1, 18, "y"); c.set(lx, 17, "W")
+        c.outline()
+        frames.append(c)
+    return sheet(frames)
+
+
+def island_repair_shop():
+    """雾灯岛修理厂：铁皮斜屋顶、齿轮窗、工具挂架和门边木料。52×42。"""
+    c = Canvas(52, 42)
+    c.rect(5, 16, 46, 40, "A"); c.rect(7, 18, 44, 39, "a")
+    for x in range(8, 44, 6):
+        c.rect(x, 19, x, 38, "A")          # 波纹铁皮墙
+        c.set(x + 1, 20, "W")
+    c.rect(3, 12, 48, 16, "B")             # 斜屋顶的檐口
+    for x in range(5, 48, 7):
+        c.set(x, 13, "c"); c.set(x + 1, 14, "y")
+    c.rect(8, 5, 44, 11, "A"); c.rect(11, 2, 41, 4, "a")
+    c.rect(15, 0, 38, 1, "A"); c.rect(19, 1, 34, 1, "a")
+    c.rect(10, 22, 20, 30, "B"); c.rect(11, 23, 19, 29, "c")
+    c.rect(14, 23, 14, 29, "A"); c.rect(11, 26, 19, 26, "A")  # 工坊窗
+    # 门和旁边的工具架
+    c.rect(24, 24, 33, 40, "K"); c.rect(25, 25, 32, 39, "o")
+    c.rect(29, 25, 32, 39, "O"); c.set(26, 32, "y")
+    c.rect(37, 22, 44, 23, "O"); c.rect(38, 24, 39, 32, "o")
+    c.pts([(40, 24), (41, 25), (42, 24), (43, 23)], "a")  # 挂起的扳手
+    c.rect(35, 34, 47, 38, "o"); c.rect(35, 34, 47, 35, "n")
+    c.pts([(37, 36), (41, 37), (45, 36)], "O")
+    c.outline()
+    return c
+
+
+def island_pawnshop():
+    """雾灯岛典当行：砖红店面、金边遮雨棚、天平与典当金币窗。48×40。"""
+    c = Canvas(48, 40)
+    c.rect(4, 15, 43, 38, "R"); c.rect(6, 17, 41, 37, "r")
+    for y in (21, 29, 35):
+        c.pts([(7, y), (13, y), (21, y), (28, y), (36, y)], "R")
+    c.rect(2, 12, 45, 16, "O")
+    for x in range(3, 45, 6):
+        c.rect(x, 13, x + 2, 15, "g" if (x // 6) % 2 == 0 else "w")
+        c.set(x, 12, "y")
+    # 天平招牌
+    c.rect(20, 2, 27, 3, "y"); c.rect(23, 3, 24, 9, "H")
+    c.rect(17, 5, 30, 6, "h"); c.rect(18, 7, 19, 8, "y"); c.rect(28, 7, 29, 8, "y")
+    c.pts([(16, 9), (17, 10), (18, 10), (19, 9), (28, 9), (29, 10), (30, 10), (31, 9)], "y")
+    c.rect(21, 9, 26, 10, "H")
+    # 展示窗里的金币与柜台
+    c.rect(7, 20, 18, 30, "A"); c.rect(8, 21, 17, 29, "c")
+    c.ellipse(12, 25, 3, 3, "y"); c.ellipse(12, 25, 1.5, 1.5, "h"); c.set(12, 25, "W")
+    c.rect(7, 31, 19, 33, "O"); c.rect(7, 31, 19, 31, "y")
+    c.rect(24, 22, 33, 38, "K"); c.rect(25, 23, 32, 37, "o"); c.rect(29, 23, 32, 37, "O")
+    c.set(26, 31, "y")
+    c.pts([(36, 22), (37, 20), (38, 22), (39, 20), (40, 22)], "h")
+    c.outline()
+    return c
+
+
+def island_tavern():
+    """雾灯岛酒馆：渔港木屋、红色风浪屋顶、啤酒杯招牌和门边酒桶。56×42。"""
+    c = Canvas(56, 42)
+    c.rect(5, 15, 50, 40, "K"); c.rect(7, 17, 48, 39, "o")
+    for x in range(8, 48, 5):
+        c.rect(x, 19, x, 38, "O"); c.set(x + 1, 20, "n")
+    # 厚檐红瓦与抗风压顶木
+    c.rect(3, 12, 52, 16, "R")
+    for x in range(5, 51, 6):
+        c.rect(x, 13, x + 2, 14, "r"); c.set(x + 1, 15, "w")
+    c.rect(8, 8, 47, 11, "R"); c.rect(14, 4, 41, 7, "r")
+    c.rect(20, 1, 35, 3, "R"); c.rect(23, 0, 32, 0, "A")
+    # 两扇暖窗、厚木门、酒桶
+    c.rect(9, 21, 19, 29, "K"); c.rect(10, 22, 18, 28, "y")
+    c.rect(14, 22, 14, 28, "o"); c.rect(10, 25, 18, 25, "o")
+    c.rect(36, 21, 45, 29, "K"); c.rect(37, 22, 44, 28, "y")
+    c.rect(40, 22, 40, 28, "o"); c.rect(37, 25, 44, 25, "o")
+    c.rect(23, 23, 32, 40, "K"); c.rect(24, 24, 31, 39, "O"); c.set(29, 32, "y")
+    c.ellipse(5, 35, 4, 4, "o"); c.ellipse(5, 35, 2.5, 2.5, "n")
+    c.rect(1, 35, 9, 36, "O"); c.rect(1, 33, 9, 33, "O")
+    # 门檐下的酒杯招牌
+    c.rect(42, 3, 43, 7, "A"); c.rect(39, 7, 46, 12, "y")
+    c.rect(40, 8, 45, 10, "h"); c.rect(41, 10, 44, 11, "W")
+    c.rect(42, 12, 43, 14, "a")
+    c.outline()
+    return c
+
+
 def tree():
     c = Canvas(24, 36)
     c.rect(10, 22, 13, 35, "o"); c.rect(10, 22, 10, 35, "O")
@@ -2047,6 +2158,10 @@ def build():
         "house_1": save(house("l", "f", "b", "B", w=40, door_x=6), "house_1"),
         "house_2": save(house("W", "a", "g", "G", w=52, door_x=22), "house_2"),
         "lighthouse": save(lighthouse(), "lighthouse"),
+        "keeper_ko": save(keeper_ko(), "keeper_ko"),
+        "island_repair": save(island_repair_shop(), "island_repair"),
+        "island_pawn": save(island_pawnshop(), "island_pawn"),
+        "island_tavern": save(island_tavern(), "island_tavern"),
         "house_3": save(house("n", "o", "A", "a", w=52, door_x=22), "house_3"),
         "scene_wreck": save(scene_wreck(), "scene_wreck"),
         "house_4": save(house("a", "A", "r", "R", w=52, door_x=22), "house_4"),

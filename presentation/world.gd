@@ -536,31 +536,19 @@ func _draw_island_buildings(left: float, right: float, t: int) -> void:
 	var dark: float = float(g.sky()["dark"])
 	var rx: float = g.repair_x()
 	if rx > left - 50 and rx < right + 50:
-		var x0 := rx - 20.0
-		var y0 := float(GROUND_Y) - 30.0
-		m.draw_rect(Rect2(x0 - 1, y0 + 5, 42, 26), Pal.U_K)
-		m.draw_rect(Rect2(x0, y0 + 6, 40, 24), Pal.L_N)
-		for k in range(0, 40, 6):
-			m.draw_rect(Rect2(x0 + k, y0 + 6, 1, 24), Pal.L_O)
-		m.draw_rect(Rect2(x0 - 3, y0, 46, 7), Pal.U_K)           # 单坡顶
-		m.draw_rect(Rect2(x0 - 2, y0 + 1, 44, 5), Pal.L_A)
-		m.draw_rect(Rect2(x0 - 2, y0 + 5, 44, 1), Pal.U_A)
-		m.draw_rect(Rect2(rx - 4, y0 + 15, 9, 15), Pal.U_O)      # 门
-		m.draw_rect(Rect2(x0 + 4, y0 + 12, 8, 7), Pal.L_C)       # 窗
-		m.draw_rect(Rect2(x0 + 4, y0 + 15, 8, 1), Pal.U_O)
-		m.draw_rect(Rect2(x0 + 28, y0 + 20, 11, 10), Pal.U_O)    # 门口的木板堆
-		for k in 3:
-			m.draw_rect(Rect2(x0 + 28, y0 + 22 + k * 3, 11, 2), Pal.L_O if k % 2 == 0 else Pal.L_N)
-		_plate_at(rx, GROUND_Y - 36.0 - 8.0, "修理厂")
+		var x0 := rx - 26.0
+		var y0 := float(GROUND_Y) - 42.0
+		m.draw_texture(m.tex["island_repair"], Vector2(x0, y0))
+		_plate_at(rx, GROUND_Y - 49.0, "修理厂")
 		var busy := false
 		for p in g.works.projects():
 			if g.works.status(str(p["id"])) == "building":
 				busy = true
 		if busy:
 			for k in 4:                                           # 脚手架
-				m.draw_rect(Rect2(x0 - 4 + k * 14, y0 - 10, 2, 40), Pal.U_O)
-			m.draw_rect(Rect2(x0 - 4, y0 - 10, 44, 2), Pal.U_O)
-			m.draw_rect(Rect2(x0 - 4, y0 + 2, 44, 2), Pal.L_O)
+				m.draw_rect(Rect2(x0 - 3 + k * 16, y0 - 8, 2, 44), Pal.U_O)
+			m.draw_rect(Rect2(x0 - 3, y0 - 8, 54, 2), Pal.U_O)
+			m.draw_rect(Rect2(x0 - 3, y0 + 3, 54, 2), Pal.L_O)
 		var nw: int = mini(g.works.workers(), 3)
 		for k in nw:                                              # 雇来的工人
 			var wx := rx - 30.0 - float(k) * 18.0 if k < 2 else rx + 30.0
@@ -570,21 +558,13 @@ func _draw_island_buildings(left: float, right: float, t: int) -> void:
 				m.tex_frame("sparkle", Vector2(wx - 4, GROUND_Y - 24), (t / 110) % 2, 2)
 	var px: float = g.pawn_x()
 	if px > left - 50 and px < right + 50:
-		# 典当行：砖红墙、绿色遮阳篷、门边挂着三个金球的招牌
-		var x2 := px - 18.0
-		var y2 := float(GROUND_Y) - 30.0
-		m.draw_rect(Rect2(x2 - 1, y2 + 5, 38, 26), Pal.U_K)
-		m.draw_rect(Rect2(x2, y2 + 6, 36, 24), Pal.U_R)
-		for k in range(0, 36, 6):
-			m.draw_rect(Rect2(x2 + k, y2 + 6, 1, 24), Pal.U_K)
-		m.draw_rect(Rect2(x2 - 2, y2 + 1, 40, 6), Pal.U_K)
-		for k in 7:
-			m.draw_rect(Rect2(x2 - 1 + k * 6, y2 + 2, 6, 4), Pal.L_G if k % 2 == 0 else Pal.L_W)
-		m.draw_rect(Rect2(px - 3, y2 + 16, 8, 14), Pal.U_O)
-		m.draw_rect(Rect2(x2 + 3, y2 + 13, 8, 7), Pal.L_Y if dark > 0.3 else Pal.L_C)
-		for k in 3:                                               # 三个金球
-			m.draw_rect(Rect2(x2 + 26 + (k % 2) * 6 - 3 * (k / 2), y2 + 10 + k * 4, 4, 3), Pal.L_Y)
-		_plate_at(px, GROUND_Y - 36.0 - 8.0, "典当行")
+		# 典当行：红砖店面、金边雨棚，招牌是天平，窗里陈列金币。
+		var x2 := px - 24.0
+		var y2 := float(GROUND_Y) - 40.0
+		m.draw_texture(m.tex["island_pawn"], Vector2(x2, y2))
+		if dark > 0.3:
+			m.draw_rect(Rect2(x2 + 9, y2 + 22, 8, 6), Color(Pal.L_Y, 0.24))
+		_plate_at(px, GROUND_Y - 47.0, "典当行")
 	var trx: float = g.trash_x()
 	if trx > left - 30 and trx < right + 30:
 		# 垃圾箱：灰色铁桶，盖子半掀
@@ -597,27 +577,17 @@ func _draw_island_buildings(left: float, right: float, t: int) -> void:
 		m.draw_rect(Rect2(trx - 7, GROUND_Y - 18, 14, 1), Pal.L_W)
 	var tx: float = g.tavern_x()
 	if tx > left - 50 and tx < right + 50:
-		var x1 := tx - 20.0
-		var y1 := float(GROUND_Y) - 34.0
-		m.draw_rect(Rect2(x1 + 28, y1 - 8, 6, 12), Pal.U_A)                           # 烟囱
-		m.draw_rect(Rect2(x1 - 1, y1 + 9, 42, 26), Pal.U_K)
-		m.draw_rect(Rect2(x1, y1 + 10, 40, 24), Pal.L_W if dark < 0.4 else Pal.L_N)
-		m.draw_rect(Rect2(x1, y1 + 28, 40, 6), Pal.U_O)
-		for k in 10:                                                                   # 红色屋顶
-			m.draw_rect(Rect2(x1 - 3 + k * 2, y1 + 8 - k, 46 - k * 4, 2), Pal.L_R if k % 3 != 2 else Pal.U_R)
-		m.draw_rect(Rect2(tx - 4, y1 + 19, 9, 15), Pal.U_O)
-		var win := Pal.L_Y if dark > 0.3 else Pal.L_C
-		m.draw_rect(Rect2(x1 + 4, y1 + 17, 8, 7), win)
-		m.draw_rect(Rect2(x1 + 28, y1 + 17, 8, 7), win)
+		var x1 := tx - 28.0
+		var y1 := float(GROUND_Y) - 42.0
+		m.draw_texture(m.tex["island_tavern"], Vector2(x1, y1))
 		if dark > 0.3:
-			m.draw_rect(Rect2(x1 + 2, y1 + 15, 12, 11), Color(Pal.L_Y, 0.15))
-			m.draw_rect(Rect2(x1 + 26, y1 + 15, 12, 11), Color(Pal.L_Y, 0.15))
-		m.draw_rect(Rect2(x1 + 31, y1 + 10, 1, 4), Pal.U_K)
-		_plate_at(tx, GROUND_Y - 42.0 - 8.0, "酒馆")
+			m.draw_rect(Rect2(x1 + 10, y1 + 23, 8, 6), Color(Pal.L_Y, 0.18))
+			m.draw_rect(Rect2(x1 + 37, y1 + 23, 7, 6), Color(Pal.L_Y, 0.18))
+		_plate_at(tx, GROUND_Y - 49.0, "酒馆")
 		# 烟囱的烟
 		for k in 3:
 			var ph := fposmod(float(t) / 2600.0 + float(k) / 3.0, 1.0)
-			m.draw_rect(Rect2(x1 + 30 + sin(ph * 6.0) * 2.0, y1 - 10 - ph * 18.0, 3, 3), Color(Pal.L_W, 0.7 * (1.0 - ph)))
+			m.draw_rect(Rect2(x1 + 27 + sin(ph * 6.0) * 2.0, y1 - 8 - ph * 16.0, 3, 3), Color(Pal.L_W, 0.7 * (1.0 - ph)))
 	# 整修栈桥完工：码头边多了两盏灯
 	if g.works.is_done("pier"):
 		var lx: float = g.island_land_x()
@@ -779,7 +749,7 @@ func _draw_island(left: float, right: float, bottom: float, t: int) -> void:
 	# 灯塔看守：站在灯塔脚下，面朝码头；有事可做时头顶冒一个黄色的"!"
 	var kx: float = m.game.island_keeper_x()
 	if kx > left - 30 and kx < right + 4:
-		m.tex_frame_flipped("villager_3", Vector2(kx, GROUND_Y - 19), 0, 2)
+		m.tex_frame_flipped("keeper_ko", Vector2(kx, GROUND_Y - 22), (t / 900) % 2, 2)
 		var qid: String = m.game.room_quest("lighthouse")
 		if island_near_keeper(float(m.game.journey.roam_x())) and not m.mini:
 			draw_talk_bubble(Vector2(kx + 1, GROUND_Y - 44), t)

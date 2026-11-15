@@ -3,6 +3,7 @@ extends RefCounted
 ## 和 menu.gd 一样借用主节点 m 的绘制方法，坐标是界面坐标。
 
 const Pal := preload("res://presentation/palette.gd")
+const MoneyC := preload("res://core/money.gd")
 
 var open: bool = false
 var sell_mode: bool = false   # 在典当行打开的（只有这里能卖东西）
@@ -181,6 +182,18 @@ func _mail_address_rect() -> Rect2:
 func _all_rect() -> Rect2:
 	var u := _use_rect()
 	return Rect2(u.position.x - u.size.x - 3, u.position.y, u.size.x, u.size.y)
+
+func _mail_send_rect() -> Rect2:
+	var back := _use_rect()
+	var w := 72.0 if m.mini else 78.0
+	return Rect2(back.position.x - w - 3.0, back.position.y, w, back.size.y)
+
+func _mail_send_label() -> String:
+	var copper: int = m.game.mail_quote(mail_place_id, mail_dest, draft)
+	var out := "寄出"
+	for part in MoneyC.parts(copper):
+		out += "%d%s" % [int(part[1]), {"gold": "金", "silver": "银", "copper": "铜"}[str(part[0])]]
+	return out
 
 ## 仓库里的"使用"按钮：直接用（或装备）选中的东西，不用先取出来。
 func _wh_use_rect() -> Rect2:
@@ -518,7 +531,7 @@ func click(p: Vector2) -> bool:
 			if _use_rect().has_point(p):
 				mail_step = 1
 				m.play("click")
-			elif _sell_all_rect().has_point(p):
+			elif _mail_send_rect().has_point(p):
 				mail_send_now()
 		elif tab == 1:
 			if _use_rect().has_point(p):
@@ -689,7 +702,7 @@ func _draw_mail_buttons(r: Rect2, id: String) -> void:
 			_btn(_sell_all_rect(), "确认地址", Pal.L_Y, Pal.U_H)
 		else:
 			_btn(_use_rect(), "返回", Pal.L_A, Pal.U_A)
-			_btn(_sell_all_rect(), "付费寄出", Pal.L_Y, Pal.U_H)
+			_btn(_mail_send_rect(), _mail_send_label(), Pal.L_Y, Pal.U_H)
 	elif tab == 1:
 		_btn(_use_rect(), "领这组", Pal.L_G, Pal.U_G)
 	elif tab == 2:
@@ -718,7 +731,7 @@ func _draw_mail_info(r: Rect2) -> void:
 			line = "确认寄往：%s" % _mail_address_name()
 		m.dyn_text(line, Vector2(x, r.position.y + (14 if m.mini else 2)), Pal.L_W)
 		if mail_step == 2 and n > 0:
-			m.draw_money(g.mail_quote(mail_place_id, mail_dest, draft), Vector2(x + m.dyn_text_width(line) + 6, r.position.y + (13 if m.mini else 1)), Pal.L_Y)
+			m.draw_money_full(g.mail_quote(mail_place_id, mail_dest, draft), Vector2(x + m.dyn_text_width(line) + 6, r.position.y + (13 if m.mini else 1)), Pal.L_Y)
 		elif mail_step == 0:
 			m.dyn_text("选好物品后进入地址选择", Vector2(x, r.position.y + (24 if m.mini else 14)), Pal.L_A)
 		elif mail_step == 2:
