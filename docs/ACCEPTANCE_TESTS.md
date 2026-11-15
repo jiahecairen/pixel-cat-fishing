@@ -423,3 +423,4 @@ HOME=/tmp/坏档home CATFISH_SAVE=/tmp/坏档 build/CatFishing_v1.00_Qwen_debug.
 - **「存档没写进去」这条提示的真机表现**：只验了 `save()` 返回 false + 带原因，**没有真的写满磁盘或把目录设成只读**跑一遍游戏。`save_recovered`（"存档补上了"）同理。
 - `save_lost_on_quit`（退出时仍未写进去）只在代码路径里，没在真机上触发过。
 - **v1.00 的 35 画面体检**（`./tools/perf/leak_sweep.sh 240 build/CatFishing_v1.00_Qwen_debug.app /tmp/v100_shots`，退出码 0）：`✓ 泄漏扫描通过：35 个画面退出时都没有泄漏、没有缺字，每个都留下了自己的截图`，35 行**退出码／泄漏行／`SCRIPT ERROR`／缺字全 0**，35 张截图 5–25 KB 在 `/tmp/v100_shots/`（最小 `02_迷你视图.png` 5.0 KB，最大 `15_菜单.png` 25 KB）；唯一的软提示还是 `矿井开挖 与别的画面完全相同`（第 240 帧还没画到挥镐那一帧，只提示不判失败）。截图**我没有肉眼看过**。
+- 挂机 20 分钟（`./tools/perf/idle_rss.sh 20 build/CatFishing_v1.00_Qwen_debug.app`）：首段平均 184.2 MB → 末段 111.0 MB（−39.7%）、CPU 平均 5.4%（最大 6.8%），`✓ 判定：挂着没一直在涨`。**未验**：比 20 分钟更长的挂机没测过；RSS 绝对值随机器状态浮动，不能当预算。
