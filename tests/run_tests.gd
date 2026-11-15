@@ -74,6 +74,7 @@ func _init() -> void:
 		test_v088_ticket_and_locker(balance, fish)
 		test_v093_open_shafts(balance, fish)
 		test_v094_shaft_themes(balance, fish)
+		test_v095_shaft_backdrop(balance, fish)
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -2861,3 +2862,76 @@ func test_v094_shaft_themes(balance: Dictionary, fish: Array) -> void:
 		if str((th[k] as Dictionary).get("name", "")).length() < 3:
 			named_all = false
 	check(named_all, "名字都不是占位符（至少三个字）")
+
+func test_v095_shaft_backdrop(balance: Dictionary, fish: Array) -> void:
+	print("v0.95: 每口井的背景、黑暗、灯光也有自己的颜色")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(95))
+	var mn = g.mine
+	mn.ensure(clock.t)
+	var Pal := preload("res://presentation/palette.gd")
+	var MV := preload("res://presentation/mine_view.gd")
+	var th: Dictionary = balance.get("mine", {}).get("shaft_themes", {})
+	var have_all := true
+	var palette_only := true
+	for k in th.keys():
+		var t: Dictionary = th[k]
+		for slot in ["bg", "fog", "lamp"]:
+			var key := str(t.get(slot, ""))
+			if key == "":
+				have_all = false
+			elif not Pal.BY_KEY.has(key):
+				palette_only = false
+	check(have_all, "五口井都写了背景（bg）、黑暗（fog）、灯光（lamp）三个颜色位")
+	check(palette_only, "背景、黑暗、灯光用的都是调色板里的键，画不出 24 色以外的颜色")
+	var bgs: Array = []
+	var lamps: Array = []
+	for i in range(1, 6):
+		var bk: String = mn.shaft_color(i, "bg")
+		if not bgs.has(bk):
+			bgs.append(bk)
+		var lk: String = mn.shaft_color(i, "lamp")
+		if not lamps.has(lk):
+			lamps.append(lk)
+	check(bgs.size() >= 4, "五口井的背景色至少有 4 种不一样（%s）" % "、".join(PackedStringArray(bgs)))
+	check(lamps.size() >= 4, "五口井的灯光色至少有 4 种不一样（%s）" % "、".join(PackedStringArray(lamps)))
+	# 1 号井的染色强度是 0，这三个函数必须原样返回旧颜色
+	check(MV.shaft_backdrop(mn.shaft_color(1, "bg"), 0.0) == Pal.U_K, "混 0 成的背景 = 原来的深紫黑 Pal.U_K，一个字节都没改")
+	check(MV.shaft_backdrop(mn.shaft_color(1, "bg"), mn.shaft_mix(1)) == Pal.U_K, "1 号井按 json 里的强度算出来还是原来的背景色")
+	check(MV.shaft_darkness(mn.shaft_color(1, "fog"), 0.0, 0.5) == Color(0.03, 0.02, 0.05, 0.5), "混 0 成的黑暗 = 原来的黑（只换色相，不改透明度）")
+	check(MV.shaft_darkness(mn.shaft_color(1, "fog"), mn.shaft_mix(1), 0.75).a == 0.75, "黑暗叠加的透明度不受配色影响")
+	check(MV.shaft_lamp(mn.shaft_color(1, "lamp"), mn.shaft_mix(1)) == Pal.L_Y, "1 号井的灯光还是原来的暖黄 Pal.L_Y")
+	# 别的井要真的不一样，但不能变亮、变花
+	var shifted := true
+	var dark_enough := true
+	var bgcols: Array = []
+	for i in range(1, 6):
+		var c: Color = MV.shaft_backdrop(mn.shaft_color(i, "bg"), mn.shaft_mix(i))
+		bgcols.append(c)
+		if i >= 2 and c == Pal.U_K:
+			shifted = false
+		if c.get_luminance() > 0.25:
+			dark_enough = false
+	check(shifted, "2–5 号井的背景确实不是原来那个颜色")
+	check(dark_enough, "染完色背景还是暗的（亮度都 ≤ 0.25）：井底不会变成彩色卡片")
+	var uniq := true
+	for i in bgcols.size():
+		for j in range(i + 1, bgcols.size()):
+			if bgcols[i] == bgcols[j]:
+				uniq = false
+	check(uniq, "五口井的背景色两两不同（截图里能一眼看出换了口井）")
+	var dark_ok := true
+	for i in range(1, 6):
+		var d: Color = MV.shaft_darkness(mn.shaft_color(i, "fog"), mn.shaft_mix(i), 1.0)
+		if d.get_luminance() > 0.06:
+			dark_ok = false
+	check(dark_ok, "黑暗叠加再怎么染色也还是黑的（亮度 ≤ 0.06），不会把矿洞照亮")
+	var lamp_ok := true
+	for i in range(2, 6):
+		var l: Color = MV.shaft_lamp(mn.shaft_color(i, "lamp"), mn.shaft_mix(i))
+		if l.get_luminance() < Pal.L_Y.get_luminance() * 0.5:
+			lamp_ok = false
+	check(lamp_ok, "每口井的灯光都够亮（不低于原暖黄的一半）：反光点还看得见")
+	check(MV.shaft_backdrop("没有这个键", 0.9) == Pal.U_K, "写了个调色板里没有的键，背景退回原来的深紫黑，不会崩")
+	check(MV.shaft_backdrop(mn.shaft_color(3, "bg"), 5.0) == MV.shaft_backdrop(mn.shaft_color(3, "bg"), 1.0), "染色强度写大了会被夹到 1")
+	check(MV.shaft_backdrop(mn.shaft_color(3, "bg"), -3.0) == Pal.U_K, "染色强度写成负数等于不染")

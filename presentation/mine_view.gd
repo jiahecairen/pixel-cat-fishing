@@ -344,6 +344,23 @@ func _tint(key: String, mix: float) -> Color:
 	var l: float = maxf(0.08, (c.r + c.g + c.b) / 3.0)
 	return Color.WHITE.lerp(Color(c.r / l, c.g / l, c.b / l, 1.0), clampf(mix, 0.0, 1.0))
 
+## 井底背景色：往主题色上混一点（最多混一半，别让井底变成彩色）。mix = 0 时就是原来的深紫黑。
+static func shaft_backdrop(key: String, mix: float) -> Color:
+	var k: Color = Pal.BY_KEY.get(key, Pal.U_K)
+	return Pal.U_K.lerp(k, clampf(mix, 0.0, 1.0) * 0.5)
+
+## 黑暗叠加：还是这么黑，只是黑得偏一点色（把主题色压到 16% 亮度再混）。mix = 0 时和以前逐字节一致。
+static func shaft_darkness(key: String, mix: float, a: float) -> Color:
+	var k: Color = Pal.BY_KEY.get(key, Pal.U_K)
+	var c := Color(0.03, 0.02, 0.05).lerp(Color(k.r * 0.16, k.g * 0.16, k.b * 0.16), clampf(mix, 0.0, 1.0) * 0.6)
+	c.a = clampf(a, 0.0, 1.0)
+	return c
+
+## 矿石反光 / 灯光色：主题色提亮一点，当"这口井的灯是什么色温"。mix = 0 时就是原来的暖黄。
+static func shaft_lamp(key: String, mix: float) -> Color:
+	var k: Color = Pal.BY_KEY.get(key, Pal.L_Y)
+	return Pal.L_Y.lerp(k.lerp(Color.WHITE, 0.35), clampf(mix, 0.0, 1.0) * 0.7)
+
 func _shaft_now() -> int:
 	var mn = m.game.mine
 	return clampi(mn.shaft_id(), 1, maxi(1, mn.shaft_count()))
@@ -1204,7 +1221,13 @@ func _draw_mine(view: Vector2, t: int) -> void:
 		cam += Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).round() * _shake_amp * k
 	else:
 		_shake_amp = 0.0
-	m.draw_rect(Rect2(Vector2.ZERO, view), Pal.U_K)
+	# 每口井的背景、黑暗、灯光都按自己的主题来（1 号井 mix = 0 → 颜色和以前一模一样）
+	var sh := _shaft_now()
+	var mix: float = m.game.mine.shaft_mix(sh)
+	var bg_col := shaft_backdrop(m.game.mine.shaft_color(sh, "bg"), mix)
+	var fog_key: String = str(m.game.mine.shaft_color(sh, "fog"))   # 这里 m.game.mine 没有类型，得显式写 String
+	var lamp_col := shaft_lamp(m.game.mine.shaft_color(sh, "lamp"), mix)
+	m.draw_rect(Rect2(Vector2.ZERO, view), bg_col)
 	m.draw_set_transform(-cam)
 	var x0 := int(floor(cam.x / CELL)) - 1
 	var x1 := int(ceil((cam.x + view.x) / CELL)) + 1
@@ -1212,8 +1235,6 @@ func _draw_mine(view: Vector2, t: int) -> void:
 	var y1 := int(ceil((cam.y + view.y) / CELL)) + 1
 	var now: int = m.game.now_ms()
 	var R: float = mn.light_radius()
-	var sh := _shaft_now()
-	var mix: float = mn.shaft_mix(sh)
 	var rock_tint := _tint(mn.shaft_color(sh, "rock"), mix)      # 石头、岩壁、崖壁
 	var floor_tint := _tint(mn.shaft_color(sh, "stone"), mix * 0.6)   # 地板只染轻一点，别把小猫也盖住
 	var rim_col: Color = _shaft_color(sh, "rim")
@@ -1252,7 +1273,7 @@ func _draw_mine(view: Vector2, t: int) -> void:
 				var seen := Vector2(x + 0.5 - fp.x, y + 0.5 - fp.y).length() <= R * 0.8
 				var gl: int = absi(hash([x, y, mn.floor_n(), "glint"])) % 100
 				if seen and ((o != "" and gl < 40) or (o == "" and b != "granite" and gl < 8)):
-					var gc: Color = Pal.L_Y if gl % 2 == 0 else Pal.L_C
+					var gc: Color = Pal.L_Y.lerp(lamp_col, mix * 0.6) if gl % 2 == 0 else Pal.L_C.lerp(lamp_col, mix * 0.6)
 					m.draw_rect(Rect2(pos + shake + Vector2(12 + gl % 7, 11 + gl % 5), Vector2(2, 2)), gc)
 				if f > 0.02:
 					m.tex_frame("mine_tiles", pos + shake, CRACK0 + clampi(int(f * 4.0), 0, 3), MINE_FRAMES)
@@ -1291,7 +1312,7 @@ func _draw_mine(view: Vector2, t: int) -> void:
 			var a := clampf((d2 - R + 0.5) / 2.0, 0.0, 1.0)
 			a = floorf(a * 4.0) / 4.0
 			if a > 0.0:
-				m.draw_rect(Rect2(x * CELL, y * CELL, CELL, CELL), Color(0.03, 0.02, 0.05, a))
+				m.draw_rect(Rect2(x * CELL, y * CELL, CELL, CELL), shaft_darkness(fog_key, mix, a))
 	# 爆炸的闪光（盖在黑暗上面）
 	var fk: Array = []
 	for fl in flashes:
