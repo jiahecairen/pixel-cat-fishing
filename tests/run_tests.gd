@@ -77,6 +77,7 @@ func _init() -> void:
 		test_v095_shaft_backdrop(balance, fish)
 		test_v096_ore_dex(balance, fish)
 		test_v097_no_helper_cycles()
+		test_v098_perf_hygiene()
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -3123,4 +3124,50 @@ func test_v097_no_helper_cycles() -> void:
 	check(wsc != null and wsc.can_instantiate(), "world.gd 还能编译（小镇主画面）")
 	var msc: GDScript = load("res://presentation/main.gd")
 	check(msc != null and msc.can_instantiate(), "main.gd 还能编译（游戏入口）")
+
+
+
+
+## v0.98：体检脚本的卫生规则。
+## 这两个脚本会把游戏真起来跑几分钟，最容易犯的错就是"顺手写了玩家的存档"。
+## 所以钉死：tools/ 下任何 .sh 都必须把存档写到临时目录（mktemp 或 CATFISH_SAVE），
+## 打包脚本也一样。另外钉住挂机帧率常量（桌面宠物全天挂着，不是满帧在画）。
+func test_v098_perf_hygiene() -> void:
+	print("v0.98: 体检脚本不许碰真存档 + 挂机帧率常量")
+	var dir := DirAccess.open("res://tools/perf")
+	check(dir != null, "tools/perf/ 目录在")
+	var seen := 0
+	var naked := 0
+	var first_naked := ""
+	if dir != null:
+		for f in dir.get_files():
+			var fn := str(f)
+			if not fn.ends_with(".sh"):
+				continue
+			seen += 1
+			var src: String = FileAccess.get_file_as_string("res://tools/perf/%s" % fn)
+			check(src.length() > 400, "%s 有内容（%d 字节）" % [fn, src.length()])
+			if not (src.contains("mktemp") and src.contains("CATFISH_SAVE")):
+				naked += 1
+				if first_naked == "":
+					first_naked = fn
+	check(seen >= 2, "tools/perf/ 下有 %d 个体检脚本" % seen)
+	check(naked == 0, "每个体检脚本都把存档写到临时目录%s" % (("；漏了：" + first_naked) if naked > 0 else ""))
+	var sweep: String = FileAccess.get_file_as_string("res://tools/perf/leak_sweep.sh")
+	check(sweep.contains("--verbose"), "泄漏扫描开了 --verbose（不然是空跑，抓不到退出时的报告）")
+	check(sweep.contains("Leaked instance") and sweep.contains("still in use") and sweep.contains("Orphan StringName"),
+		"泄漏扫描认那三类泄漏关键字")
+	var screens := 0
+	for l in sweep.split("\n"):
+		if str(l).begins_with("\t\"") and str(l).contains("|CATFISH_"):
+			screens += 1
+	check(screens >= 10, "泄漏扫描覆盖 %d 个画面" % screens)
+	var idle: String = FileAccess.get_file_as_string("res://tools/perf/idle_rss.sh")
+	check(idle.contains("ps -o rss="), "挂机探针读的是 RSS（常驻内存），不是虚拟内存")
+	check(idle.contains("trap 'rm -rf"), "挂机探针退出时把临时目录删掉")
+	var pack: String = FileAccess.get_file_as_string("res://打包游戏.command")
+	check(pack.contains("mktemp") and pack.contains('HOME="$check_home"'), "打包自检也在临时 HOME 里跑（v0.97 的规则）")
+	var main: String = FileAccess.get_file_as_string("res://presentation/main.gd")
+	check(main.contains("const FPS_NORMAL := 30"), "平时限 30 帧（不是满帧在画）")
+	check(main.contains("const FPS_HIDDEN := 5"), "窗口最小化时降到 5 帧")
 

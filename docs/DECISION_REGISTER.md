@@ -319,3 +319,9 @@ dialogs.json 里选项（choices）上写的 action 之前没被读取，工坊"
 - **打包自检永远不许拿玩家的真存档跑**：`打包游戏.command` 的两帧自检从 v0.97 起把 `HOME` 指到 `mktemp -d` 建的临时目录，自检完删掉。理由：游戏一启动就写 `user://save.json`，老做法等于每次打包重写一次真存档（v0.96 实测真存档因此多出空键 `stats.ore_counts`）。**规则：以后凡是"把打包好的 app 起来看一眼"的自检，一律带 `HOME=/tmp/…`（Release 包不认 `CATFISH_SAVE`，它被 `OS.is_debug_build()` 门控）。**
 - **画面助手（`extends RefCounted`）之间不许来回指**：单向持有可以（持有者释放时被持有者归零），**A 存 B 且 B 存回 A 不行**——两个引用计数对象互相指就永远不回收，v0.96 表现为退出时 5 个实例 + 2 个资源 + 227 条孤儿 StringName。修法是把需要的**数值**在构造时抄一份（`Shopfronts._gy0`），而不是存回对方的对象；`m`（Node 引用）不参与引用计数，可以继续存。这条由 `test_v097_no_helper_cycles` 源码扫描兜底。
 - 这版**不改任何玩法、数值、存档字段**（`stats` 结构、`balance.json` 一字未动），只动 `presentation/shopfronts.gd` 的持有关系 + 打包脚本的自检目录。
+
+
+## D186 v0.98（2026-11-15，用户授权自由发挥，未逐条询问）
+- **一切"把游戏真起来跑"的体检脚本都必须用临时存档目录**：`tools/perf/*.sh` 与 `打包游戏.command` 一律 `mktemp -d` + `HOME`/`CATFISH_SAVE` 隔离，跑完删除。这条由 `test_v098_perf_hygiene` 扫源码兜底（少一个脚本漏了就红）。理由见 D185：游戏一启动就写 `user://save.json`，体检顺手就把玩家进度盖掉了。
+- **桌面宠物的挂机开销用实测说话，不靠猜**：内存看 `ps -o rss=`（RSS，不看虚拟内存），泄漏看引擎退出时的 `Leaked instance` / `still in use` / `Orphan StringName` 三类关键字；判定阈值写在脚本里（热身 30 秒后末段比首段高 >20% 且 >20 MB 才算"在涨"）。
+- 确认现有决定不变：平时 30 帧（`FPS_NORMAL`）、最小化 5 帧（`FPS_HIDDEN`），逻辑一律靠时间戳推进（D 里"计时用时间戳"）——限帧不影响番茄钟与经济与存档。
