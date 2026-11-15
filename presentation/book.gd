@@ -101,8 +101,17 @@ func dex_rows() -> int:
 func dex_per_page() -> int:
 	return dex_rows() * 3
 
+## 一页翻完的总数：先是鱼，接着是矿石（v0.96 起矿石也进图鉴）。
+func dex_total() -> int:
+	var g = m.game
+	return int(g.fish_list.size()) + int(g.mine.ore_dex().size())
+
+## 一共几页：纯算术，单独拎出来好测（per 是一页几张卡）。
+static func dex_pages_for(total: int, per: int) -> int:
+	return maxi(1, int(ceil(float(total) / float(maxi(1, per)))))
+
 func dex_pages() -> int:
-	return maxi(1, int(ceil(float(m.game.fish_list.size()) / float(dex_per_page()))))
+	return dex_pages_for(dex_total(), dex_per_page())
 
 func dex_turn(delta: int) -> void:
 	dex_page = clampi(dex_page + delta, 0, dex_pages() - 1)
@@ -269,24 +278,49 @@ func _draw_dex(r: Rect2) -> void:
 	var cw := (r.size.x - 12.0) / 3.0
 	dex_page = clampi(dex_page, 0, dex_pages() - 1)
 	var per := dex_per_page()
+	var ores: Array = g.mine.ore_dex()
+	var nf: int = int(g.fish_list.size())
 	for k in per:
 		var i := dex_page * per + k
-		if i >= g.fish_list.size():
+		if i >= nf + ores.size():
 			break
-		var f: Dictionary = g.fish_list[i]
 		var c := r.position + Vector2(6.0 + (k % 3) * cw, 20.0 + (k / 3) * 38.0)
-		var n := int(counts.get(f["id"], 0))
+		var is_ore: bool = i >= nf
+		var n := 0
+		var big := 0
+		var nm := "？？？"
+		var spr := ""
+		if is_ore:
+			var oid: String = str(ores[i - nf])
+			n = g.mine.ore_dug_count(oid)
+			var od: Dictionary = g.inventory.by_id.get(oid, {})
+			nm = str(od.get("name", oid))
+			spr = str(od.get("sprite", ""))
+		else:
+			var f: Dictionary = g.fish_list[i]
+			n = int(counts.get(f["id"], 0))
+			big = int(best.get(f["id"], 0))
+			nm = str(f["name"])
+			spr = str(f["sprite"])
 		m.draw_rect(Rect2(c, Vector2(cw - 4, 35)), Pal.U_A)
 		m.draw_rect(Rect2(c + Vector2(1, 1), Vector2(cw - 6, 33)), Pal.U_B if n > 0 else Pal.U_K)
-		m.draw_texture(m.tex[f["sprite"]], c + Vector2(5, 11), Color.WHITE if n > 0 else Color(0.25, 0.25, 0.35))
-		m.label(f["name"] if n > 0 else "？？？", c + Vector2(28, 5), Pal.L_W if n > 0 else Pal.L_A)
+		if is_ore and n == 0:
+			m.draw_rect(Rect2(c + Vector2(5, 11), Vector2(16, 16)), Pal.U_A)      # 没见过的矿石：一个空框，不露图
+		elif m.tex.has(spr):
+			m.draw_texture(m.tex[spr], c + Vector2(5, 11), Color.WHITE if n > 0 else Color(0.25, 0.25, 0.35))
+		if is_ore:
+			m.dyn_text(nm if n > 0 else "？？？", c + Vector2(28, 8), Pal.L_W if n > 0 else Pal.L_A)
+		else:
+			m.label(nm if n > 0 else "？？？", c + Vector2(28, 5), Pal.L_W if n > 0 else Pal.L_A)
 		if n > 0:
 			m.text("x%d" % n, c + Vector2(28, 19), Pal.L_W)
-			var b := int(best.get(f["id"], 0))
-			if b > 0:
-				m.text("%dcm" % b, c + Vector2(28, 26), Pal.L_Y)
+			if not is_ore and big > 0:
+				m.text("%dcm" % big, c + Vector2(28, 26), Pal.L_Y)
 	m.label("共钓到", r.position + Vector2(6, r.size.y - 13), Pal.L_A)
 	m.text(str(int(g.state.stats["total_fish"])), r.position + Vector2(40, r.size.y - 10), Pal.L_W)
+	var seen: int = int(g.mine.dex_found())
+	var ows := "矿石 %d/%d 种" % [seen, ores.size()]
+	m.dyn_text(ows, Vector2(r.position.x + 78, r.position.y + r.size.y - 8), Pal.L_Y if seen > 0 else Pal.L_A)
 	if dex_pages() > 1:
 		m.tex_frame("btn_left", _dex_prev_rect().position, 0 if dex_page > 0 else 1, 2)
 		m.tex_frame("btn_right", _dex_next_rect().position, 0 if dex_page < dex_pages() - 1 else 1, 2)

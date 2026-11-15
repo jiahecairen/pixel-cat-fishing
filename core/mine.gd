@@ -656,6 +656,35 @@ func ore_def(id: String) -> Dictionary:
 			return o
 	return {}
 
+## 记一笔"这种矿石挖到过几个"，给图鉴用。一格石头只会碎一次，所以重复提交不会重复加。
+func _record_ore(item: String, cnt: int) -> void:
+	var st: Dictionary = _s.stats
+	var oc: Dictionary = st.get("ore_counts", {})
+	oc[item] = int(oc.get(item, 0)) + maxi(1, cnt)
+	st["ore_counts"] = oc
+
+## 图鉴顺序：全部会挖到的矿石（就是 json 里 `mine.ores` 的顺序，越深的井排越后）。
+func ore_dex() -> Array:
+	var out: Array = []
+	for o in _c.get("ores", []):
+		var id := str(o.get("item", o.get("id", "")))
+		if id != "" and not out.has(id):
+			out.append(id)
+	return out
+
+## 这种矿石挖到过几块（没挖到过 = 0，图鉴里是"？？？"）。
+func ore_dug_count(id: String) -> int:
+	var oc: Dictionary = _s.stats.get("ore_counts", {})
+	return int(oc.get(id, 0))
+
+## 图鉴进度：一共几种、见过几种。
+func dex_found() -> int:
+	var n := 0
+	for id in ore_dex():
+		if ore_dug_count(str(id)) > 0:
+			n += 1
+	return n
+
 func need_tool(_x: int, _y: int) -> int:
 	return int(layer(floor_n()).get("tool", 1))
 
@@ -1002,6 +1031,7 @@ func _break_cell(x: int, y: int) -> Dictionary:
 		e["n"] = cnt
 		return e
 	_inv.add(_s, item, cnt)
+	_record_ore(item, cnt)
 	e["item"] = item
 	e["n"] = cnt
 	return e

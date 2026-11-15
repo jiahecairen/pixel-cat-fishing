@@ -27,7 +27,7 @@ var warehouse: Dictionary = {}      # 家里仓库：和物品栏一样 {物品 
 ## 物品效果：幸运鱼饵的到期时刻、招财铃剩余的单数
 var effects: Dictionary = {"lucky_until_ms": 0, "bell_sales": 0, "napped_end_ms": 0, "bird_next_ms": 0, "bird_act_ms": 0, "drift_0": 0, "drift_1": 0, "drift_2": 0, "signal_ready_ms": 0, "drift_3": 0, "drift_4": 0, "drift_5": 0, "pot_0": 0, "pot_1": 0, "pot_2": 0, "bridge": 0, "west_chest": 0, "lake_resume": 0, "gift_g064": 0, "rp_bridge": 0, "rp_lamp": 0, "rp_pier": 0, "workers": 0}
 var journey: Dictionary = {"activity": 0, "phase_start_ms": 0, "phase_end_ms": 0, "next_eat_ms": 0, "paused_at_ms": 0, "sales": 0, "roam_x": 0, "walk_from": -1, "boat_x": 260, "line_out": 1}
-var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}, "chests": 0, "fish_best": {}, "empty_casts": 0, "focus_hours": {}}
+var stats: Dictionary = {"total_pomodoros": 0, "daily": {}, "total_fish": 0, "fish_counts": {}, "chests": 0, "fish_best": {}, "empty_casts": 0, "focus_hours": {}, "ore_counts": {}}   # ore_counts：挖到过的矿石 → 个数（v0.96 起的矿石图鉴）
 ## 时长设置为 0 表示"使用 balance.json 的默认值"
 ## view_mode: 0 = 桌面迷你悬浮窗，1 = 全画面窗口
 var settings: Dictionary = {"view_mode": 1, "pixel_scale": 3, "sfx_volume": 2, "real_weather": 0, "focus_min": 0, "short_break_min": 0, "long_break_min": 0}

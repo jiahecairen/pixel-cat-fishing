@@ -494,6 +494,14 @@ func _apply_debug_env() -> void:
 			st.stats["fish_counts"][fid] = rngd.randi_range(0, 12)
 			st.stats["fish_best"][fid] = rngd.randi_range(8, 90)
 		st.stats["total_fish"] = 77
+		var odex: Array = game.mine.ore_dex()          # 调试：矿石图鉴也播几种进去（前面几种见过，后面还是"？？？"）
+		var ocx: Dictionary = st.stats.get("ore_counts", {})
+		var on := 6
+		if OS.has_environment("CATFISH_ORES"):        # 调试：想点亮几种矿石（不给就是 6 种）
+			on = OS.get_environment("CATFISH_ORES").to_int()
+		for oi in mini(on, odex.size()):
+			ocx[str(odex[oi])] = 1 + oi
+		st.stats["ore_counts"] = ocx
 		wardrobe.open = false
 		outfit_shop.open = false
 		shipyard_panel.close()

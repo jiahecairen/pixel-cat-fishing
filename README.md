@@ -298,7 +298,8 @@ tests/         无界面单元测试
 | `CATFISH_CATCH=sunfish` | 显示"钓到鱼"的提示（值是鱼的 id） |
 | `CATFISH_BIRD=1` | 一开局就有鸟来 |
 | `CATFISH_BIRDKIND=steal` / `gift` / `none` | 让一只鸟立刻来访（偷鱼 / 送礼 / 什么都不做） |
-| `CATFISH_BOOK=2` | 造一堆统计数据并打开图鉴册第 2 页 |
+| `CATFISH_BOOK=2` | 造一堆统计数据（含 6 种"挖到过的矿石"）并打开图鉴册第 2 页 |
+| `CATFISH_ORES=38` | 配合 `CATFISH_BOOK=0`：把图鉴里前 N 种矿石点亮，方便截图对比"见过 / 没见过"两种卡片 |
 | `CATFISH_WALK=1,0` | 开头几秒自动按住方向键（`dx,dy`） |
 | `CATFISH_MOVE=2` | 小猫与世界动画的速度倍率（≥1） |
 | `CATFISH_NOHOVER=1` | 迷你窗不因为鼠标悬停而躲开 |

@@ -75,6 +75,7 @@ func _init() -> void:
 		test_v093_open_shafts(balance, fish)
 		test_v094_shaft_themes(balance, fish)
 		test_v095_shaft_backdrop(balance, fish)
+		test_v096_ore_dex(balance, fish)
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -2935,3 +2936,87 @@ func test_v095_shaft_backdrop(balance: Dictionary, fish: Array) -> void:
 	check(MV.shaft_backdrop("没有这个键", 0.9) == Pal.U_K, "写了个调色板里没有的键，背景退回原来的深紫黑，不会崩")
 	check(MV.shaft_backdrop(mn.shaft_color(3, "bg"), 5.0) == MV.shaft_backdrop(mn.shaft_color(3, "bg"), 1.0), "染色强度写大了会被夹到 1")
 	check(MV.shaft_backdrop(mn.shaft_color(3, "bg"), -3.0) == Pal.U_K, "染色强度写成负数等于不染")
+
+func test_v096_ore_dex(balance: Dictionary, fish: Array) -> void:
+	print("v0.96: 挖到的矿石进图鉴")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(96))
+	var mn = g.mine
+	mn.ensure(clock.t)
+	var ores: Array = mn.ore_dex()
+	check(ores.size() == balance["mine"]["ores"].size() and ores.size() >= 30, "图鉴里有全部 %d 种矿石（按 json 顺序，越深的井越靠后）" % ores.size())
+	var uniq := true
+	for i in ores.size():
+		for j in range(i + 1, ores.size()):
+			if ores[i] == ores[j]:
+				uniq = false
+	check(uniq, "图鉴里的矿石没有重复")
+	var known := true
+	for id in ores:
+		if not g.inventory.by_id.has(str(id)):
+			known = false
+	check(known, "图鉴里的每种矿石都是物品栏里真有的物品（图标和名字都对得上）")
+	check(mn.dex_found() == 0 and mn.ore_dug_count("stone") == 0, "新存档一种矿石都没见过")
+	# 找一块埋着矿、头顶是地板的石头，站上去朝下挖一格
+	mn.begin_run(1, clock.t)
+	mn.give_first_pick()
+	g.state.mine["sta"] = float(mn.stamina_max())
+	var tx := -1
+	var ty := -1
+	var oid := ""
+	for yy in range(mn.height() - 1):
+		for xx in range(mn.width()):
+			var o := str(mn.ore(xx, yy))
+			if o != "" and mn.is_floor(xx, yy - 1) and mn.need_tool(xx, yy) <= 1 and str(mn.ore_def(o).get("item", "")) != "":
+				tx = xx
+				ty = yy
+				oid = str(mn.ore_def(o)["item"])
+				break
+		if tx >= 0:
+			break
+	check(tx >= 0, "第 1 层里找得到一块埋着矿的石头（挖 %s）" % oid)
+	# 站到矿石上面那格：整数格和偏移都要写（fpos 只认整数格对得上的偏移）
+	var rr: Dictionary = g.state.mine["run"]
+	rr["x"] = tx
+	rr["y"] = ty - 1
+	rr["fx"] = float(tx) + 0.5
+	rr["fy"] = float(ty) - 0.3     # 往下挖要往前站一点（和老测试一样偏 0.2 格），否则够不着下面那格
+	var ms := int(mn.dig_ms(tx, ty)) + 1
+	check(ms > 1 and mn.start_dig(0, 1, clock.t) == "", "站到矿石上方开始挖")
+	clock.t += ms
+	var ev: Array = mn.update(clock.t)
+	var dug := false
+	for e in ev:
+		if str(e.get("type", "")) == "dug":
+			dug = true
+	check(dug and mn.is_dug(tx, ty), "石头碎了")
+	check(mn.ore_dug_count(oid) == 1, "碎的那块如果是 %s，图鉴里就记 1 块" % oid)
+	check(mn.dex_found() == 1, "图鉴进度变成见过 1 种")
+	# 再挖同一格不会重复加（一格石头只碎一次）
+	mn.stop_dig(clock.t)
+	clock.t += 10000
+	mn.update(clock.t)
+	check(mn.ore_dug_count(oid) == 1, "同一块石头不会记两次（经济幂等）")
+	# 存档往返
+	var d: Dictionary = g.state.to_dict()
+	check((d.get("stats") as Dictionary).has("ore_counts"), "图鉴计数跟着存档走")
+	var st2 := GameState.new()
+	check(st2.from_dict(d), "带图鉴计数的存档能读回来")
+	var g3 := Game.new(balance, fish, st2, clock, _rng(96))
+	g3.mine.ensure(clock.t)
+	check(g3.mine.ore_dug_count(oid) == 1 and g3.mine.dex_found() == 1, "读档以后图鉴还是那 1 种 1 块")
+	# 老存档（没有这个键）不会崩
+	var old := GameState.new()
+	check(old.from_dict(g.state.to_dict()), "老存档照样能读")
+	var st4 := GameState.new()
+	st4.stats.erase("ore_counts")
+	var g5 := Game.new(balance, fish, st4, clock, _rng(96))
+	g5.mine.ensure(clock.t)
+	check(g5.mine.ore_dex().size() == ores.size() and g5.mine.dex_found() == 0, "存档里没这个键就当一种都没见过，不报错")
+	check(mn.dex_found() <= mn.ore_dex().size(), "见过几种不会超过一共有几种")
+	# 翻页的算术（图鉴册的卡片数 = 鱼 + 矿石；一页放不下就得多翻几页）
+	var Book := load("res://presentation/book.gd")
+	var total: int = int(g.fish_list.size()) + int(mn.ore_dex().size())
+	check(Book.dex_pages_for(total, 12) == int(ceil(float(total) / 12.0)) and Book.dex_pages_for(total, 12) >= 3, "%d 张卡一页 12 张要翻 %d 页" % [total, Book.dex_pages_for(total, 12)])
+	check(Book.dex_pages_for(0, 12) == 1 and Book.dex_pages_for(12, 12) == 1, "刚好一页或空图鉴都只有一页")
+	check(Book.dex_pages_for(13, 12) == 2 and Book.dex_pages_for(13, 0) == 13, "多一张就多一页；一页一张时不会除零")
