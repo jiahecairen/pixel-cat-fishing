@@ -73,6 +73,7 @@ func _init() -> void:
 		test_mail(balance, fish)
 		test_v088_ticket_and_locker(balance, fish)
 		test_v093_open_shafts(balance, fish)
+		test_v094_shaft_themes(balance, fish)
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -2792,3 +2793,71 @@ func test_v093_open_shafts(balance: Dictionary, fish: Array) -> void:
 	var g3 := Game.new(balance, fish, s3, clock, _rng(93))
 	g3.mine.ensure(clock.t)
 	check(g3.mine.deepest_floor(1) == 12 and g3.mine.shaft_status(3) == "wait", "老存档缺 3/4/5 号井的条目也会自动补上，不报错")
+
+func test_v094_shaft_themes(balance: Dictionary, fish: Array) -> void:
+	print("v0.94: 五口井各有各的长相")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(94))
+	var mn = g.mine
+	mn.ensure(clock.t)
+	var Pal = preload("res://presentation/palette.gd")
+	var th: Dictionary = balance.get("mine", {}).get("shaft_themes", {})
+	check(th.size() >= 5 and th.has("1") and th.has("5"), "五口井的主题写在 balance 里（%d 条）" % th.size())
+	var slots := ["dirt", "stone", "rock", "deep", "rim"]
+	var complete := true
+	var palette_only := true
+	var hex_free := true
+	for k in th.keys():
+		var e: Dictionary = th[k]
+		if str(e.get("name", "")) == "" or not e.has("mix"):
+			complete = false
+		for sl in slots:
+			var v = e.get(sl, "")
+			if typeof(v) != TYPE_STRING or not Pal.BY_KEY.has(str(v)):
+				palette_only = false
+			if str(v).length() != 1:
+				hex_free = false
+	check(complete, "每口井都写了名字、五个部位的颜色和染色强度")
+	check(palette_only, "主题里的颜色全是锁定调色板里的键（画不出调色板以外的颜色）")
+	check(hex_free, "颜色写成调色板键而不是十六进制（改调色板会一起改）")
+	var names: Array = []
+	var rocks: Array = []
+	var named := true
+	for i in range(1, 6):
+		var n: String = mn.shaft_name(i)
+		if n == "" or not n.contains("矿井"):
+			named = false
+		names.append(n)
+		rocks.append(mn.shaft_color(i, "rock"))
+	check(named, "每口井都有名字（%s）" % "、".join(names))
+	check(names.size() == 5 and names.has("灰岩矿井") and names.has("星陨矿井"), "从灰岩矿井到星陨矿井，五口井都叫得出名")
+	var rockset: Dictionary = {}
+	for rc in rocks:
+		rockset[str(rc)] = true
+	check(rocks.size() == 5 and rockset.size() == 5, "五口井的石头颜色两两不同：%s" % ", ".join(PackedStringArray(rocks)))
+	check(mn.shaft_color(1, "dirt") == "O" and mn.shaft_color(1, "stone") == "a" and mn.shaft_color(1, "rock") == "A" and mn.shaft_color(1, "deep") == "S", "1 号井还是原来那四个颜色（老玩家看不出变化）")
+	check(mn.shaft_mix(1) == 0.0, "1 号井染色强度 0：素材原色，一个像素都没变")
+	var others_ok := true
+	for i in range(2, 6):
+		var mx := mn.shaft_mix(i)
+		if mx < 0.3 or mx > 0.8:
+			others_ok = false
+	check(others_ok, "2–5 号井的染色在 0.3–0.8 之间：看得出是另一种石头，又不会糊成一团")
+	check(mn.shaft_theme(9) == mn.shaft_theme(1) and mn.shaft_name(9) == "9 号井", "没写主题的井号退回 1 号井的样子，不报错")
+	check(mn.shaft_color(3, "没这个部位") == mn.shaft_color(3, "rock"), "问一个不存在的部位会退回石头色，不是空白")
+	var t3: Dictionary = th["3"]
+	check(str(t3.get("mix", -1.0)) == str(mn.shaft_mix(3)), "每口井自己的染色强度优先于全局的 shaft_theme_mix")
+	var gm := float(balance["mine"].get("shaft_theme_mix", -1.0))
+	check(gm >= 0.0 and gm <= 1.0, "全局默认染色强度 %s 也在 0–1 之间" % str(gm))
+	var probe := GameState.new()
+	probe.from_dict({"mine": {"shafts": {"3": {"open": 1, "cp": 1, "best": 20}}, "runs": 0, "dish": "", "run": {}, "bombs": 0, "sta": 100.0}})
+	var g2 := Game.new(balance, fish, probe, clock, _rng(94))
+	g2.mine.ensure(clock.t)
+	check(g2.mine.shaft_color(3, "rock") == str(t3.get("rock", "")), "换了个存档，井的颜色还是照 json 走（颜色不进存档）")
+	check(not g2.state.to_dict().has("shaft_themes"), "主题只是配置，不会被抄进存档里存两份")
+	check(Pal.BY_KEY.has(mn.shaft_color(5, "rim")), "崖边描边用的也是调色板里的颜色（星陨井：%s）" % mn.shaft_color(5, "rim"))
+	var named_all := true
+	for k in th.keys():
+		if str((th[k] as Dictionary).get("name", "")).length() < 3:
+			named_all = false
+	check(named_all, "名字都不是占位符（至少三个字）")

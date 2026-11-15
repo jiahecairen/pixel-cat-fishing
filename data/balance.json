@@ -1816,6 +1816,54 @@
       "stone": 40,
       "crew": 2
     },
+    "shaft_theme_mix": 0.55,
+    "shaft_themes": {
+      "1": {
+        "name": "灰岩矿井",
+        "dirt": "O",
+        "stone": "a",
+        "rock": "A",
+        "deep": "S",
+        "rim": "O",
+        "mix": 0.0
+      },
+      "2": {
+        "name": "赤铜矿井",
+        "dirt": "O",
+        "stone": "n",
+        "rock": "R",
+        "deep": "R",
+        "rim": "n",
+        "mix": 0.5
+      },
+      "3": {
+        "name": "蓝晶矿井",
+        "dirt": "B",
+        "stone": "a",
+        "rock": "B",
+        "deep": "B",
+        "rim": "c",
+        "mix": 0.6
+      },
+      "4": {
+        "name": "地火矿井",
+        "dirt": "O",
+        "stone": "R",
+        "rock": "F",
+        "deep": "K",
+        "rim": "r",
+        "mix": 0.62
+      },
+      "5": {
+        "name": "星陨矿井",
+        "dirt": "A",
+        "stone": "A",
+        "rock": "K",
+        "deep": "K",
+        "rim": "W",
+        "mix": 0.66
+      }
+    },
     "open_shafts": {
       "3": {
         "prev": 2,

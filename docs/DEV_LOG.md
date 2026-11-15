@@ -521,3 +521,17 @@
 - 本机实跑：`ALL TESTS PASS`（943 项 0 失败）、`SIM PASS`，两者退出码 0、0 条 `SCRIPT ERROR`；`./打包游戏.command` → `✓ 自检通过`，产物 **`build/CatFishing_v0.93_Qwen.app`**（163 MB，`CFBundleShortVersionString=0.93`，`codesign -v` 通过，200 帧无界面启动 0 报错）；调试包带 `CATFISH_MINEMENU=open` 自截图 `/tmp/cf93app_open_150.png`（1920×1080，0 警告 0 报错）。启动前后 `user://save.json` md5 一致（`738cc5ad…`，已备份在 `_backup_save/`）。
 - 这次没动 `tools/art/generate.py`（面板文字走 `dyn_text` 动态字体，不是标签图集），所以没有重新生成素材。
 - 验证状态见 C181：**测试、打包、启动、自检都在本机跑过；开工面板的排版没有人工目检**（自动化的像素校验在这台机器上不可靠，见 C179/C180 的教训）。
+
+
+## v0.94：五口井各有各的长相（配色进 json，1 号井一个像素都没变）
+- `docs/MINES_PLAN.md` 早就写了五口井的矿脉阶梯（灰岩／赤铜／蓝晶／地火／星陨），但画面是同一套石头颜色，挖 5 号井和挖 1 号井长得一样。这次把"每口井长什么样"做成数据。
+- `data/balance.json` 新增 `mine.shaft_themes`（1–5 号各一条：`name` + `dirt`/`stone`/`rock`/`deep`/`rim` 五个部位的**调色板键** + `mix` 染色强度）和全局兜底 `mine.shaft_theme_mix`。**颜色存的是单字母调色板键，不是十六进制**——沿用 `presentation/palette.gd` 生成出来的 `Pal.BY_KEY`，所以既不会画出 24 色以外的颜色，也不用改任何生成脚本（这次没动 `tools/art/`，素材一张都没重生成）。
+- `core/mine.gd` 新增 `shaft_theme()`（没写的井退回 1 号井）、`shaft_name()`（没有这条或没写名字就叫"N 号井"，**不会把别的井的名字套过来**）、`shaft_color(id, slot)`（不认识的部位退回石头色）、`shaft_mix(id)`（每口井自己的 `mix` 优先，没写用全局值）。core 里只出现"键字符串"和浮点数，不出现 `Color`。
+- `presentation/mine_view.gd`：`_block_color()` 多一个井号参数（迷你地图、碎块两处跟着改）；新增 `_shaft_color()` / `_shaft_now()` / `_tint()`；`_draw_mine()` 里石头·岩壁·崖壁用 `rock_tint`、地板用轻一档的 `floor_tint`、崖边描边用主题的 `rim`；`_draw_wall()` 的描边色从写死的木褐改成参数。票务工位每一行、下井提示都带上井名。
+- **染色只改色相不改明暗**：`_tint()` 把主题色先除以它自己的亮度再按比例混进白色。第一版直接用主题色当 modulate，深色的 4/5 号井越染越黑、几乎看不出是"另一种石头"；改成亮度归一后，实测五口井亮区亮度只差 1.3% 以内、石头区平均色却明显分开（2 号井偏红、3 号井蓝通道最高、4 号井最橙、5 号井偏紫）。1 号井 `mix = 0` → 染色值是纯白 modulate，画面与 v0.93 逐像素一致。
+- 调试口子上补了三件事（都只在调试构建生效）：`CATFISH_SAVE=目录` 把存档和事件日志整个挪走（**命令行调试务必带上**，别墅玩家的真存档）、`CATFISH_SHAFT=N` 直接开进某一口井、`CATFISH_SEED` 在矿井里也钉死本局地图种子（两张截图只差颜色，好比对）。`CATFISH_REGION` 现在会顺手把小猫放到矿山岛上（`Journey.Activity.ISLAND`），否则 `mine_view.active()` 每帧被 `journey.on_island()` 踢掉，截出来整屏是黑的。
+- 测试：新增 `test_v094_shaft_themes`（**18 项**），检查数 **943 → 961**。覆盖：五口井都有主题、每条都写了名字/五个部位/染色强度、**所有颜色键都能在 `Pal.BY_KEY` 里查到**、没有十六进制、五个名字都含"矿井"且互不相同、五口井石头色两两不同、**1 号井四色仍是 `O`/`a`/`A`/`S` 且 `mix == 0`**、2–5 号井 `mix` 落在 0.3–0.8、没写主题的井号退回 1 号井、问不存在的部位退回石头色、每口井的 `mix` 优先于全局、换个存档颜色照 json 走、**主题不会被抄进存档里存两份**。
+- 本机实跑：`ALL TESTS PASS`（**961 项 0 失败**）+ `SIM PASS`，退出码都 0、0 条 `SCRIPT ERROR`、0 条 `WARNING`。五口井各截一张 1920×1080（同一颗种子、frame 200），0 条 `SCRIPT ERROR`、0 条"标签图集缺少文字"，像素比对结果记在 C182。打包：`./打包游戏.command` → `✓ 自检通过`，产物 **`build/CatFishing_v0.94_Qwen.app`**（163 MB，`CFBundleShortVersionString=0.94`，`codesign -v` 通过，200 帧无界面启动 0 报错），另打调试包 `build/CatFishing_v0.94_Qwen_debug.app`（178 MB）+ 启动脚本，`build/CatFishing.app` 已指向 v0.94。**打包好的调试包**也逐口井跑过：`CATFISH_SHAFT=1` 与 `=3` 两张截图 18.3% 像素不同、亮区亮度只差 0.4%（详见 C182）。
+- **踩过的坑（记下来免得再犯）**：①`Godot --user-dir` 对本项目无效，真存档照样被写——已改成游戏内的 `CATFISH_SAVE` 覆盖 `SaveService`/`EventLog` 路径，并在每次命令行启动前后核对真存档 md5；②`OS.set_user_data_dir()` 在 Godot 4.7 的 GDScript 里不存在（解析期就报错）；③`CATFISH_RUN` 嵌在 `CATFISH_REGION` 里面，只给 `CATFISH_RUN` 不会开局；④四个 Godot 编辑器并发跑同一个工程会互相抢导入锁，刷出上万条 `SCRIPT ERROR`，串行跑就没这事。
+- 顺手修了 `打包游戏.command` 的一个小毛病：同步版本号到 `export_presets.cfg` 的正则只认 `application/short_version="…"` 这种写法，本工程里写的是行首的 `short_version="…"`，所以那次同步**从来没生效过**（预设里一直停在 0.92；打包出来的 `Info.plist` 靠 `project.godot` 才是对的，所以没被发现）。改成两种写法都认，重新打包后预设里也是 `0.94` 了。
+- 验证状态见 C182：**测试、打包、启动、自检、像素比对都在本机跑过；五口井配色的"好不好看"没有人工目检**（本代理没有视觉能力，像素比对只能证明"色相分开了、亮度没塌"）。

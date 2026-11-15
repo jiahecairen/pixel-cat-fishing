@@ -278,7 +278,7 @@ func _descend() -> void:
 		_step_cd = 0.3
 		m.play("done")
 		var f: int = mn.floor_n()
-		say("第 %d 层" % f + ("  存档点：下次矿车能直达这里" if mn.has_elevator() else ""))
+		say("%s  第 %d 层" % [mn.shaft_name(mn.shaft_id()), f] + ("  存档点：下次矿车能直达这里" if mn.has_elevator() else ""))
 		_mcam = Vector2.INF
 		m.game.dirty = true
 
@@ -287,7 +287,7 @@ func _shake(amp: float, ms: int) -> void:
 	_shake_amp = maxf(_shake_amp * 0.5, amp)
 
 func _chips(x: int, y: int, n: int, speed: float) -> void:
-	var col := _block_color(str(m.game.mine.layer(y).get("block", "dirt")))
+	var col := _block_color(str(m.game.mine.layer(y).get("block", "dirt")), _shaft_now())
 	var t := Time.get_ticks_msec()
 	for k in n:
 		debris.append({"p": Vector2(x * CELL + 6 + randf() * 20.0, y * CELL + 6 + randf() * 20.0), "v": Vector2(randf_range(-speed, speed), randf_range(-speed * 1.6, -speed * 0.4)), "t": t, "c": col})
@@ -329,8 +329,24 @@ func _boom_fx(x: int, y: int) -> void:
 	flashes.append({"p": Vector2(x * CELL + 16, y * CELL + 16), "t": Time.get_ticks_msec()})
 	_chips(x, y, 22, 140.0)
 
-func _block_color(b: String) -> Color:
-	return {"dirt": Pal.U_O, "stone": Pal.L_A, "rock": Pal.U_A, "deep": Pal.U_S}.get(b, Pal.L_A)
+func _block_color(b: String, shaft: int = 0) -> Color:
+	var slot: String = {"dirt": "dirt", "stone": "stone", "rock": "rock", "deep": "deep"}.get(b, "stone")
+	return _shaft_color(shaft, slot)
+
+## 这口井的某个部位的颜色（从调色板里取）。shaft <= 0 就用当前这口井。
+func _shaft_color(shaft: int, slot: String) -> Color:
+	var key: String = m.game.mine.shaft_color(maxi(1, shaft), slot)
+	return Pal.BY_KEY.get(key, Pal.U_A)
+
+## 只改色相、不改明暗：把主题色除以它自己的亮度再按比例混。直接用深色当染色会把矿洞越染越黑，看不出是另一种石头。
+func _tint(key: String, mix: float) -> Color:
+	var c: Color = Pal.BY_KEY.get(key, Pal.U_A)
+	var l: float = maxf(0.08, (c.r + c.g + c.b) / 3.0)
+	return Color.WHITE.lerp(Color(c.r / l, c.g / l, c.b / l, 1.0), clampf(mix, 0.0, 1.0))
+
+func _shaft_now() -> int:
+	var mn = m.game.mine
+	return clampi(mn.shaft_id(), 1, maxi(1, mn.shaft_count()))
 
 func _price(c: int) -> String:
 	var out := ""
@@ -864,9 +880,9 @@ func draw(view: Vector2, t: int) -> void:
 	_draw_overlay(view, t)
 
 ## 岩壁（像星露谷的洞穴外围）：下面挨着地面的画崖壁正面；其它挨着地面的画岩壁顶面，朝地面那一边描亮边；再往外全黑。
-func _draw_wall(mn, x: int, y: int, pos: Vector2) -> void:
+func _draw_wall(mn, x: int, y: int, pos: Vector2, rim0 := Color("#6f4030"), tint := Color.WHITE) -> void:
 	if mn.is_floor(x, y + 1):
-		m.tex_frame("mine_tiles", pos, TILE["wall"], MINE_FRAMES)
+		m.tex_frame("mine_tiles", pos, TILE["wall"], MINE_FRAMES, tint)
 		return
 	var near := false
 	for oy in range(-1, 2):
@@ -876,7 +892,7 @@ func _draw_wall(mn, x: int, y: int, pos: Vector2) -> void:
 	if not near and not mn.is_floor(x, y + 2):
 		return
 	m.tex_frame("mine_tiles", pos, TILE["walltop"], MINE_FRAMES)
-	var rim := Color(Pal.U_O, 1.0)
+	var rim := rim0
 	if mn.is_floor(x - 1, y):
 		m.draw_rect(Rect2(pos, Vector2(3, CELL)), rim)
 	if mn.is_floor(x + 1, y):
@@ -913,7 +929,7 @@ func draw_mini(view: Vector2, t: int) -> void:
 	var r := Rect2(3, 31, view.x - 6, 61)
 	m.draw_rect(r.grow(1), Pal.U_K)
 	m.draw_rect(r, Color("#241c2e"))
-	var col: Color = _block_color(str(mn.layer(mn.floor_n()).get("block", "dirt")))
+	var col: Color = _block_color(str(mn.layer(mn.floor_n()).get("block", "dirt")), _shaft_now())
 	# 右边的岩壁：一格一格的块，被敲的那块跟着挥镐抖
 	var swing := (t / 260) % 2
 	for ix in 3:
@@ -1014,18 +1030,22 @@ func _draw_menu(view: Vector2) -> void:
 				if st == "ok":
 					if mn.in_run() and mn.shaft_id() == id:
 						var active_fare: int = mn.ticket_price(id, mn.floor_n())
-						crow.append(["%d 号井" % id, "接着第 %d 层 · 票 %s" % [mn.floor_n(), _price(active_fare)]])
+						crow.append(["%d 号井 · %s" % [id, mn.shaft_name(id)], "接着第 %d 层 · 票 %s" % [mn.floor_n(), _price(active_fare)]])
 					elif mn.in_run():
-						crow.append(["%d 号井" % id, "先结束上一局", true])
+						crow.append(["%d 号井 · %s" % [id, mn.shaft_name(id)], "先结束上一局", true])
 					else:
 						var fl: Array = mn.start_floors(id)
 						var f := _cart_floor(id)
 						var fare: int = mn.ticket_price(id, f)
-						crow.append(["%d 号井" % id, ("◀ %d层 · %s ▶" % [f, _price(fare)]) if fl.size() > 1 else ("%d层 · 票 %s" % [f, _price(fare)])])
+						crow.append(["%d 号井 · %s" % [id, mn.shaft_name(id)], ("◀ %d层 · %s ▶" % [f, _price(fare)]) if fl.size() > 1 else ("%d层 · 票 %s" % [f, _price(fare)])])
 				elif st == "broken":
-					crow.append(["%d 号井" % id, "铁路未修好", true])
+					crow.append(["%d 号井 · %s" % [id, mn.shaft_name(id)], "铁路未修好", true])
+				elif st == "build":
+					crow.append(["%d 号井 · %s" % [id, mn.shaft_name(id)], "条件齐了就能开工", true])
+				elif st == "wait":
+					crow.append(["%d 号井 · %s" % [id, mn.shaft_name(id)], "要先开放 %d 号井" % mn.open_prev(id), true])
 				else:
-					crow.append(["%d 号井" % id, "还没开放", true])
+					crow.append(["%d 号井 · %s" % [id, mn.shaft_name(id)], "还没开放", true])
 			_panel(view, "矿车票务", _wallet_text(), crow, "↑↓选井  ←→选层  空格买票出发  Esc离开", 17.0 + crow.size() * 22.0 + 17.0, true)
 		"repair":
 			var need: Dictionary = mn.cfg().get("repair2", {})
@@ -1192,6 +1212,11 @@ func _draw_mine(view: Vector2, t: int) -> void:
 	var y1 := int(ceil((cam.y + view.y) / CELL)) + 1
 	var now: int = m.game.now_ms()
 	var R: float = mn.light_radius()
+	var sh := _shaft_now()
+	var mix: float = mn.shaft_mix(sh)
+	var rock_tint := _tint(mn.shaft_color(sh, "rock"), mix)      # 石头、岩壁、崖壁
+	var floor_tint := _tint(mn.shaft_color(sh, "stone"), mix * 0.6)   # 地板只染轻一点，别把小猫也盖住
+	var rim_col: Color = _shaft_color(sh, "rim")
 	var dt: Vector2i = mn.dig_target()
 	var ex: Vector2i = mn.exit_pos(mn.floor_n())
 	var en: Vector2i = mn.entrance(mn.floor_n())
@@ -1200,9 +1225,9 @@ func _draw_mine(view: Vector2, t: int) -> void:
 			var pos := Vector2(x * CELL, y * CELL)
 			var b: String = mn.block(x, y)
 			if not mn.is_floor(x, y):
-				_draw_wall(mn, x, y, pos)
+				_draw_wall(mn, x, y, pos, rim_col, rock_tint)
 				continue
-			m.tex_frame("mine_tiles", pos, TILE["floor"], MINE_FRAMES)
+			m.tex_frame("mine_tiles", pos, TILE["floor"], MINE_FRAMES, floor_tint)
 			if not mn.is_floor(x, y - 1):                # 崖壁脚下的一道阴影
 				m.draw_rect(Rect2(pos, Vector2(CELL, 4)), Color(0, 0, 0, 0.35))
 			if not mn.is_floor(x - 1, y):
@@ -1221,7 +1246,7 @@ func _draw_mine(view: Vector2, t: int) -> void:
 				if Vector2i(x, y) == dt and f > 0.0:
 					shake = Vector2(roundf(sin(float(t) / 35.0) * (0.5 + f)), 0)
 				var vr: int = absi(hash([x, y, mn.floor_n()])) % 3                 # 石头的形状（和里面有没有矿无关）
-				m.tex_frame("mine_tiles", pos + shake, TILE.get(b if vr == 0 or b == "granite" else b + str(vr), 0), MINE_FRAMES)
+				m.tex_frame("mine_tiles", pos + shake, TILE.get(b if vr == 0 or b == "granite" else b + str(vr), 0), MINE_FRAMES, rock_tint)
 				# 矿不再明显标出来：只有一部分矿石会有一点点反光，也有几块普通石头会反光（迷惑）
 				var o: String = mn.ore(x, y) if b != "granite" else ""
 				var seen := Vector2(x + 0.5 - fp.x, y + 0.5 - fp.y).length() <= R * 0.8

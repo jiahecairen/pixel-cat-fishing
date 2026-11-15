@@ -31,7 +31,9 @@ import re, sys
 v = sys.argv[1]
 p = 'export_presets.cfg'
 s = open(p, encoding='utf-8').read()
-s2 = re.sub(r'application/(short_version|version)="[^"]*"', lambda m: '%s="%s"' % (m.group(1), v), s)
+# 导出预设里的版本号有两种写法：老文件里是行首的 short_version="…"，新版 Godot 写的是 application/short_version="…"。
+# 老脚本只认后一种，所以这两行一直是 0.92 没被同步过（打包出来的 Info.plist 靠 project.godot 才是对的）。
+s2 = re.sub(r'(?m)^(application/)?(short_version|version)="[^"]*"', lambda m: '%s%s="%s"' % (m.group(1) or '', m.group(2), v), s)
 if s2 != s:
     open(p, 'w', encoding='utf-8').write(s2)
     print("  export_presets.cfg 的版本号已同步为", v)

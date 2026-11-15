@@ -186,8 +186,11 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 
-	saver = SaveService.new()
-	log = EventLog.new()
+	var debug_dir := ""
+	if OS.is_debug_build() and OS.has_environment("CATFISH_SAVE"):   # 调试：把存档和日志写到别处，绝不动玩家真正的 user://save.json
+		debug_dir = OS.get_environment("CATFISH_SAVE").trim_suffix("/")
+	saver = SaveService.new("user://save.json" if debug_dir == "" else debug_dir + "/save.json")
+	log = EventLog.new("user://logs/events.log" if debug_dir == "" else debug_dir + "/logs/events.log")
 	log.write("app_start", {"version": ProjectSettings.get_setting("application/config/version", ""), "os": OS.get_name()})
 	var state := GameState.new()
 	var saved := saver.load_data()
@@ -229,6 +232,9 @@ func _ready() -> void:
 		mine_view.restore(mat)         # 重启前在矿山岛：回到原处（在矿里这一局还在）
 	if OS.has_environment("CATFISH_REGION"):      # 调试：直接进矿山岛的某个区域
 		mine_view.go(OS.get_environment("CATFISH_REGION"))
+		if not game.journey.on_island():     # 调试：小猫不真在岛上，矿山岛的画面每帧都会被踢掉，这里先把它放到岛上
+			game.journey._enter(Journey.Activity.ISLAND, game.now_ms(), 0)
+			game.journey.set_roam_x(0.0)
 		if OS.has_environment("CATFISH_CAVEX"):       # 调试：大厅里小猫站的位置
 			mine_view.cave_x = OS.get_environment("CATFISH_CAVEX").to_float()
 		if OS.has_environment("CATFISH_ROOM"):        # 调试：直接走进矿山岛的屋子（shop / rest / inn）
@@ -240,14 +246,24 @@ func _ready() -> void:
 		if OS.has_environment("CATFISH_RUN"):     # 调试：直接开一局（给第一把镐），站在入口；CATFISH_DIG=朝下挖；CATFISH_AT="x,y"站到那格
 			game.mine.ensure(game.now_ms())
 			game.mine.give_first_pick()
+			var dbg_shaft := 1
+			if OS.has_environment("CATFISH_SHAFT"):      # 调试：直接开进某一口井（把前面的井都当作已开放），用来看每口井的长相
+				dbg_shaft = clampi(int(OS.get_environment("CATFISH_SHAFT")), 1, game.mine.shaft_count())
+				for sid in range(2, game.mine.shaft_count() + 1):
+					game.mine.shaft_state(sid)["fixed"] = 1
+					game.mine.shaft_state(sid)["open"] = 1
+				if game.mine.in_run() and game.mine.shaft_id() != dbg_shaft:
+					game.mine.end_run()     # 前面 CATFISH_REGION=mine 可能已经先开了一局，先收掉再按这口井重来
 			if not game.mine.in_run():
-				game.mine.begin_run(1, game.now_ms())
+				game.mine.begin_run(dbg_shaft, game.now_ms())
+			if OS.has_environment("CATFISH_SEED"):   # 调试：固定这一局的地图种子，两张截图之间只差颜色，好比对每口井的染色
+				game.mine.m()["run"]["seed"] = clampi(int(OS.get_environment("CATFISH_SEED")), 1, 2000000000)
 			var cr: Array = []
 			for cy in game.mine.height():
 				for cx in game.mine.width():
 					if game.mine.block(cx, cy) == "chest":
 						cr.append(Vector2i(cx, cy))
-			print("MINEDBG entrance=", game.mine.entrance(1), " exit=", game.mine.exit_pos(1), " crates=", cr)
+			print("MINEDBG shaft=", game.mine.shaft_id(), " region=", game.region if "region" in game else "-", " entrance=", game.mine.entrance(1), " exit=", game.mine.exit_pos(1), " crates=", cr)
 			if OS.get_environment("CATFISH_AT") in ["pit", "crate"]:    # 站到洞口/木箱旁边，面朝它
 				var tgt_c: Vector2i = game.mine.exit_pos(1)
 				if OS.get_environment("CATFISH_AT") == "crate" and not cr.is_empty():

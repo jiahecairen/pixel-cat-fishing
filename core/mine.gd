@@ -215,6 +215,40 @@ func open_ready(id: int) -> bool:
 		return false
 	return open_missing(id).is_empty()
 
+## ---- 永久：每口井的长相（配色写在 data/balance.json 的 mine.shaft_themes 里，用的是调色板键）----
+
+## 这口井的主题。颜色存的是调色板键（不是十六进制），这样画面不可能画出调色板以外的颜色。没有这口井的主题就照 1 号井画。
+func shaft_theme(id: int) -> Dictionary:
+	var t: Dictionary = _c.get("shaft_themes", {})
+	var v = t.get(str(id), {})
+	if v is Dictionary and not (v as Dictionary).is_empty():
+		return v
+	var d = t.get("1", {})
+	return d if d is Dictionary else {}
+
+## 这口井叫什么。没有这一号井、或者没写名字，就叫"N 号井"（不会把别的井的名字套过来）。
+func shaft_name(id: int) -> String:
+	var v = _c.get("shaft_themes", {}).get(str(id), {})
+	var n := ""
+	if v is Dictionary:
+		n = str((v as Dictionary).get("name", ""))
+	return n if n != "" else ("%d 号井" % id)
+
+## 某个部位用哪个调色板键："dirt" 浮土 / "stone" 碎石地板 / "rock" 石头 / "deep" 深层 / "rim" 崖边。不认识就退回石头色。
+func shaft_color(id: int, slot: String) -> String:
+	var t := shaft_theme(id)
+	var v := str(t.get(slot, ""))
+	if v == "":
+		v = str(t.get("rock", "A"))
+	return v
+
+## 石头染色强度：0 = 素材原色，1 = 完全染成主题色。每口井可以不同，没写就用全局的 shaft_theme_mix。
+func shaft_mix(id: int) -> float:
+	var t := shaft_theme(id)
+	if t.has("mix"):
+		return clampf(float(t["mix"]), 0.0, 1.0)
+	return clampf(float(_c.get("shaft_theme_mix", 0.55)), 0.0, 1.0)
+
 ## 开工一口新井。返回 ""=开好了 / "done"=早就开了 / "locked"=没这口井 / "prev"=上一口井没开 / "depth"·"mat"·"crew"=还缺什么。
 func open_shaft(id: int) -> String:
 	if shaft_ok(id):
