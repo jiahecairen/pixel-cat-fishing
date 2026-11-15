@@ -317,3 +317,10 @@
 - **打包出来的包真的在跑游戏，不只是启动器**：另外用 `--export-debug` 打了一份调试包（调试包才认 `CATFISH_*`），让它自己截图两张：`/tmp/cfapp_boot_150.png`、`/tmp/cfapp_tavern_150.png`，都是 1920×1080、不同颜色 198 / 276 种、两张之间有 100 万像素不同（= 传送换地方了），日志 **0 条 `SCRIPT ERROR`、0 条 `标签图集缺少文字``。
 - 回归：`--script res://tests/run_tests.gd` → `ALL TESTS PASS`，**912 项 0 失败**；`--script res://tests/sim_long_run.gd` → `SIM PASS`；两者退出码 0，无 `SCRIPT ERROR`。
 - **未运行**：①**真人双击**的完整体验（我是用命令行跑同一个 `.command` 等价验证的，双击时 Terminal 的打开方式、字体、窗口位置没法替你看）；②Gatekeeper 第一次拦不拦（本机自己打的包没有隔离标记，从 GitHub 下载下来的那份要靠脚本里的 `xattr -cr` 兜底）；③窗口**透明、点击穿透、拖动**的肉眼确认——注意 `.app` 里 `get_viewport().get_texture().get_image()` 截出来是 **100% 不透明**的（视口截图不带窗口 alpha），所以截图**不能**用来判断透明度；④`.app` 图标在 Dock／Finder 里的观感；⑤Intel 机器上的实机运行（只验了 Apple Silicon 这台）。
+
+## C181 v0.93：3–5 号井的开工条件（本机 macOS 真机）
+- **实跑**：`Godot --headless --path . --script res://tests/run_tests.gd` → `ALL TESTS PASS`，**943 项 0 失败**（新增 `test_v093_open_shafts` 31 项），退出码 0、日志 0 条 `SCRIPT ERROR`。`… --script res://tests/sim_long_run.gd` → `SIM PASS`，退出码 0、0 条 `SCRIPT ERROR`。
+- **新测试覆盖的点**：开工条件全部来自 `data/balance.json`（代码里不写死）；三井的 `prev` 都比自己小、深度门槛递增、材料 id 都是真实存在的道具（写错名字会永远凑不齐）；越级开工返回 `prev`；没写条件的井号返回 `locked`；**条件不齐时不扣材料、不扣钱、`revision` 不变**（深度差 1 层也不行）；缺工人优先返回 `crew`；开工成功按表扣材料、`revision` 上涨、`shaft_status` 变 `ok`；重复开工返回 `done` 且不重复扣；开了 3 号井才买得到它的票（票价 = 起步价 + 2×`per_shaft`）；开工状态与"每口井挖到过多深"存得下来读得回来；**老存档只有 1/2 号井条目时 `ensure()` 自动补齐，不报错**。
+- **打包真机**：`./打包游戏.command` → `✓ 自检通过`、退出码 0，产物 `build/CatFishing_v0.93_Qwen.app`（163 MB 通用二进制，`plutil` 读 `CFBundleShortVersionString` = `0.93`，`codesign -v` 退出码 0），`Contents/MacOS/CatFishing --headless --quit-after 200` 退出码 0、**0 条 `ERROR`／`SCRIPT ERROR`**（打包好的包不带 `--path`）。另打调试包 `build/CatFishing_v0.93_Qwen_debug.app` 跑 `CATFISH_REGION=cave CATFISH_MINEMENU=open CATFISH_SHOT=/tmp/cf93app_open:150` → 生成 1920×1080 截图、日志 0 条 `SCRIPT ERROR`／`标签图集缺少文字`／`配置文件不存在`。
+- **存档安全**：启动真机包之前把 `user://save.json` 备份到 `_backup_save/save_before_v093_app.json`（md5 `738cc5ad…`），自检与 200 帧启动跑完后 md5 **仍是同一个值**（没有被打包/启动污染）。
+- **未运行**：①「开工」面板的**人工目检**（截图文件生成了，但本次是命令行自动截图，没有肉眼看过排版；我也没把视口截图当作透明度或排版正确的证据）；②真人从矿车大厅一路走到开工的**手感**（面板位置、选中行是否好点）；③窗口透明/穿透/拖动；④Intel 机器。

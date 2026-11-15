@@ -36,6 +36,7 @@ var cart_pick: Dictionary = {}     # 每口井选中的起始层
 var _leave_dbg := false
 var _need_release := false      # 爆炸后要先松开方向键
 var menu: String = ""           # "" / "shop" / "cook" / "cart" / "repair"
+var open_id: int = 3          # 「open」菜单正在开的是哪口井
 var menu_sel: int = 0
 var ride_shaft: int = 1
 var ride_floor: int = 1
@@ -426,6 +427,7 @@ func _menu_rows() -> int:
 		"shop": return 3
 		"cook": return m.game.mine.dishes().size()
 		"cart": return m.game.mine.shaft_count()
+		"open": return 2
 		"leave": return 2
 		"descend": return 2
 		"inn": return mine_inn_rows()
@@ -446,6 +448,7 @@ func _menu_key(code: int, act: bool) -> void:
 			"cook": _cook(menu_sel)
 			"cart": _cart(menu_sel)
 			"repair": _repair()
+			"open": _open_confirm()
 			"descend":
 				var go_down := menu_sel == 0
 				menu = ""
@@ -462,6 +465,8 @@ func _menu_key(code: int, act: bool) -> void:
 func _open(name: String) -> void:
 	menu = name
 	menu_sel = 0
+	if name == "open":
+		open_id = 3       # 调试：CATFISH_MINEMENU=open 直接看 3 号井的开工面板
 	m.play("click")
 
 ## 山上的木脚手架和冒烟的小屋（远景，都很小）。x 是在山里的横坐标，y 贴着山的轮廓。
@@ -589,8 +594,43 @@ func _cart(i: int) -> void:
 			menu = "repair"
 			menu_sel = 0
 			m.play("click")
+		"build":
+			open_id = id
+			menu = "open"
+			menu_sel = 0
+			m.play("click")
+		"wait":
+			say("要先开放 %d 号井" % mn.open_prev(id))
+			m.play("deny")
 		_:
 			say("%d 号井还没有开放" % id)
+			m.play("deny")
+
+## 开工一口新井（3–5 号）：材料在物品栏里，工人在雾灯岛酒馆雇。
+func _open_confirm() -> void:
+	var mn = m.game.mine
+	var why: String = mn.open_shaft(open_id)
+	match why:
+		"":
+			m.play("done")
+			m.game.dirty = true
+			say("%d 号井开工了！矿车现在能过去了" % open_id)
+			menu = "cart"
+			menu_sel = open_id - 1
+			m.log.write("mine_open", {"shaft": open_id})
+		"done":
+			menu = "cart"
+		"crew":
+			say("工人不够：去雾灯岛酒馆雇人")
+			m.play("deny")
+		"depth":
+			say("%d 号井还没挖到那么深" % mn.open_prev(open_id))
+			m.play("deny")
+		"prev":
+			say("要先开放 %d 号井" % mn.open_prev(open_id))
+			m.play("deny")
+		_:
+			say("材料不够，先去挖石头、金属和木板")
 			m.play("deny")
 
 func _repair() -> void:
@@ -998,6 +1038,21 @@ func _draw_menu(view: Vector2) -> void:
 				"工人 ×%d（已雇 %d）  工人在雾灯岛的酒馆雇" % [int(need.get("crew", 0)), mn.crew()]]
 			for i in lines.size():
 				m.dyn_text(str(lines[i]), r.position + Vector2(10, 22 + i * 14), Pal.L_W if i != 1 else Pal.L_Y)
+		"open":
+			var od: Dictionary = mn.open_need(open_id)
+			var inv3 = m.game.inventory
+			var st3 = m.game.state
+			var prev: int = mn.open_prev(open_id)
+			var olines: Array = ["上一口：%d 号井，要挖到第 %d 层（现在最深 %d 层）" % [prev, int(od.get("depth", 0)), mn.deepest_floor(prev)]]
+			var oitems: Dictionary = od.get("items", {})
+			for k in oitems.keys():
+				var nm: String = str(inv3.by_id.get(str(k), {}).get("name", str(k)))
+				olines.append("%s ×%d（有 %d）" % [nm, int(oitems[k]), inv3.count(st3, str(k))])
+			olines.append("工人 ×%d（已雇 %d，去雾灯岛酒馆雇）" % [int(od.get("crew", 0)), mn.crew()])
+			var oh := 26.0 + olines.size() * 14.0 + 24.0
+			var or2 := _panel(view, "%d 号井：开工" % open_id, _wallet_text(), [], "空格开工  Esc关闭", oh)
+			for i in olines.size():
+				m.dyn_text(str(olines[i]), or2.position + Vector2(10, 24 + i * 14), Pal.L_W if i != 0 else Pal.L_C)
 		"descend":
 			_panel(view, "下到第 %d 层？" % (mn.floor_n() + 1), "", [["下去", "沿着梯子爬进黑洞，更深一层"], ["先不下去", "继续待在第 %d 层" % mn.floor_n()]], "↑↓选择  空格确认  Esc取消", 20.0 + 2 * 28.0 + 20.0)
 		"inn":

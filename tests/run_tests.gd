@@ -72,6 +72,7 @@ func _init() -> void:
 		test_island_layout(balance, fish)
 		test_mail(balance, fish)
 		test_v088_ticket_and_locker(balance, fish)
+		test_v093_open_shafts(balance, fish)
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -1951,7 +1952,7 @@ func test_v067(balance: Dictionary, fish: Array) -> void:
 	var mn = g.mine
 	mn.ensure(clock.t)
 	check(mn.shaft_ok(1) and not mn.shaft_ok(2) and not mn.begin_run(2, clock.t), "1 号井通畅，2 号井铁路坏了进不去")
-	check(mn.shaft_status(2) == "broken" and mn.shaft_status(3) == "locked" and mn.shaft_count() == 5, "一共 5 口井：2 号坏了，3-5 号还没开放")
+	check(mn.shaft_status(2) == "broken" and mn.shaft_status(3) == "wait" and mn.shaft_count() == 5, "一共 5 口井：2 号坏了，3 号还在等 2 号通")
 	check(not g.state.to_dict().has("gems"), "宝石货币已取消")
 	check(mn.start_floors() == [1] and not mn.begin_run(1, clock.t, 5), "还没到过整 5 层，只能从第 1 层开始")
 	check(mn.begin_run(1, clock.t) and mn.in_run() and mn.floor_n() == 1 and mn.pos() == mn.entrance(1) + Vector2i(0, 1), "坐矿车下井：第 1 层，站在入口梯子下面一格")
@@ -2498,7 +2499,7 @@ func test_v088_ticket_and_locker(balance: Dictionary, fish: Array) -> void:
 	var w0: int = 5000
 	g.state.wallet_gold = w0
 	var r0: int = g.state.revision
-	check(mn.shaft_status(3) == "locked" and mn.buy_ticket(3, 1) == "locked", "3 号井还没开放，买不到票")
+	check(mn.shaft_status(3) == "wait" and mn.buy_ticket(3, 1) == "locked", "3 号井还没开放，买不到票")
 	check(g.state.wallet_gold == w0 and g.state.revision == r0, "买不到票不扣钱也不改存档")
 	check(mn.buy_ticket(1, 7) == "floor" and g.state.wallet_gold == w0, "没到过的层不能直接买票（也照旧不扣钱）")
 	g.state.wallet_gold = base - 1
@@ -2681,3 +2682,113 @@ func test_labels() -> void:
 				if first_bad == "":
 					first_bad = "%s: %s" % [str(f), s3]
 	check(bad == 0, "画面脚本里写死的 label 文字全在图集里（漏了 %d 条，第一个：%s）" % [bad, first_bad])
+
+func test_v093_open_shafts(balance: Dictionary, fish: Array) -> void:
+	print("v0.93: 3–5 号井的开工条件")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(93))
+	var mn = g.mine
+	var inv = g.inventory
+	mn.ensure(clock.t)
+	g.state.bag_slots = 60      # 要一次塞下几十份材料，先把物品栏放大
+	var om: Dictionary = balance.get("mine", {}).get("open_shafts", {})
+	check(om.has("3") and om.has("4") and om.has("5"), "3/4/5 号井的开工条件写在 balance 里（不是写死在代码里）")
+	var prev_ok := true
+	var d3 := 0
+	var d4 := 0
+	var d5 := 0
+	for k in ["3", "4", "5"]:
+		var e: Dictionary = om[k]
+		var p := int(e.get("prev", 0))
+		if p >= int(k) or p < 1 or p > 5 or int(e.get("depth", 0)) <= 0 or int(e.get("crew", 0)) <= 0:
+			prev_ok = false
+		if (e.get("items", {}) as Dictionary).is_empty():
+			prev_ok = false
+	check(prev_ok, "每口井都有：更早的上一口井、正数深度门槛、正数工人、要材料")
+	d3 = int(om["3"].get("depth", 0)); d4 = int(om["4"].get("depth", 0)); d5 = int(om["5"].get("depth", 0))
+	check(d3 < d4 and d4 < d5, "越往后的井要挖得越深才让开（%d < %d < %d）" % [d3, d4, d5])
+	var ids_ok := true
+	for k in ["3", "4", "5"]:
+		for it in (om[k].get("items", {}) as Dictionary).keys():
+			if not inv.by_id.has(str(it)):
+				ids_ok = false
+	check(ids_ok, "开工要的材料都是真实存在的道具（写错名字就永远凑不齐了）")
+	# 开局：2 号井没修 → 3 号井是 wait
+	check(mn.shaft_status(3) == "wait" and not mn.shaft_ok(3), "2 号井没修好之前，3 号井只能干等（wait）")
+	check(mn.open_shaft(3) == "prev", "上一口井没开，开工被拒（prev）")
+	check(mn.shaft_status(5) == "wait" and mn.open_shaft(5) == "prev", "5 号井要等 4 号井，越级开工被拒")
+	check(mn.open_need(9).is_empty() and mn.open_shaft(9) == "locked", "没写条件的井号（9 号）永远开不了")
+	# 修好 2 号井
+	g.state.wallet_gold = 9000
+	inv.add(g.state, "metal", 90); inv.add(g.state, "stone", 90)
+	g.state.effects["workers"] = 4
+	check(mn.repair_shaft() == "" and mn.shaft_ok(2), "先按老办法把 2 号井的铁路修好")
+	check(mn.shaft_status(3) == "build", "2 号井通了以后，3 号井变成可以开工（build）")
+	# 深度不够
+	var n_before: Dictionary = {}
+	for k in (om["3"].get("items", {}) as Dictionary).keys():
+		inv.add(g.state, str(k), int((om["3"]["items"] as Dictionary)[k]))
+		n_before[str(k)] = inv.count(g.state, str(k))
+	var r0: int = g.state.revision
+	var w0: int = g.state.wallet_gold
+	check(mn.deepest_floor(2) == 0 and not mn.open_ready(3), "2 号井还一层没挖过，3 号井不算凑齐")
+	check(mn.open_shaft(3) == "depth", "2 号井没挖到指定深度，开工被拒（depth）")
+	var same := true
+	for k in n_before.keys():
+		if inv.count(g.state, str(k)) != int(n_before[k]):
+			same = false
+	check(same and g.state.wallet_gold == w0 and g.state.revision == r0, "开工被拒不扣材料、不扣钱、不写存档")
+	mn.shaft_state(2)["best"] = d3 - 1
+	check(mn.deepest_floor(2) == d3 - 1 and mn.open_shaft(3) == "depth", "差一层也不行（%d 层 < %d 层）" % [d3 - 1, d3])
+	mn.shaft_state(2)["best"] = d3
+	check(mn.deepest_floor(2) == d3 and mn.open_ready(3), "挖到第 %d 层就算够深" % d3)
+	# 缺工人
+	g.state.effects["workers"] = 0
+	r0 = g.state.revision
+	check(mn.open_shaft(3) == "crew", "工人没雇够，开工被拒（crew）")
+	same = true
+	for k in n_before.keys():
+		if inv.count(g.state, str(k)) != int(n_before[k]):
+			same = false
+	check(same and g.state.revision == r0, "缺工人这一趟一件材料都不扣（先查再扣）")
+	# 缺材料
+	inv.remove(g.state, "metal", inv.count(g.state, "metal"))
+	g.state.effects["workers"] = 4
+	r0 = g.state.revision
+	check(mn.open_shaft(3) == "mat", "材料不够，开工被拒（mat）")
+	check(g.state.revision == r0, "缺材料这一趟也不写存档")
+	# 凑齐
+	for k in (om["3"].get("items", {}) as Dictionary).keys():
+		inv.add(g.state, str(k), int((om["3"]["items"] as Dictionary)[k]))
+	var m3: Dictionary = om["3"]["items"]
+	var metal_before: int = inv.count(g.state, "metal")
+	r0 = g.state.revision
+	check(mn.open_missing(3).is_empty() and mn.open_ready(3), "材料、深度、工人齐了，open_ready 说可以")
+	check(mn.open_shaft(3) == "", "齐了就开得成 3 号井")
+	check(mn.shaft_ok(3) and mn.shaft_status(3) == "ok", "开好的井状态变 ok，矿车能过去")
+	check(inv.count(g.state, "metal") == metal_before - int(m3.get("metal", 0)), "开工按表扣金属（扣了 %d 个）" % int(m3.get("metal", 0)))
+	check(g.state.revision > r0, "开工要写进存档（修订号涨了 %d）" % (g.state.revision - r0))
+	r0 = g.state.revision
+	var metal_after: int = inv.count(g.state, "metal")
+	check(mn.open_shaft(3) == "done", "已经开好的井不能重复开工（done）")
+	check(g.state.revision == r0 and inv.count(g.state, "metal") == metal_after, "重复开工不重复扣钱扣材料")
+	# 开了就能买票
+	g.state.wallet_gold = 9000
+	var t: Dictionary = balance.get("mine", {}).get("ticket", {})
+	check(mn.buy_ticket(3, 1) == "" and g.state.wallet_gold == 9000 - (int(t.get("base", 0)) + 2 * int(t.get("per_shaft", 0))), "开了 3 号井就能买它的票（贵两档）")
+	check(mn.shaft_status(4) == "build" and mn.shaft_status(5) == "wait", "3 号井通了 → 4 号井可开工、5 号井还得等")
+	# 存档往返
+	mn.shaft_state(4)["open"] = 1
+	var s2 := GameState.new()
+	s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
+	var g2 := Game.new(balance, fish, s2, clock, _rng(93))
+	g2.mine.ensure(clock.t)
+	check(g2.mine.shaft_ok(3) and g2.mine.shaft_ok(4) and not g2.mine.shaft_ok(5), "开工状态存得下来、读得回来")
+	check(g2.mine.deepest_floor(2) == d3, "每口井挖到过多深也存得下来")
+	# 老存档：没有 3/4/5 号井的条目也不能崩
+	var s3 := GameState.new()
+	s3.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict())))
+	(s3.mine as Dictionary)["shafts"] = {"1": {"cp": 3, "best": 12}}
+	var g3 := Game.new(balance, fish, s3, clock, _rng(93))
+	g3.mine.ensure(clock.t)
+	check(g3.mine.deepest_floor(1) == 12 and g3.mine.shaft_status(3) == "wait", "老存档缺 3/4/5 号井的条目也会自动补上，不报错")

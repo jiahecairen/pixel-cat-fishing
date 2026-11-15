@@ -509,3 +509,15 @@
 - 产物：**`build/CatFishing_v0.92_Qwen.app`**（163 MB 通用二进制，`CFBundleShortVersionString=0.92`，签名校验通过，PCK 里确认带上了 `data/*.json`）。另外打了一份调试包用 `CATFISH_SHOT` 让它**自己截图**，证明这个包真的在跑游戏画面（两张 1920×1080，0 警告 0 报错）。
 - `project.godot` 的 `config/version` 从 `0.89` 升到 `0.92`（之前一直没跟着版本号走，"关于"里显示的是旧版本）。
 - 验证状态见 C180：打包、启动、自检、回归测试都在本机跑过；**真人双击、透明/穿透/拖动、Intel 机器**还没验。
+
+## v0.93：3–5 号井从"永远锁着"变成可以自己开工
+- 之前矿车大厅里 3/4/5 号井是死的：`shaft_ok()` 只认 1 号和修好的 2 号，剩下三口永远返回 `locked`，玩家无论怎么挖都开不了 → 5 口井的数据（`mine.shafts=5`）和 5 种矿石分层其实是空转的。
+- 现在改成数据驱动的**开工工程**：`data/balance.json` 新增 `mine.open_shafts`（3/4/5 号各一条：`prev` 要先开放哪口井、`depth` 上一口井要挖到多深、`items` 要哪些材料、`crew` 要几个雇工）。数值一个都没写进 `.gd`。
+- `core/mine.gd` 新增 `open_need()` / `open_prev()` / `deepest_floor()` / `open_missing()` / `open_ready()` / `open_shaft()`；`shaft_ok()` 认 `shafts[id].open`；`shaft_status()` 多两种状态：`wait`（上一口井还没开）和 `build`（材料·工人·深度还差东西），原来的 `locked` 只留给"数据里根本没这口井"。
+- **先查再扣**：`open_shaft()` 先把 `open_missing()` 算完，缺什么就返回 `depth` / `mat` / `crew` / `prev` 并**一件材料都不扣、`revision` 不动**；齐了才一次扣完并置 `shafts[id].open = 1`。重复开工返回 `done`，不重复扣。
+- `presentation/mine_view.gd`：票务工位上新增「开工」面板（沿用 2 号井修理面板的 `_panel()` + `dyn_text` 路径），逐条列出上一口井的深度进度、每种材料"要几个 / 有几个"、工人"要几个 / 已雇几个"；开工成功后自动跳回票务工位并选中这口井。`_open("open")` 让 `CATFISH_MINEMENU=open` 直接看这块面板。
+- `ensure()` 现在给 1–5 号井都补齐 `{fixed, open, cp, best}` 字段，老存档只有 1/2 号井的条目也不会缺字段。
+- 测试：新增 `test_v093_open_shafts`（31 项），检查数 **912 → 943**；顺带改掉两条被这次改动改旧了的断言（`shaft_status(3)` 从 `locked` 变 `wait`）。两处自己写反的判断已修正（"材料清单非空"写成"为空"、`prev < id` 的 `or` 条件把合法数据判成非法）。
+- 本机实跑：`ALL TESTS PASS`（943 项 0 失败）、`SIM PASS`，两者退出码 0、0 条 `SCRIPT ERROR`；`./打包游戏.command` → `✓ 自检通过`，产物 **`build/CatFishing_v0.93_Qwen.app`**（163 MB，`CFBundleShortVersionString=0.93`，`codesign -v` 通过，200 帧无界面启动 0 报错）；调试包带 `CATFISH_MINEMENU=open` 自截图 `/tmp/cf93app_open_150.png`（1920×1080，0 警告 0 报错）。启动前后 `user://save.json` md5 一致（`738cc5ad…`，已备份在 `_backup_save/`）。
+- 这次没动 `tools/art/generate.py`（面板文字走 `dyn_text` 动态字体，不是标签图集），所以没有重新生成素材。
+- 验证状态见 C181：**测试、打包、启动、自检都在本机跑过；开工面板的排版没有人工目检**（自动化的像素校验在这台机器上不可靠，见 C179/C180 的教训）。

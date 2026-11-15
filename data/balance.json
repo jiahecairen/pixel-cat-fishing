@@ -1816,6 +1816,41 @@
       "stone": 40,
       "crew": 2
     },
+    "open_shafts": {
+      "3": {
+        "prev": 2,
+        "depth": 20,
+        "crew": 2,
+        "items": {
+          "plank": 10,
+          "stone": 30,
+          "metal": 12
+        }
+      },
+      "4": {
+        "prev": 3,
+        "depth": 40,
+        "crew": 3,
+        "items": {
+          "plank": 16,
+          "stone": 55,
+          "metal": 28,
+          "coal": 20
+        }
+      },
+      "5": {
+        "prev": 4,
+        "depth": 65,
+        "crew": 4,
+        "items": {
+          "plank": 24,
+          "stone": 80,
+          "metal": 50,
+          "coal": 45,
+          "gold_ore": 12
+        }
+      }
+    },
     "height": 20,
     "checkpoint_every": 5,
     "bomb": {

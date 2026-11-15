@@ -58,11 +58,13 @@ func ensure(now_ms: int) -> void:
 	if not d.has("sta"):                           # 体力是跨局的：第一次进矿是满的
 		d["sta"] = float(stamina_max())
 	run().erase("sta")
-	for sid in [1, 2]:
+	for sid in range(1, shaft_count() + 1):
 		if not m()["shafts"].has(str(sid)):
-			m()["shafts"][str(sid)] = {"fixed": 0, "cp": 1, "best": 0}
+			m()["shafts"][str(sid)] = {"fixed": 0, "open": 0, "cp": 1, "best": 0}
 		if not shaft_state(sid).has("cp"):
 			shaft_state(sid)["cp"] = 1
+		if not shaft_state(sid).has("best"):
+			shaft_state(sid)["best"] = 0
 
 ## ---- 永久：镐 / 灯 / 背包 / 炸弹 ----
 func pick() -> int:
@@ -97,16 +99,26 @@ func shaft_state(id: int) -> Dictionary:
 	return sh.get(str(id), {})
 
 func shaft_ok(id: int) -> bool:
-	return id == 1 or (id == 2 and int(shaft_state(id).get("fixed", 0)) > 0)
+	if id == 1:
+		return true
+	if id == 2:
+		return int(shaft_state(id).get("fixed", 0)) > 0
+	return int(shaft_state(id).get("open", 0)) > 0
 
 func shaft_count() -> int:
 	return int(_c.get("shafts", 5))
 
-## "ok" 能下 / "broken" 铁路坏了能修 / "locked" 还没开放
+## "ok" 能下 / "broken" 铁路坏了能修 / "wait" 上一口井还没开工 / "build" 条件差材料·工人·深度 / "locked" 没有开放条件
 func shaft_status(id: int) -> String:
 	if shaft_ok(id):
 		return "ok"
-	return "broken" if id == 2 else "locked"
+	if id == 2:
+		return "broken"
+	if open_need(id).is_empty():
+		return "locked"
+	if not shaft_ok(open_prev(id)):
+		return "wait"
+	return "build"
 
 ## 矿车票价：矿井越高级、选择的存档楼层越深，票价越高。
 func ticket_price(id: int, floor: int) -> int:
@@ -159,6 +171,72 @@ func repair_shaft() -> String:
 	for id in ["metal", "stone"]:
 		_inv.remove(_s, id, int(need.get(id, 0)))
 	shaft_state(2)["fixed"] = 1
+	_s.revision += 1
+	return ""
+
+## ---- 永久：3–5 号井的开工条件（数值全在 data/balance.json 的 mine.open_shafts）----
+
+## 这口井的开工条件（上一口井、要挖到多深、要几个工人、要哪些材料）。没有这口井 = 空字典。
+func open_need(id: int) -> Dictionary:
+	var o: Dictionary = _c.get("open_shafts", {})
+	var v = o.get(str(id), {})
+	return v if v is Dictionary else {}
+
+## 要先开放哪口井（数据没写就默认前一口）。
+func open_prev(id: int) -> int:
+	return maxi(1, int(open_need(id).get("prev", maxi(1, id - 1))))
+
+## 这口井以前最深挖到过第几层（下井时记在 shafts[id].best）。
+func deepest_floor(id: int) -> int:
+	return int(shaft_state(id).get("best", 0))
+
+## 还差什么：[["depth"|"crew"|道具 id, 差几个], …]，空 = 都够了。
+func open_missing(id: int) -> Array:
+	var need := open_need(id)
+	if need.is_empty():
+		return []
+	var out: Array = []
+	var want := int(need.get("depth", 0))
+	if want > 0 and deepest_floor(open_prev(id)) < want:
+		out.append(["depth", want - deepest_floor(open_prev(id))])
+	var items: Dictionary = need.get("items", {})
+	for k in items.keys():
+		var lack := int(items[k]) - _inv.count(_s, str(k))
+		if lack > 0:
+			out.append([str(k), lack])
+	var lack_w := int(need.get("crew", 0)) - crew()
+	if lack_w > 0:
+		out.append(["crew", lack_w])
+	return out
+
+func open_ready(id: int) -> bool:
+	var need := open_need(id)
+	if need.is_empty() or not shaft_ok(open_prev(id)):
+		return false
+	return open_missing(id).is_empty()
+
+## 开工一口新井。返回 ""=开好了 / "done"=早就开了 / "locked"=没这口井 / "prev"=上一口井没开 / "depth"·"mat"·"crew"=还缺什么。
+func open_shaft(id: int) -> String:
+	if shaft_ok(id):
+		return "done"
+	var need := open_need(id)
+	if need.is_empty():
+		return "locked"
+	if not shaft_ok(open_prev(id)):
+		return "prev"
+	var miss := open_missing(id)
+	if not miss.is_empty():
+		for x in miss:
+			if str(x[0]) == "crew":
+				return "crew"
+		for x in miss:
+			if str(x[0]) == "depth":
+				return "depth"
+		return "mat"
+	var items: Dictionary = need.get("items", {})
+	for k in items.keys():
+		_inv.remove(_s, str(k), int(items[k]))
+	shaft_state(id)["open"] = 1
 	_s.revision += 1
 	return ""
 
