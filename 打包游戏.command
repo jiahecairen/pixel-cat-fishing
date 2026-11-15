@@ -63,18 +63,28 @@ ln -sfn "$(basename "$app")" build/CatFishing.app
 codesign --force --sign - "$app" >/dev/null 2>&1 || echo "（临时签名没做成，本机双击一般还是能开）"
 xattr -cr "$app" 2>/dev/null
 
-echo "→ 自检：打包出来的 app 无界面起两帧…"
-if ! timeout 120 "$bin" --headless --quit-after 2 >/tmp/catfish_pack_check.log 2>&1; then
+echo "→ 自检：打包出来的 app 无界面起两帧（存档写到临时目录，不碰你的存档）…"
+# 这一步以前是拿你的真实用户目录跑的：游戏一启动就会写 user://save.json，
+# 等于每打一次包就把玩家的真存档重写一遍。v0.97 起把 HOME 挪到临时目录里做自检，
+# 自检完整个目录删掉。玩家双击「运行游戏.command」时照旧写自己的存档。
+check_home="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/catfish_pack_home.XXXXXX")"
+if [[ -z "$check_home" || ! -d "$check_home" ]]; then
+	echo "✗ 建不出临时存档目录，自检不做了（不敢拿你的真存档试）。" >&2
+	exit 1
+fi
+if ! HOME="$check_home" timeout 120 "$bin" --headless --quit-after 2 >/tmp/catfish_pack_check.log 2>&1; then
+	rm -rf "$check_home"
 	echo "✗ 打包出来的 app 起不来，见 /tmp/catfish_pack_check.log" >&2
 	tail -20 /tmp/catfish_pack_check.log >&2
 	exit 1
 fi
+rm -rf "$check_home"
 if grep -q "SCRIPT ERROR" /tmp/catfish_pack_check.log; then
 	echo "✗ app 能起，但日志里有 SCRIPT ERROR，见 /tmp/catfish_pack_check.log" >&2
 	grep "SCRIPT ERROR" -A 2 /tmp/catfish_pack_check.log | head -20 >&2
 	exit 1
 fi
-echo "✓ 自检通过：app 能启动（两帧，退出码 0，无 SCRIPT ERROR）"
+echo "✓ 自检通过：app 能启动（两帧，退出码 0，无 SCRIPT ERROR；临时存档目录已删）"
 
 echo ""
 echo "打包完成："

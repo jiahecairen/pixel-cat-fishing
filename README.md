@@ -176,7 +176,7 @@ macOS 桌面上的像素小猫，在透明悬浮窗里坐船钓鱼。开始一�
 ./build_codex.command     # Codex 线：产物 build/CatFishing_v<版本>_codex.app
 ```
 
-两个脚本都会读取 `project.godot` 的 `config/version`，把它同步进 `export_presets.cfg` 的版本号，导出后再把 `build/CatFishing.app` 做成指向版本包的替身。`打包游戏.command` 还会**自己无界面起两帧做自检**，起不来就报错退出，不会假装打包成功。
+两个脚本都会读取 `project.godot` 的 `config/version`，把它同步进 `export_presets.cfg` 的版本号，导出后再把 `build/CatFishing.app` 做成指向版本包的替身。`打包游戏.command` 还会**自己无界面起两帧做自检**，起不来就报错退出，不会假装打包成功。自检是在 `mktemp` 建的临时目录里跑的（v0.97 起），**不会重写你的存档**——以前每打一次包都会把你的 `user://save.json` 重写一遍。
 想打包一份"能截图能看"的调试版（调试版才认 `CATFISH_*` 调试变量）：
 
 ```bash

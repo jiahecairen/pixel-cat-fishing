@@ -8,15 +8,17 @@ extends RefCounted
 
 const Pal := preload("res://presentation/palette.gd")
 
-var w          # World
-var m
+var m                    # 主节点（Node 的引用不参与引用计数，不会形成循环）
+var _gy0: float = 0.0    # 地面高度。构造时取一次**数值**：这里**不能**把 World 存进成员，
+                         # 因为 World 和本类都是 RefCounted，互相指就永远不会被回收
+                         # （v0.96 打调试包退出时报 2 个资源仍被占用、5 个实例泄漏，就是这里）
 
 func _init(world) -> void:
-	w = world
+	_gy0 = float(world.GROUND_Y)      # GROUND_Y 是 const，抄一份数值永远不会有"过期"问题
 	m = world.m
 
 func _gy() -> float:
-	return float(w.GROUND_Y)
+	return _gy0
 
 # ------------------------------------------------------------------ 小工具
 func _r(x: float, y: float, wd: float, h: float, col: Color) -> void:

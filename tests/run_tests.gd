@@ -76,6 +76,7 @@ func _init() -> void:
 		test_v094_shaft_themes(balance, fish)
 		test_v095_shaft_backdrop(balance, fish)
 		test_v096_ore_dex(balance, fish)
+		test_v097_no_helper_cycles()
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -3020,3 +3021,106 @@ func test_v096_ore_dex(balance: Dictionary, fish: Array) -> void:
 	check(Book.dex_pages_for(total, 12) == int(ceil(float(total) / 12.0)) and Book.dex_pages_for(total, 12) >= 3, "%d 张卡一页 12 张要翻 %d 页" % [total, Book.dex_pages_for(total, 12)])
 	check(Book.dex_pages_for(0, 12) == 1 and Book.dex_pages_for(12, 12) == 1, "刚好一页或空图鉴都只有一页")
 	check(Book.dex_pages_for(13, 12) == 2 and Book.dex_pages_for(13, 0) == 13, "多一张就多一页；一页一张时不会除零")
+
+
+## v0.97：画面助手（都是 RefCounted）不许**互相**持有。
+## 两个带引用计数的对象互相指，谁都归不了零，就永远不回收：v0.96 打调试包退出时引擎报了
+## "2 resources still in use at exit" + "5 ObjectDB instances were leaked" + 227 条 Orphan
+## StringName，查出来就是 World 存了 Shopfronts、Shopfronts 又存回 World。单向持有没问题
+## （持有者被释放时，被持有者跟着归零），所以要拦的是**来回指**。
+func test_v097_no_helper_cycles() -> void:
+	print("v0.97: 助手之间不许互相持有（退出时不再漏对象）")
+	var dir := DirAccess.open("res://presentation")
+	check(dir != null, "presentation/ 目录在")
+	var helpers := {}
+	if dir != null:
+		for f in dir.get_files():
+			var fn := str(f)
+			if not fn.ends_with(".gd"):
+				continue
+			var src: String = FileAccess.get_file_as_string("res://presentation/%s" % fn)
+			var head := ""
+			for l in src.split("\n"):
+				var t := str(l).strip_edges()
+				if t == "" or t.begins_with("#"):
+					continue
+				head = t
+				break
+			if head == "extends RefCounted":
+				helpers[fn] = src
+	check(helpers.size() >= 10, "扫到 %d 个 RefCounted 画面助手" % helpers.size())
+	# 类名约定：文件名去掉 .gd、首字母大写（shopfronts.gd → Shopfronts）
+	var by_class := {}
+	for f in helpers.keys():
+		var n := str(f).substr(0, str(f).length() - 3)
+		by_class[str(n).substr(0, 1).to_upper() + str(n).substr(1)] = str(f)
+	# 先找出"谁把哪个助手赋给了自己的成员"，画出一张单向图
+	var edges := {}          # 文件 → { 被持有的类名: 成员名 }
+	var loops := 0
+	var first_loop := ""
+	for f in helpers.keys():
+		var src: String = helpers[f]
+		var members := {}
+		for l in src.split("\n"):
+			var t := str(l)
+			if not t.begins_with("var ") and not t.begins_with("@export var "):
+				continue
+			var rest := t.substr(t.find("var ") + 4)
+			var end := rest.length()
+			for ch in [" ", "\t", "=", ":"]:
+				var i := rest.find(ch)
+				if i >= 0:
+					end = mini(end, i)
+			members[rest.substr(0, end)] = true
+		var holds := {}
+		for cls in by_class.keys():
+			if str(by_class[cls]) == str(f):
+				continue
+			var needle := "= %s.new(" % str(cls)
+			var pos := src.find(needle)
+			while pos >= 0:
+				var ls := src.rfind("\n", pos)
+				var line := str(src.substr(ls + 1, pos - ls - 1)).strip_edges()
+				if members.has(line):
+					holds[str(cls)] = str(line)
+				pos = src.find(needle, pos + 1)
+		edges[str(f)] = holds
+	# 来回指 = 环
+	var my_class := {}
+	for f in helpers.keys():
+		for cls in by_class.keys():
+			if str(by_class[cls]) == str(f):
+				my_class[str(f)] = str(cls)
+	for f in edges.keys():
+		var holds: Dictionary = edges[f]
+		for cls in holds.keys():
+			var target := str(by_class[cls])
+			if not edges.has(target):
+				continue
+			if (edges[target] as Dictionary).has(my_class[f]):
+				loops += 1
+				if first_loop == "":
+					first_loop = "%s 存了 %s，%s 又存回 %s" % [str(f), str(cls), str(target), str(my_class[f])]
+	var edge_count := 0
+	for f in edges.keys():
+		edge_count += (edges[f] as Dictionary).size()
+	check(edge_count >= 1, "扫到 %d 条单向持有（说明这个扫描真的在看，不是空转）" % edge_count)
+	check(loops == 0, "助手之间没有来回指的环%s" % (("；查出：" + first_loop) if loops > 0 else ""))
+	# 当初那处具体的毛病：门面不许再存任何东西
+	var sf: String = FileAccess.get_file_as_string("res://presentation/shopfronts.gd")
+	check(sf.length() > 200, "shopfronts.gd 还在（街上门面）")
+	check(not sf.contains("\nvar w"), "门面不再把 World 存进成员（环断在这一半）")
+	check(sf.contains("var _gy0"), "地面高度改成构造时抄一份数值（_gy0）")
+	check(sf.contains("return _gy0"), "地面高度取自抄来的数值，不再回头找 World")
+	check(sf.find("w.GROUND_Y") < 0, "门面里一处也不再通过 World 取东西")
+	check((edges.get("shopfronts.gd", {}) as Dictionary).is_empty(), "门面不再持有任何助手（单向图里它是叶子）")
+	var ws: String = FileAccess.get_file_as_string("res://presentation/world.gd")
+	check(ws.contains("const GROUND_Y"), "GROUND_Y 是常量，抄一份数值不会有\"过期\"的问题")
+	check(ws.contains("Shopfronts.new(self)"), "门面还是 World 现造的（画面没被拆掉）")
+	var sfc: GDScript = load("res://presentation/shopfronts.gd")
+	check(sfc != null and sfc.can_instantiate(), "shopfronts.gd 改完还能编译")
+	var wsc: GDScript = load("res://presentation/world.gd")
+	check(wsc != null and wsc.can_instantiate(), "world.gd 还能编译（小镇主画面）")
+	var msc: GDScript = load("res://presentation/main.gd")
+	check(msc != null and msc.can_instantiate(), "main.gd 还能编译（游戏入口）")
+

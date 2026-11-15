@@ -562,3 +562,15 @@
 - 打包：`./打包游戏.command` → `✓ 自检通过`，产物 **`build/CatFishing_v0.96_Qwen.app`**（163 MB 通用二进制，`CFBundleShortVersionString`/`CFBundleVersion` 都是 0.96，`codesign -v` 退出码 0），`build/CatFishing.app` 已指向 v0.96；调试包 `build/CatFishing_v0.96_Qwen_debug.app` + 启动脚本同版本生成。全程真存档 md5 仍是 `738cc5ad…`。
 - **还没做**：矿石的"用途"目前只到"看得见"——**工坊合成、任务需求**还没有，矿石仍然只进不出（除了直接在物品栏卖钱）。这条继续挂在 `docs/MINES_PLAN.md` 等用户定。
 - 验证状态见 C184：**测试、打包、自检、图鉴页截图取色都在本机跑过；图鉴页的排版与"好不好看"没有人工目检**（本代理没有视觉能力，像素差异只能证明"矿石卡在画、且只画在面板里"）。
+
+
+## v0.97：退出时不再漏对象，打包自检不再碰你的存档（这版全是"收尾"）
+- 起因是 v0.96 打包自检的日志：`--verbose` 退出时引擎报 **`ERROR: 2 resources still in use at exit`** + **`WARNING: 5 ObjectDB instances were leaked at exit`**，还有 **227 条 Orphan StringName**（`_fronts`、`_draw_drops`、`ROOM_MIN_X` 这些名字全在门面和小镇那边）。当时当成"退出时的噪音"放过了，这版去查：**是真泄漏，不是噪音**。
+- 查出来的环：`presentation/world.gd` 是 `extends RefCounted` 的助手类，`_fronts = Shopfronts.new(self)` 把门面（也是 RefCounted）存进成员；而 `shopfronts.gd` 的 `_init(world)` 又 `w = world` 把 World 存了回来。**两个引用计数的对象互相指，谁都归不了零**，于是这两个脚本资源永远释放不掉 → 引擎报的就是那两行。单向持有本身没问题（持有者被释放时被持有者跟着归零），**坏在来回指**。
+- 修法（`presentation/shopfronts.gd`）：门面不再存 World，改成构造时把地面高度**抄成数值** `var _gy0: float`，`_gy()` 返回它；`m`（主节点）照旧存——**Node 的引用不参与引用计数，不会成环**。`GROUND_Y` 是 `const`（124），抄一份数值不存在"过期"的问题。改动只有这一处，`Shopfronts.new(self)` 两个调用点一个字没动。
+- 防再犯（`tests/run_tests.gd::test_v097_no_helper_cycles`，**15 项**，检查数 **997 → 1012**）：扫 `presentation/*.gd`，先认出头一行是 `extends RefCounted` 的助手，再找出"谁把哪个助手赋给了自己的成员"画一张**单向图**，最后只拦**来回指的环**（A 存 B 且 B 存回 A）。另外钉住这次的具体现场：门面不许再出现 `var w`、不许再出现 `w.GROUND_Y`、`_gy0`/`return _gy0` 要在、`GROUND_Y` 必须还是 `const`（否则抄数值就危险）、门面在单向图里必须是叶子，外加三个画面脚本还能编译。
+- 另一件更要紧的：**`打包游戏.command` 的两帧自检以前是拿玩家真实用户目录跑的**。游戏一启动就写 `user://save.json`，等于**每打一次包就把你的真存档重写一遍**——v0.96 那次真存档多出空键 `stats.ore_counts` 就是这么来的（那次没有丢进度，但这条路本身迟早出事）。现在自检把 `HOME` 用 `mktemp -d` 挪到临时目录，跑完整个目录删掉；`bash -n` 语法自检通过。**实测打包前后真存档 md5 一模一样**（`9eca58e9…` → `9eca58e9…`），临时目录里只有它自己写的 1562 字节新档。
+- 本机实跑（都在真 macOS / Godot 4.7.2 上）：`--import` 0 报错；`ALL TESTS PASS`（**1012 项 0 失败**）+ `SIM PASS`，两者退出码 0、**0 条 `SCRIPT ERROR`、0 条 `WARNING`**；`./打包游戏.command` → `✓ 自检通过`，产物 **`build/CatFishing_v0.97_Qwen.app`**（163 MB，x86_64 + arm64，`codesign -v` 退出码 0，版本号 0.97）+ 调试包 `CatFishing_v0.97_Qwen_debug.app`（178 MB，临时签名退出码 0）。
+- 泄漏修没修好，用**同一套关键字**（`Leaked instance|still in use|Orphan StringName`）前后各量一次（都带 `--verbose`、都带 `HOME=/tmp/…` 隔离）：**改之前** —— 矿洞（v0.96 调试包，`--quit-after 240`）**64 行**（孤儿 StringName 55 条）、图鉴页（同一个包）**64 行**（55 条）、小镇（v0.96 代码，编辑器外 `--path .`，`--quit-after 300`）**236 行**（227 条；引擎那两行是 `5 ObjectDB instances were leaked` + `2 resources still in use at exit`）。**改之后** —— 同样的三种画面各跑一次 + Release 包 200 帧 + 调试包 240 帧：**全部 0 行**，退出码 0、0 条 `SCRIPT ERROR`。
+- 画面有没有被改坏：同版本两次运行的整屏像素差是 **10.98%**（街上的人会走、天色在变，这就是噪声地板），改动前后的差只有 **1.54%**，店面那一带（y 560–760）三张图平均 RGB 差 **≤0.12/255**。也就是说**看不出这次改动动过画面**，加上改的是常量抄数值，逻辑上也不可能变。
+- 验证状态见 C185：测试、打包、自检、三屏泄漏测量、真存档 md5 对比都在本机跑过。**没做人工目检**（本代理没有视觉能力），也没量过 Intel 机器。
