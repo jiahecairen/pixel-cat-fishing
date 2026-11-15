@@ -424,3 +424,33 @@ HOME=/tmp/坏档home CATFISH_SAVE=/tmp/坏档 build/CatFishing_v1.00_Qwen_debug.
 - `save_lost_on_quit`（退出时仍未写进去）只在代码路径里，没在真机上触发过。
 - **v1.00 的 35 画面体检**（`./tools/perf/leak_sweep.sh 240 build/CatFishing_v1.00_Qwen_debug.app /tmp/v100_shots`，退出码 0）：`✓ 泄漏扫描通过：35 个画面退出时都没有泄漏、没有缺字，每个都留下了自己的截图`，35 行**退出码／泄漏行／`SCRIPT ERROR`／缺字全 0**，35 张截图 5–25 KB 在 `/tmp/v100_shots/`（最小 `02_迷你视图.png` 5.0 KB，最大 `15_菜单.png` 25 KB）；唯一的软提示还是 `矿井开挖 与别的画面完全相同`（第 240 帧还没画到挥镐那一帧，只提示不判失败）。截图**我没有肉眼看过**。
 - 挂机 20 分钟（`./tools/perf/idle_rss.sh 20 build/CatFishing_v1.00_Qwen_debug.app`）：首段平均 184.2 MB → 末段 111.0 MB（−39.7%）、CPU 平均 5.4%（最大 6.8%），`✓ 判定：挂着没一直在涨`。**未验**：比 20 分钟更长的挂机没测过；RSS 绝对值随机器状态浮动，不能当预算。
+
+## C189 v1.01：进度没落盘时关窗口要先问一句（本机 macOS 真机）
+
+**你（人）怎么验，30 秒**：
+
+```sh
+rm -rf /tmp/坏档 && mkdir -p /tmp/坏档/save /tmp/坏档/home
+printf '{"save_version": 1}' > /tmp/坏档/save/save.json
+mkdir /tmp/坏档/save/save.json.tmp      # 关键：拿空目录占住"临时档"这个名字 → 一个字节都写不进去
+HOME=/tmp/坏档/home CATFISH_SAVE=/tmp/坏档/save build/CatFishing_v1.01_Qwen_debug.app/Contents/MacOS/CatFishing
+```
+
+- 开局后按 **⌘Q**（或点界面里的退出按钮/红叉）：**不该退出**，确认框里多两行——红「存档没写进去」、黄「再点退出会丢掉这段进度」。
+- **再点一次「退出」→ 必须真的退出**（不能把你关在门外）。
+- 事件日志 `/tmp/坏档/save/logs/events.log` 里应该有 `save_failed`（带原因）和一次 `quit_blocked_unsaved`。
+- 对照组：`rmdir /tmp/坏档/save/save.json.tmp` 再开一次 → 按 ⌘Q **应该立刻退出，一句都不多问**。
+- 跑完记得 `rm -rf /tmp/坏档`，别留个写不进去的存档目录。
+
+**机器侧已验（本机 macOS 真跑，全部 `CATFISH_SEED=7`、`--quit-after 260`、`CATFISH_SHOT=…:170,210`）**
+- 三跑对照（`CATFISH_QUIT_AT` 直接调 `_quit()`，与点红叉/⌘Q 同一个函数）：
+  - 坏档 + `CATFISH_QUIT_AT=150,200` → 第 170 帧有图（150 帧那次被拦）、第 210 帧**无图**（200 帧真退）、日志 `quit_blocked_unsaved`×1 + `app_quit`×1；
+  - 好档 + `CATFISH_QUIT_AT=150` → 第 170 帧**无图**（150 帧就退了）、`quit_blocked_unsaved` **0 次**、`app_quit`×1、`save_failed` 0 次；
+  - 好档 + 不按退出（画面对照）→ 第 170 帧有图、两个计数 0。
+- 画面对照（坏档弹框 vs 好档不弹框，同种子）：同配置重复跑的噪声 14,892 px；A/B 总差异 214,206 px；**减掉噪声后稳定差异 199,920 px，92.1% 落在预测的确认框范围**（x24–684、y198–498）；红字 `Pal.L_R`≈(120,48,52) 共 19,008 px，y 起于 300（预测第一行 y≈294）。图：`/tmp/v101_b_170.png`（弹框）、`/tmp/v101_d_170.png`（对照）。
+- 测试 `test_v101_quit_guard`（总检查 **1060 → 1077**）钉住：只有真写不进去才拦、`_quit` 里只有一个 `return`（第二次必退）、写成功就解除拦截、两行字在图集里、框长高时按钮跟着挪且**点击判定用同一套几何**（`QUIT_YES.has_point` 已删）。
+
+**没验证的（不许写成通过）**
+- **真的用鼠标点红叉 / 真按 ⌘Q 的窗口事件序列没人工验过**：机器侧是用 `CATFISH_QUIT_AT` 直接调 `_quit()`，和红叉、⌘Q、退出按钮是同一个函数，但 macOS 那条通知路径（`NOTIFICATION_WM_CLOSE_REQUEST`）没被真事件驱动过。
+- 确认框的观感（两行字会不会跟顶栏叠字、好不好看）**没有人工目检**。
+- 「盘真的满了」这种失败原因没造过（这里造的是"临时档名字被占住"，`FileAccess` 同样打不开），磁盘满时的报错文案没验过。

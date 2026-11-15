@@ -80,6 +80,7 @@ func _init() -> void:
 		test_v098_perf_hygiene()
 		test_v099_label_atlas_coverage()
 		test_v100_save_safety()
+		test_v101_quit_guard()
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -3285,3 +3286,41 @@ func test_v100_save_safety() -> void:
 	dir.remove(sub + "/afile")
 	DirAccess.open("user://").remove(sub)
 	check(not DirAccess.open("user://").file_exists(sub), "测试把自己的临时存档目录清干净了（不碰玩家真存档）")
+
+## v1.01：存档还没写进去时，关窗口要先问一句（别让人一按红叉就丢掉这段进度）。
+func test_v101_quit_guard() -> void:
+	var main: String = FileAccess.get_file_as_string("res://presentation/main.gd")
+	# 1) 真的拦一次：补试两次还是 dirty 才拦，而且只拦第一次
+	check(main.contains("if not _quit_warn_save:"), "写盘到死还写不进去时才会拦一次（不是每次都拦）")
+	check(main.contains("\"quit_blocked_unsaved\""), "拦下来这件事写进事件日志")
+	check(main.contains("_quit_warn_save = true") and main.contains("_confirm_quit = true"), "拦下来时打开退出确认框")
+	# 2) 不许把人关在门外：第二次按退出必须真退，所以只有第一次会 return
+	var qb := main.find("func _quit() -> void:")
+	var q: String = main.substr(qb, main.find("\nfunc ", qb + 5) - qb)
+	check(q.count("return") == 1, "确认过一遍之后就能正常退出（_quit 里只有一个 return，不循环拦人）")
+	check(q.find("get_tree().quit()") > q.find("quit_blocked_unsaved"), "被拦下时才不退出，否则照常 quit()")
+	# 3) 一旦写成功就解除拦截
+	check(main.contains("_quit_warn_save = false"), "存档写进去了就不再拦着关窗口")
+	# 4) 确认框得真的把话说清楚（两行字都在图集里，位置由 _quit_box 撑开）
+	var lab: String = FileAccess.get_file_as_string("res://presentation/labels.gd")
+	for t in ["存档没写进去", "再点退出会丢掉这段进度"]:
+		check(lab.contains("\"%s\"" % t), "确认框里的字在标签图集里：%s" % t)
+	check(main.contains("func _quit_box() -> Rect2:") and main.contains("Rect2(15, 30, 110, 50)"), "带警告时确认框往下长两行（不叠字）")
+	check(main.contains("QUIT_YES.position.y + 14") and main.contains("QUIT_NO.position.y + 14"), "按钮跟着往下挪，还留着能点的位置")
+	check(main.contains("if _quit_yes().has_point(p):"), "点确认框用同一套几何（画在哪儿就能点哪儿）")
+	check(not main.contains("QUIT_YES.has_point(p):"), "确认框不再拿固定的 QUIT_YES 判点击（长高之后会点错）")
+	# 5) 调试开关：让矿井开挖那张截图真的截到"正在挖"
+	check(main.contains("OS.has_environment(\"CATFISH_DIGLOOP\")"), "有 CATFISH_DIGLOOP 调试开关")
+	check(main.contains("not game.mine.digging()"), "挖完一格会自动接着挖（只在调试开关开着时）")
+	var sweep: String = FileAccess.get_file_as_string("res://tools/perf/leak_sweep.sh")
+	var row := ""
+	for ln in sweep.split("\n"):
+		if ln.contains("矿井开挖"): row = ln
+	check(row.contains("CATFISH_DIGLOOP=1"), "扫描脚本里「矿井开挖」这行开了持续挖（截图不再和「矿井里」一模一样）")
+	var mine := ""
+	for ln in sweep.split("\n"):
+		if ln.contains("\"矿井里|"): mine = ln
+	check(row.contains("CATFISH_SEED=") and mine.contains("CATFISH_SEED="), "「矿井里」「矿井开挖」两行都钉了种子（同种子才比得出挖与不挖的差别）")
+	check(row.contains("CATFISH_SEED=7") and mine.contains("CATFISH_SEED=7"), "两行用的是同一个种子 7（实测：不钉种子时随机矿脉会让开挖那张和矿井里一帧不差，看不出问题）")
+	check(main.contains("OS.has_environment(\"CATFISH_QUIT_AT\")"), "有 CATFISH_QUIT_AT 调试开关（能在指定帧按退出，机器可验\"只拦一次\"）")
+	check(main.contains("Engine.get_frames_drawn() >= int(_quit_at_frames[0])"), "调试退出用引擎帧号（和截图同一套，不做业务计时）")

@@ -82,6 +82,7 @@ var _save_retry_at: int = 0     # 存档失败后下次重试的时刻
 var _save_fail_t0: int = 0      # 本轮连续写失败从什么时候开始（0 = 没在失败中）
 var _save_fail_toast: int = -100000   # 上次因写失败提醒玩家的时刻
 var _bak_notice_at: int = 0     # 读档回退的提示什么时候弹（0 = 不弹）
+var _dbg_dig_loop := Vector2i.ZERO   # 调试：非 0 = 一直朝这个方向挖（CATFISH_DIGLOOP=1 时用它截图）
 var _low_power: bool = false
 const FPS_HIDDEN := 5            # 窗口最小化时的帧率
 var clock: Clock
@@ -138,6 +139,7 @@ var _missing_labels: Dictionary = {}
 var _full_notified: bool = false
 var _roam_fx: float = 0.0        # 自由走动的亚像素位置
 var _confirm_quit: bool = false   # 正在显示"确定要退出吗"
+var _quit_warn_save: bool = false   # 进度还没落盘：关窗口前要先问一句（写盘一直没成功时才为真）
 const MineView := preload("res://presentation/mine_view.gd")
 var mine_view                     # 矿山岛（过海、岛上、矿井），见 presentation/mine_view.gd
 var interior: String = ""        # 小猫所在的屋子（"" = 在室外）；不存档，重启后回到门口
@@ -177,6 +179,7 @@ var _debug_dir: int = 0         # 调试：CATFISH_ROAM=1/-1 模拟一直按着�
 var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  在这些帧截图后退出
 var _shot_frames: Array = []
 var _shot_busy: bool = false
+var _quit_at_frames: Array = []   # 调试：CATFISH_QUIT_AT=150,200  在这些帧各按一次"退出"（和点红叉/退出按钮同一条路）
 
 
 func _ready() -> void:
@@ -313,6 +316,8 @@ func _ready() -> void:
 				var dd := OS.get_environment("CATFISH_DIG").split(",")
 				mine_view.face_v = Vector2i(dd[0].to_int(), dd[1].to_int())
 				game.mine.start_dig(mine_view.face_v.x, mine_view.face_v.y, game.now_ms())
+				if OS.has_environment("CATFISH_DIGLOOP"):    # 调试：挖完一格接着挖，任意一帧截图都截得到"正在挖"
+					_dbg_dig_loop = Vector2i(dd[0].to_int(), dd[1].to_int())
 		if OS.has_environment("CATFISH_KIT"):     # 调试：铁镐、油灯、5 颗炸弹，往下挖几格再放一颗炸弹
 			var mk = game.mine
 			mk.m()["pick"] = 2
@@ -380,6 +385,9 @@ func _apply_debug_env() -> void:
 			_shot_prefix = sp[0]
 			for f in sp[1].split(","):
 				_shot_frames.append(f.to_int())
+	if OS.has_environment("CATFISH_QUIT_AT"):    # 调试：在指定帧各按一次"退出"，用来验"只拦一次、第二次真退"
+		for fq in OS.get_environment("CATFISH_QUIT_AT").split(","):
+			_quit_at_frames.append(fq.to_int())
 	if OS.has_environment("CATFISH_VIEW"):
 		st.settings["view_mode"] = OS.get_environment("CATFISH_VIEW").to_int()
 	if OS.has_environment("CATFISH_LOOK"):
@@ -1303,6 +1311,12 @@ func _quit() -> void:
 		tries += 1
 	if game != null and game.dirty:
 		log.write("save_lost_on_quit", {"revision": game.state.revision, "why": saver.last_error})
+		if not _quit_warn_save:
+			# 头一次拦一下：这段进度还在内存里，一按红叉就没了。确认框里会写清楚为什么。
+			_quit_warn_save = true
+			_confirm_quit = true
+			log.write("quit_blocked_unsaved", {"revision": game.state.revision, "why": saver.last_error})
+			return
 	log.write("app_quit", {"gold": game.state.wallet_gold if game != null else 0})
 	get_tree().quit()
 
@@ -1315,6 +1329,7 @@ func _save() -> void:
 		return
 	if saver.save(game.state.to_dict()):
 		game.dirty = false
+		_quit_warn_save = false      # 落盘了，不用再拦着关窗口
 		if _save_fail_t0 != 0:
 			log.write("save_recovered", {"lost_seconds": (t - _save_fail_t0) / 1000.0, "revision": game.state.revision})
 			_save_fail_t0 = 0
@@ -1418,12 +1433,17 @@ func _process(dt: float) -> void:
 	_update_mini_hover()
 	_layout()
 	_update_save_notice()
+	if _dbg_dig_loop != Vector2i.ZERO and game.mine != null and not game.mine.digging():
+		game.mine.start_dig(_dbg_dig_loop.x, _dbg_dig_loop.y, game.now_ms())
 	world.update(game.now_ms(), Time.get_ticks_msec())
 	_update_camera(dt)
 	if game.dirty:
 		_save()
 	if not _low_power:
 		queue_redraw()
+	if not _quit_at_frames.is_empty() and Engine.get_frames_drawn() >= int(_quit_at_frames[0]):
+		_quit_at_frames.pop_front()
+		_quit()
 	if not _shot_frames.is_empty() and not _shot_busy and Engine.get_frames_drawn() >= int(_shot_frames[0]):
 		_take_debug_shot()
 
@@ -1745,7 +1765,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var hp := p - Vector2(_hud_dx(), 0)                  # 顶栏自己的坐标（迷你窗里整体左移了）
 	if _confirm_quit:
 		# 确认框打开时只认这两个按钮，点别处一律当作取消
-		if QUIT_YES.has_point(p):
+		if _quit_yes().has_point(p):
 			_quit()
 		else:
 			_confirm_quit = false
@@ -1883,16 +1903,35 @@ func toggle_bag() -> void:
 	_update_polygon()
 
 
+## 进度没落盘时确认框要往下长两行，按钮跟着挪（点哪儿算按按钮也按这套算）。
+func _quit_box() -> Rect2:
+	return QUIT_BOX if not _quit_warn_save else Rect2(15, 30, 110, 50)
+
+
+func _quit_yes() -> Rect2:
+	return QUIT_YES if not _quit_warn_save else Rect2(QUIT_YES.position.x, QUIT_YES.position.y + 14, QUIT_YES.size.x, QUIT_YES.size.y)
+
+
+func _quit_no() -> Rect2:
+	return QUIT_NO if not _quit_warn_save else Rect2(QUIT_NO.position.x, QUIT_NO.position.y + 14, QUIT_NO.size.x, QUIT_NO.size.y)
+
+
 func _draw_quit_confirm() -> void:
-	draw_rect(QUIT_BOX, Pal.U_A)
-	draw_rect(QUIT_BOX.grow(-1), Pal.U_K)
-	label_centered("确定要退出吗", QUIT_BOX.position.x + QUIT_BOX.size.x / 2, QUIT_BOX.position.y + 5, Pal.L_W)
-	draw_rect(QUIT_YES, Pal.L_R)
-	draw_rect(Rect2(QUIT_YES.position.x, QUIT_YES.end.y - 2, QUIT_YES.size.x, 2), Pal.U_R)
-	label_centered("退出", QUIT_YES.position.x + QUIT_YES.size.x / 2, QUIT_YES.position.y + 1, Pal.L_W)
-	draw_rect(QUIT_NO, Pal.L_A)
-	draw_rect(Rect2(QUIT_NO.position.x, QUIT_NO.end.y - 2, QUIT_NO.size.x, 2), Pal.U_A)
-	label_centered("取消", QUIT_NO.position.x + QUIT_NO.size.x / 2, QUIT_NO.position.y + 1, Pal.U_K)
+	var box := _quit_box()
+	var yes := _quit_yes()
+	var no := _quit_no()
+	draw_rect(box, Pal.U_A)
+	draw_rect(box.grow(-1), Pal.U_K)
+	label_centered("确定要退出吗", box.position.x + box.size.x / 2, box.position.y + 5, Pal.L_W)
+	if _quit_warn_save:
+		label_centered("存档没写进去", box.position.x + box.size.x / 2, box.position.y + 16, Pal.L_R)
+		label_centered("再点退出会丢掉这段进度", box.position.x + box.size.x / 2, box.position.y + 26, Pal.L_Y)
+	draw_rect(yes, Pal.L_R)
+	draw_rect(Rect2(yes.position.x, yes.end.y - 2, yes.size.x, 2), Pal.U_R)
+	label_centered("退出", yes.position.x + yes.size.x / 2, yes.position.y + 1, Pal.L_W)
+	draw_rect(no, Pal.L_A)
+	draw_rect(Rect2(no.position.x, no.end.y - 2, no.size.x, 2), Pal.U_A)
+	label_centered("取消", no.position.x + no.size.x / 2, no.position.y + 1, Pal.U_K)
 
 
 ## 海上 = 去小镇；在镇上 = 去钓鱼。
