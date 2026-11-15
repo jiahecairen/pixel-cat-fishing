@@ -491,3 +491,10 @@
 - 修理厂、典当行、酒馆换成对应行业的像素外观：铁皮工具工坊、天平金币招牌、渔港木酒馆。素材仍由 `tools/art/generate.py` 按项目调色板生成。
 - `build_codex.command` 将按版本号生成 `CatFishing_v0.89_codex.app` 和稳定测试入口 `CatFishing.app`。
 - 自动测试及实机画面验证状态见 C177。
+
+## v0.90：参考图风格的雾灯岛像素美术
+- 按用户提供的像素画参考重绘老柯、修理厂、典当行和酒馆：扩大立绘与建筑画布，加入分层瓦片、木梁、砖纹、窗框和行业陈设；继续使用 24 色锁定调色板。
+- 按岛上实际可走走廊重新安排店铺、灯塔、老柯和垃圾箱；按角色尺寸调整对话立绘，并补齐三栋店面的互动提示标签。
+- `tools/art/generate.py` 的 214 张素材通过调色板校验；像素稿和隔离的 Godot 调试画面已目检。
+- `build_codex.command`：Godot 4.7.2 导入及 macOS Release 导出成功，生成 `build/CatFishing.app` 与 `build/CatFishing_v0.90_codex.app`，两者版本为 0.90。
+- run_tests、sim_long_run、发布版 `.app` 实际启动和玩家操作未运行；详见 C178。

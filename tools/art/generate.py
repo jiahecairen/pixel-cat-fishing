@@ -90,6 +90,15 @@ def save(c, name):
     return c
 
 
+def crop_x(c, left, width):
+    """Crop transparent side margins after drawing a detailed sprite at working width."""
+    out = Canvas(width, c.h)
+    for y in range(c.h):
+        for x in range(width):
+            out.set(x, y, c.get(x + left, y))
+    return out
+
+
 # ---------------------------------------------------------------- 猫
 # 猫用"槽位"作画，运行时再上色，这样玩家可以自定义形象：
 #   f / F / l  毛色 基础 / 暗部 / 亮部
@@ -608,114 +617,221 @@ def lighthouse():
 
 
 def keeper_ko():
-    """老柯：中年灯塔管理员，灰发雨帽、反光工作服和腰挂信号灯。16×22×2。"""
+    """老柯：中年灯塔管理员，灰鬓、海事雨帽、反光夹克和工具腰带。24×32×2。"""
     frames = []
     for step in range(2):
-        c = Canvas(16, 22)
-        # 防水工作帽与鬓角里的灰发
-        c.rect(5, 1, 10, 2, "A"); c.rect(4, 2, 11, 3, "a")
-        c.rect(4, 3, 5, 5, "A"); c.rect(10, 3, 11, 5, "A")
-        c.rect(5, 3, 10, 9, "h"); c.rect(6, 3, 9, 4, "n")
-        c.rect(3, 3, 12, 4, "b"); c.rect(4, 2, 11, 2, "c")
-        c.rect(2, 5, 13, 5, "y")                 # 雨帽反光帽檐
-        c.pts([(6, 6), (9, 6)], "K")
-        c.pts([(6, 8), (7, 9), (8, 9), (9, 8)], "A")  # 修整过的灰胡茬
-        c.rect(6, 7, 9, 7, "h")
-        # 厚实的海事工作夹克：高领、反光肩带、胸前灯塔徽章
-        c.rect(6, 10, 9, 11, "n")
-        c.rect(4, 11, 11, 18, "B"); c.rect(5, 11, 10, 12, "b")
-        c.pts([(4, 12), (5, 12), (6, 13), (7, 14), (8, 14), (9, 15)], "y")
-        c.rect(7, 12, 8, 12, "c")
-        c.pts([(6, 15), (9, 16), (9, 17)], "b")
-        c.rect(3, 12, 4, 16, "A"); c.rect(11, 12, 12, 16, "A")
-        c.pts([(5, 19), (6, 19), (9, 19), (10, 19)], "K")
-        c.rect(5, 20, 7, 20, "A"); c.rect(9, 20, 11, 20, "A")
-        c.rect(4, 21, 7, 21, "K"); c.rect(9, 21, 12, 21, "K")
-        # 腰间信号灯，一帧轻轻摆动
-        lx = 11 if step == 0 else 12
-        c.rect(lx, 16, lx + 1, 18, "y"); c.set(lx, 17, "W")
+        c = Canvas(24, 32)
+        c.rect(7, 2, 16, 3, "A"); c.rect(6, 3, 17, 5, "a")
+        c.rect(8, 1, 16, 2, "B"); c.rect(9, 1, 15, 1, "b")
+        c.rect(5, 5, 18, 6, "B"); c.rect(6, 5, 17, 5, "b")
+        c.pts([(7, 6), (8, 6), (15, 6), (16, 6)], "A")
+        c.rect(8, 6, 15, 13, "h"); c.rect(9, 6, 14, 7, "n")
+        c.rect(7, 7, 8, 10, "a"); c.rect(15, 7, 16, 10, "a")
+        c.pts([(9, 8), (14, 8)], "O"); c.pts([(10, 9), (14, 9)], "K")
+        c.set(12, 10, "n")
+        c.pts([(9, 11), (10, 12), (11, 12), (12, 11), (13, 12), (14, 12)], "A")
+        c.pts([(10, 11), (13, 11)], "o")
+        c.rect(9, 13, 14, 15, "O")
+        c.rect(5, 15, 18, 25, "B"); c.rect(7, 14, 16, 16, "B")
+        c.rect(6, 15, 9, 17, "b"); c.rect(14, 15, 17, 17, "b")
+        c.pts([(6, 17), (7, 18), (8, 19), (9, 20), (10, 21)], "y")
+        c.pts([(17, 17), (16, 18), (15, 19), (14, 20), (13, 21)], "y")
+        c.rect(11, 17, 12, 19, "A"); c.set(11, 17, "c")
+        c.rect(8, 19, 9, 22, "A"); c.set(8, 20, "y")
+        c.rect(10, 20, 13, 22, "n"); c.set(11, 21, "r")
+        c.pts([(5, 18), (4, 19), (4, 23), (5, 24)], "B")
+        c.pts([(18, 18), (19, 19), (19, 23), (18, 24)], "B")
+        c.rect(5, 24, 18, 26, "O"); c.rect(6, 24, 17, 24, "h")
+        c.rect(8, 27, 15, 29, "A"); c.rect(11, 27, 12, 28, "y")
+        c.rect(6, 29, 10, 30, "B"); c.rect(13, 29, 17, 30, "B")
+        c.rect(5, 30, 10, 31, "K"); c.rect(13, 30, 19, 31, "K")
+        lx = 18 if step == 0 else 19
+        c.rect(lx, 22, lx + 2, 25, "y"); c.set(lx + 1, 23, "W")
+        c.rect(3, 22, 5, 26, "O"); c.set(4, 23, "a")
         c.outline()
         frames.append(c)
     return sheet(frames)
 
 
 def island_repair_shop():
-    """雾灯岛修理厂：铁皮斜屋顶、齿轮窗、工具挂架和门边木料。52×42。"""
-    c = Canvas(52, 42)
-    c.rect(5, 16, 46, 40, "A"); c.rect(7, 18, 44, 39, "a")
-    for x in range(8, 44, 6):
-        c.rect(x, 19, x, 38, "A")          # 波纹铁皮墙
-        c.set(x + 1, 20, "W")
-    c.rect(3, 12, 48, 16, "B")             # 斜屋顶的檐口
-    for x in range(5, 48, 7):
-        c.set(x, 13, "c"); c.set(x + 1, 14, "y")
-    c.rect(8, 5, 44, 11, "A"); c.rect(11, 2, 41, 4, "a")
-    c.rect(15, 0, 38, 1, "A"); c.rect(19, 1, 34, 1, "a")
-    c.rect(10, 22, 20, 30, "B"); c.rect(11, 23, 19, 29, "c")
-    c.rect(14, 23, 14, 29, "A"); c.rect(11, 26, 19, 26, "A")  # 工坊窗
-    # 门和旁边的工具架
-    c.rect(24, 24, 33, 40, "K"); c.rect(25, 25, 32, 39, "o")
-    c.rect(29, 25, 32, 39, "O"); c.set(26, 32, "y")
-    c.rect(37, 22, 44, 23, "O"); c.rect(38, 24, 39, 32, "o")
-    c.pts([(40, 24), (41, 25), (42, 24), (43, 23)], "a")  # 挂起的扳手
-    c.rect(35, 34, 47, 38, "o"); c.rect(35, 34, 47, 35, "n")
-    c.pts([(37, 36), (41, 37), (45, 36)], "O")
+    """雾灯岛修理厂：灰蓝瓦屋顶、木梁工坊、齿轮窗和墙上工具架。裁边后 80×68。"""
+    c = Canvas(88, 68)
+    c.rect(7, 25, 80, 63, "A"); c.rect(10, 29, 77, 62, "a")
+    c.rect(12, 30, 75, 61, "A")
+    for x in range(14, 76, 8):
+        c.rect(x, 31, x + 1, 60, "a")
+        c.pts([(x + 2, 34), (x + 2, 39), (x + 2, 46), (x + 2, 51)], "c")
+    c.rect(7, 61, 80, 64, "K")
+    for x in range(9, 80, 10):
+        c.rect(x, 62, x + 7, 63, "A"); c.set(x + 3, 62, "a")
+    for y in range(3, 28):
+        span = min(35, y + 2)
+        c.rect(44 - span, y, 44 + span, y, "a" if y % 5 else "A")
+    for y in range(8, 27, 6):
+        span = min(35, y + 2)
+        c.rect(44 - span + 3, y, 44 + span - 3, y, "c" if y % 2 else "a")
+    c.rect(13, 8, 21, 30, "K"); c.rect(14, 10, 19, 29, "A")
+    c.rect(11, 7, 23, 10, "A"); c.rect(12, 7, 22, 8, "a")
+    c.rect(15, 12, 16, 27, "a"); c.pts([(18, 14), (18, 18), (18, 23)], "K")
+    for y in range(0, 31):
+        span = min(43, 3 + int(y * 1.35))
+        c.rect(44 - span, y, 44, y, "K")
+        c.rect(45, y, 44 + span, y, "A")
+    for y in range(3, 30, 4):
+        span = min(42, 3 + int(y * 1.35))
+        c.rect(44 - span + 2, y, 42, y, "A")
+        c.rect(46, y, 44 + span - 2, y, "a")
+        for x in range(44 - span + 4, 42, 9):
+            c.rect(x, y + 1, min(x + 3, 43), y + 2, "A")
+        for x in range(47, 44 + span - 2, 9):
+            c.rect(x, y + 1, min(x + 3, 44 + span - 2), y + 2, "A")
+        for x in range(44 - span + 4, 42, 8):
+            c.set(x, y + 1, "a"); c.set(x + 1, y + 1, "K")
+        for x in range(49, 44 + span - 2, 8):
+            c.set(x, y + 1, "c"); c.set(x + 1, y + 1, "A")
+    for y in range(2, 26, 5):
+        c.set(44 - y, y, "a"); c.set(44 + y, y, "c")
+    c.rect(4, 29, 84, 33, "K"); c.rect(6, 29, 82, 30, "a")
+    c.rect(5, 33, 83, 34, "A")
+    c.rect(12, 39, 31, 56, "K"); c.rect(14, 41, 29, 54, "A")
+    c.rect(16, 43, 27, 52, "b"); c.rect(17, 44, 26, 47, "c")
+    c.rect(16, 48, 27, 49, "B"); c.rect(21, 43, 22, 52, "A")
+    c.ellipse(21, 47, 3, 3, "y"); c.ellipse(21, 47, 1, 1, "H")
+    c.rect(10, 37, 33, 39, "A"); c.rect(11, 56, 32, 58, "K")
+    c.rect(36, 39, 52, 64, "K"); c.rect(38, 41, 50, 63, "O")
+    c.rect(40, 43, 48, 61, "o"); c.rect(41, 44, 47, 49, "n")
+    c.rect(41, 51, 47, 60, "O"); c.rect(43, 52, 45, 59, "o")
+    c.rect(47, 51, 48, 53, "y"); c.rect(36, 38, 52, 40, "a")
+    c.rect(34, 35, 37, 40, "y"); c.rect(34, 36, 35, 38, "W")
+    c.rect(59, 39, 77, 41, "O"); c.rect(60, 42, 76, 54, "A")
+    c.pts([(62, 44), (62, 48), (64, 50), (66, 48), (66, 45)], "a")
+    c.pts([(70, 44), (70, 50), (72, 52), (74, 50), (74, 46)], "y")
+    c.rect(61, 55, 78, 57, "o"); c.rect(62, 58, 78, 60, "O")
+    c.pts([(64, 58), (68, 59), (72, 58), (76, 59)], "n")
+    for x in (10, 34, 54, 79):
+        c.set(x, 35, "y"); c.set(x, 60, "K")
     c.outline()
-    return c
+    return crop_x(c, 4, 80)
 
 
 def island_pawnshop():
-    """雾灯岛典当行：砖红店面、金边遮雨棚、天平与典当金币窗。48×40。"""
-    c = Canvas(48, 40)
-    c.rect(4, 15, 43, 38, "R"); c.rect(6, 17, 41, 37, "r")
-    for y in (21, 29, 35):
-        c.pts([(7, y), (13, y), (21, y), (28, y), (36, y)], "R")
-    c.rect(2, 12, 45, 16, "O")
-    for x in range(3, 45, 6):
-        c.rect(x, 13, x + 2, 15, "g" if (x // 6) % 2 == 0 else "w")
-        c.set(x, 12, "y")
-    # 天平招牌
-    c.rect(20, 2, 27, 3, "y"); c.rect(23, 3, 24, 9, "H")
-    c.rect(17, 5, 30, 6, "h"); c.rect(18, 7, 19, 8, "y"); c.rect(28, 7, 29, 8, "y")
-    c.pts([(16, 9), (17, 10), (18, 10), (19, 9), (28, 9), (29, 10), (30, 10), (31, 9)], "y")
-    c.rect(21, 9, 26, 10, "H")
-    # 展示窗里的金币与柜台
-    c.rect(7, 20, 18, 30, "A"); c.rect(8, 21, 17, 29, "c")
-    c.ellipse(12, 25, 3, 3, "y"); c.ellipse(12, 25, 1.5, 1.5, "h"); c.set(12, 25, "W")
-    c.rect(7, 31, 19, 33, "O"); c.rect(7, 31, 19, 31, "y")
-    c.rect(24, 22, 33, 38, "K"); c.rect(25, 23, 32, 37, "o"); c.rect(29, 23, 32, 37, "O")
-    c.set(26, 31, "y")
-    c.pts([(36, 22), (37, 20), (38, 22), (39, 20), (40, 22)], "h")
+    """雾灯岛典当行：红砖门面、金边瓦檐、天平招牌和珠宝陈列窗。裁边后 64×62。"""
+    c = Canvas(78, 62)
+    c.rect(5, 22, 72, 57, "R"); c.rect(8, 25, 69, 56, "r")
+    for y in (29, 36, 43, 50):
+        c.pts([(9, y), (16, y), (29, y), (36, y), (49, y), (56, y), (68, y)], "R")
+        c.pts([(22, y + 3), (43, y + 3), (63, y + 3)], "H")
+    c.rect(5, 56, 72, 59, "K"); c.rect(8, 57, 69, 58, "A")
+    for x in range(10, 70, 12):
+        c.rect(x, 58, x + 7, 58, "a")
+    for y in range(0, 23):
+        span = min(39, 4 + int(y * 1.55))
+        c.rect(39 - span, y, 39, y, "R")
+        c.rect(40, y, 39 + span, y, "r")
+    for y in range(3, 22, 4):
+        span = min(38, 4 + int(y * 1.55))
+        c.rect(39 - span + 2, y, 38, y, "r")
+        c.rect(41, y, 39 + span - 2, y, "r")
+        for x in range(39 - span + 4, 38, 9):
+            c.rect(x, y + 1, min(x + 3, 39), y + 2, "R")
+        for x in range(42, 39 + span - 2, 9):
+            c.rect(x, y + 1, min(x + 3, 39 + span - 2), y + 2, "R")
+        for x in range(39 - span + 5, 38, 9):
+            c.set(x, y + 1, "h")
+        for x in range(43, 39 + span - 2, 9):
+            c.set(x, y + 1, "H")
+    c.rect(2, 21, 76, 25, "O"); c.rect(4, 21, 74, 22, "y")
+    c.rect(6, 25, 72, 27, "H")
+    for x0 in (10, 52):
+        c.rect(x0, 32, x0 + 14, 48, "K"); c.rect(x0 + 2, 34, x0 + 12, 46, "A")
+        c.rect(x0 + 3, 35, x0 + 11, 43, "b"); c.rect(x0 + 3, 35, x0 + 7, 38, "c")
+        c.rect(x0 + 2, 44, x0 + 12, 46, "B")
+        c.rect(x0 - 1, 30, x0 + 15, 32, "H"); c.rect(x0 - 1, 48, x0 + 15, 50, "O")
+    c.ellipse(17, 41, 3, 3, "y"); c.ellipse(17, 41, 1, 1, "h"); c.set(16, 40, "W")
+    c.ellipse(59, 40, 3, 4, "p"); c.set(59, 38, "w"); c.set(58, 40, "r")
+    c.rect(31, 31, 47, 59, "K"); c.rect(33, 33, 45, 58, "O")
+    c.rect(35, 35, 43, 56, "o"); c.rect(36, 37, 42, 45, "n")
+    c.rect(36, 48, 42, 55, "O"); c.rect(38, 49, 40, 54, "o")
+    c.rect(42, 45, 44, 47, "y"); c.rect(29, 29, 49, 32, "y")
+    c.rect(28, 58, 50, 60, "H"); c.rect(30, 60, 48, 61, "y")
+    c.rect(37, 5, 40, 20, "H"); c.rect(27, 8, 50, 10, "y")
+    c.rect(30, 6, 47, 7, "h"); c.rect(38, 3, 39, 5, "W")
+    c.pts([(28, 11), (29, 15), (31, 17), (35, 17), (36, 15), (37, 11)], "y")
+    c.pts([(40, 11), (41, 15), (43, 17), (47, 17), (49, 15), (50, 11)], "y")
+    c.rect(30, 18, 35, 19, "H"); c.rect(43, 18, 48, 19, "H")
+    c.rect(34, 20, 43, 21, "O"); c.rect(36, 19, 41, 20, "h")
+    for x in (8, 25, 52, 69):
+        c.set(x, 27, "y")
+    c.rect(72, 35, 74, 42, "H"); c.set(73, 37, "W")
     c.outline()
-    return c
+    return crop_x(c, 7, 64)
 
 
 def island_tavern():
-    """雾灯岛酒馆：渔港木屋、红色风浪屋顶、啤酒杯招牌和门边酒桶。56×42。"""
-    c = Canvas(56, 42)
-    c.rect(5, 15, 50, 40, "K"); c.rect(7, 17, 48, 39, "o")
-    for x in range(8, 48, 5):
-        c.rect(x, 19, x, 38, "O"); c.set(x + 1, 20, "n")
-    # 厚檐红瓦与抗风压顶木
-    c.rect(3, 12, 52, 16, "R")
-    for x in range(5, 51, 6):
-        c.rect(x, 13, x + 2, 14, "r"); c.set(x + 1, 15, "w")
-    c.rect(8, 8, 47, 11, "R"); c.rect(14, 4, 41, 7, "r")
-    c.rect(20, 1, 35, 3, "R"); c.rect(23, 0, 32, 0, "A")
-    # 两扇暖窗、厚木门、酒桶
-    c.rect(9, 21, 19, 29, "K"); c.rect(10, 22, 18, 28, "y")
-    c.rect(14, 22, 14, 28, "o"); c.rect(10, 25, 18, 25, "o")
-    c.rect(36, 21, 45, 29, "K"); c.rect(37, 22, 44, 28, "y")
-    c.rect(40, 22, 40, 28, "o"); c.rect(37, 25, 44, 25, "o")
-    c.rect(23, 23, 32, 40, "K"); c.rect(24, 24, 31, 39, "O"); c.set(29, 32, "y")
-    c.ellipse(5, 35, 4, 4, "o"); c.ellipse(5, 35, 2.5, 2.5, "n")
-    c.rect(1, 35, 9, 36, "O"); c.rect(1, 33, 9, 33, "O")
-    # 门檐下的酒杯招牌
-    c.rect(42, 3, 43, 7, "A"); c.rect(39, 7, 46, 12, "y")
-    c.rect(40, 8, 45, 10, "h"); c.rect(41, 10, 44, 11, "W")
-    c.rect(42, 12, 43, 14, "a")
+    """雾灯岛酒馆：渔港半木骨架房、红瓦双坡顶、啤酒招牌和花窗。裁边后 76×64。"""
+    c = Canvas(84, 64)
+    c.rect(6, 24, 78, 58, "O"); c.rect(9, 27, 75, 57, "h")
+    c.rect(11, 29, 73, 56, "w")
+    for x in range(13, 73, 10):
+        c.rect(x, 30, x + 1, 55, "n")
+        c.pts([(x + 2, 34), (x + 2, 42), (x + 2, 50)], "h")
+    c.rect(6, 56, 78, 59, "K")
+    for x in range(9, 78, 9):
+        c.rect(x, 57, x + 6, 58, "A"); c.set(x + 2, 57, "a")
+    for y in range(3, 27):
+        span = min(36, y + 2)
+        c.rect(42 - span, y, 42 + span, y, "w" if y % 4 else "h")
+    c.pts([(14, 20), (21, 15), (28, 10), (35, 5), (42, 2)], "O")
+    c.pts([(42, 2), (49, 7), (56, 12), (63, 17), (70, 22)], "O")
+    c.rect(12, 6, 20, 28, "O"); c.rect(14, 8, 18, 26, "R")
+    c.rect(10, 5, 22, 8, "A"); c.rect(11, 5, 21, 6, "a")
+    c.pts([(14, 12), (17, 12), (15, 17), (18, 21)], "r")
+    for y in range(0, 29):
+        span = min(42, 4 + int(y * 1.34))
+        c.rect(42 - span, y, 42, y, "R")
+        c.rect(43, y, 42 + span, y, "r")
+    for y in range(2, 28, 4):
+        span = min(41, 4 + int(y * 1.34))
+        c.rect(42 - span + 2, y, 41, y, "r")
+        c.rect(44, y, 42 + span - 2, y, "r")
+        for x in range(42 - span + 4, 41, 9):
+            c.rect(x, y + 1, min(x + 3, 42), y + 2, "R")
+        for x in range(45, 42 + span - 2, 9):
+            c.rect(x, y + 1, min(x + 3, 42 + span - 2), y + 2, "R")
+        for x in range(42 - span + 5, 41, 8):
+            c.set(x, y + 1, "H"); c.set(x + 1, y + 1, "R")
+        for x in range(46, 42 + span - 2, 8):
+            c.set(x, y + 1, "h"); c.set(x + 1, y + 1, "R")
+    c.rect(2, 27, 82, 31, "O"); c.rect(4, 27, 80, 28, "n")
+    c.rect(5, 31, 79, 33, "o")
+    # 裸露的外框木梁和斜撑，让半木骨架在墙面上清楚可见
+    c.rect(7, 33, 12, 56, "O"); c.rect(72, 33, 77, 56, "O")
+    c.rect(12, 33, 72, 35, "O"); c.rect(12, 53, 72, 56, "O")
+    c.rect(27, 35, 30, 52, "O"); c.rect(54, 35, 57, 52, "O")
+    c.pts([(13, 35), (16, 38), (19, 41), (22, 44), (25, 47)], "O")
+    c.pts([(71, 35), (68, 38), (65, 41), (62, 44), (59, 47)], "O")
+    for x0 in (11, 59):
+        c.rect(x0, 37, x0 + 14, 49, "K"); c.rect(x0 + 2, 39, x0 + 12, 47, "y")
+        c.rect(x0 + 3, 40, x0 + 7, 43, "h"); c.rect(x0 + 8, 40, x0 + 11, 43, "n")
+        c.rect(x0 + 7, 39, x0 + 8, 47, "O"); c.rect(x0 + 2, 43, x0 + 12, 44, "O")
+        c.rect(x0 - 2, 49, x0 + 16, 51, "O"); c.rect(x0 - 1, 49, x0 + 15, 49, "n")
+        c.rect(x0 + 1, 52, x0 + 3, 54, "R"); c.set(x0 + 2, 51, "p")
+        c.rect(x0 + 7, 52, x0 + 9, 54, "G"); c.set(x0 + 8, 51, "g")
+        c.rect(x0 + 12, 52, x0 + 14, 54, "R"); c.set(x0 + 13, 51, "p")
+    c.rect(34, 36, 50, 59, "K"); c.rect(36, 38, 48, 58, "O")
+    c.rect(38, 40, 46, 56, "o"); c.rect(39, 42, 45, 48, "n")
+    c.rect(39, 50, 45, 55, "O"); c.rect(41, 51, 43, 54, "o")
+    c.rect(45, 48, 47, 50, "y"); c.rect(32, 34, 52, 37, "n")
+    c.rect(33, 59, 51, 60, "A"); c.rect(35, 60, 49, 61, "a")
+    c.rect(66, 20, 68, 34, "O"); c.rect(64, 25, 75, 27, "H")
+    c.rect(66, 27, 73, 32, "y"); c.rect(67, 28, 72, 30, "h")
+    c.rect(68, 32, 71, 34, "n"); c.set(69, 29, "W")
+    c.ellipse(4, 53, 5, 5, "O"); c.ellipse(4, 53, 3, 3, "o")
+    c.rect(0, 52, 9, 54, "O"); c.rect(1, 49, 8, 50, "n")
+    c.pts([(19, 55), (20, 54), (21, 55), (22, 54), (23, 55), (24, 54)], "g")
+    c.pts([(59, 55), (60, 54), (61, 55), (62, 54), (63, 55), (64, 54)], "g")
     c.outline()
-    return c
+    return crop_x(c, 4, 76)
 
 
 def tree():
@@ -1826,6 +1942,9 @@ def labels():
         for key in ("name", "desc"):
             if f.get(key) and f[key] not in names:
                 names.append(f[key])
+    for name in ("空格键看修理厂", "空格键进酒馆", "空格键进典当行", "空格键扔东西（垃圾箱）"):
+        if name not in names:
+            names.append(name)
     font_ = ImageFont.truetype(FONT_FILE, 10)
     from fontTools.ttLib import TTFont
     cmap = TTFont(FONT_FILE).getBestCmap()

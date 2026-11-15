@@ -2116,7 +2116,9 @@ func _draw_hud(now: int) -> void:
 		elif game.journey.on_island():
 			label("方向键走动", Vector2(17, 30), hint_col)
 			var ix := float(game.journey.roam_x())
-			label(_island_hint(ix), Vector2(17, 41), hint_col)
+			var island_hint := _island_hint(ix)
+			if island_hint != "":
+				label(island_hint, Vector2(17, 41), hint_col)
 		elif game.journey.in_town():
 			label("方向键走动", Vector2(17, 30), hint_col)
 			if game.journey.activity() == Journey.Activity.SOLD_OUT:

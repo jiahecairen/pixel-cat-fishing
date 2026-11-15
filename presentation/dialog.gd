@@ -221,9 +221,24 @@ func _who_name(who: String) -> String:
 		return str(m.game.state.cat_name)
 	return str(_d.get("names", {}).get(who, ""))
 
-func _portrait(who: String, pos: Vector2, scale: float, lit: bool, flip: bool) -> void:
+func _portrait_scale(who: String) -> float:
+	if who == "cat":
+		return 1.0
+	return 2.0 if who == "keeper" else 3.0
+
+func _portrait_size(who: String) -> Vector2:
+	if who == "cat":
+		var bt: Texture2D = m.tex["cat/portrait_bust"]
+		return Vector2(bt.get_width(), bt.get_height())
+	var tex_name := "keeper_ko" if who == "keeper" else "villager_%d" % int(_d.get("faces", {}).get(who, 1))
+	if not m.tex.has(tex_name):
+		return Vector2(48, 66)
+	var tx: Texture2D = m.tex[tex_name]
+	return Vector2(float(tx.get_width()) / 2.0, float(tx.get_height())) * _portrait_scale(who)
+
+func _portrait(who: String, pos: Vector2, lit: bool, flip: bool) -> void:
 	var tint := Color.WHITE if lit else Color(0.5, 0.52, 0.62)
-	var sc: float = 1.0 if who == "cat" else 3.0
+	var sc := _portrait_scale(who)
 	var xf := Transform2D(Vector2(sc * (-1.0 if flip else 1.0), 0), Vector2(0, sc), pos + m.ui_off)
 	m.draw_set_transform_matrix(xf)
 	if who == "cat":
@@ -232,7 +247,8 @@ func _portrait(who: String, pos: Vector2, scale: float, lit: bool, flip: bool) -
 	else:
 		var tex_name := "keeper_ko" if who == "keeper" else "villager_%d" % int(_d.get("faces", {}).get(who, 1))
 		if m.tex.has(tex_name):
-			m.tex_frame(tex_name, Vector2(-16 if flip else 0, 0), 0, 2, tint)
+			var frame_w := float(m.tex[tex_name].get_width()) / 2.0
+			m.tex_frame(tex_name, Vector2(-frame_w if flip else 0.0, 0), 0, 2, tint)
 	m.draw_set_transform_matrix(Transform2D(Vector2(1, 0), Vector2(0, 1), m.ui_off))
 
 func _wrap(s: String, width: float) -> Array:
@@ -273,13 +289,16 @@ func draw() -> void:
 			var dsz := Vector2(tx.get_width(), tx.get_height()) * k
 			m.draw_texture_rect(tx, Rect2(sp + (sz - dsz) / 2.0, dsz), false)
 		var speaker := who if who != "" else str(_d.get("left", "cat"))
-		_portrait(speaker, Vector2(r.position.x + 10, b.position.y - 4 - (72 if speaker == "cat" else 66)), 3.0, who != "", false)
+		var portrait_size := _portrait_size(speaker)
+		_portrait(speaker, Vector2(r.position.x + 10, b.position.y - 4 - portrait_size.y), who != "", false)
 	else:
 		m.draw_rect(Rect2(r.position + Vector2(2, 2), r.size - Vector2(4, 4)), Color("#262a3f"))
 		var left := str(_d.get("left", "cat"))
 		var right := str(_d.get("right", "keeper"))
-		_portrait(left, Vector2(r.position.x + 8, b.position.y - 4 - (72 if left == "cat" else 66)), 3.0, who == left, false)
-		_portrait(right, Vector2(r.end.x - 8 - (60 if right == "cat" else 48), b.position.y - 4 - (72 if right == "cat" else 66)), 3.0, who == right, true)
+		var left_size := _portrait_size(left)
+		var right_size := _portrait_size(right)
+		_portrait(left, Vector2(r.position.x + 8, b.position.y - 4 - left_size.y), who == left, false)
+		_portrait(right, Vector2(r.end.x - 8 - right_size.x, b.position.y - 4 - right_size.y), who == right, true)
 		var place := str(_d.get("place", ""))
 		if place != "":
 			var pw: float = m.dyn_text_width(place) + 14.0

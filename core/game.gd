@@ -519,18 +519,18 @@ func nearest_spot_x(cat_x: float) -> float:
 func at_lake_spot() -> bool:
 	return journey.on_island() and (absf(float(journey.roam_x()) - lake_spot_x()) <= 3.0 or at_bridge_spot())
 
-## 修理厂和酒馆的门（世界坐标）。
+## 雾灯岛店铺与垃圾桶的互动点（世界坐标）。
 func repair_x() -> float:
-	return island_x() - 282.0
+	return island_x() - 294.0
 
 func tavern_x() -> float:
-	return island_x() - 148.0
+	return island_x() - 212.0
 
 func pawn_x() -> float:
-	return island_x() - 108.0
+	return island_x() - 93.0
 
 func trash_x() -> float:
-	return island_x() - 78.0
+	return island_x() - 55.0
 
 func island_keeper_x() -> float:
 	return island_x() - float(island_info().get("keeper_off", 196))

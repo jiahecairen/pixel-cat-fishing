@@ -290,3 +290,10 @@
 - Godot 4.7.2 导入与 macOS Release 导出：成功，生成 `build/CatFishing.app` 和 `build/CatFishing_v0.89_codex.app`；两者 `Info.plist` 版本均为 0.89。
 - `git diff --check`、`data/balance.json` JSON 解析：通过。
 - 未运行：run_tests、sim_long_run、实际启动游戏和游戏内画面截图。
+
+## C178 v0.90：参考图风格的雾灯岛美术
+- `tools/art/generate.py`：214 张素材通过 24 色调色板检查；老柯、三栋建筑、互动提示标签均由脚本生成。
+- 目检：像素放大稿和 Godot 4.7.2 隔离调试画面中的三栋店面、灯塔、可达路线与老柯对话立绘；未发现贴图裁切或路线遮挡。调试进程强制退出时 Godot 报告对象清理提示，没有 `SCRIPT ERROR`。
+- `build_codex.command`：Godot 导入与 macOS Release 导出成功；两个 `.app` 包的 Info.plist 版本均为 0.90。
+- `git diff --check`、`data/balance.json` JSON 解析：通过。
+- 未运行：run_tests、sim_long_run、发布版 `.app` 实际启动和玩家操作。
