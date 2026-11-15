@@ -491,3 +491,13 @@
 - 修理厂、典当行、酒馆换成对应行业的像素外观：铁皮工具工坊、天平金币招牌、渔港木酒馆。素材仍由 `tools/art/generate.py` 按项目调色板生成。
 - `build_codex.command` 将按版本号生成 `CatFishing_v0.89_codex.app` 和稳定测试入口 `CatFishing.app`。
 - 自动测试及实机画面验证状态见 C177。
+
+## v0.91：补上 v0.88 / v0.89 欠的测试，并修掉真机跑出来的两个问题
+- 新工作副本 `/Users/rain/DevGame/CC_CatFashing_Qwen`（`git worktree`，从 `v0.89` 分出），里面没有历代版本压缩包。推到 GitHub 的分支叫 **`Qwen-v0.91`**，标签 **`v0.91-qwen`**（本地分支名只能小写：macOS 文件系统不分大小写）。
+- 新增 `test_v088_ticket_and_locker`、`test_v089_scripts_and_art`、`test_labels` 三组测试：检查数从 811 项涨到 **912 项**，本机 macOS 无界面 `ALL TESTS PASS` / `SIM PASS`。
+- 真机启动发现：**10 条界面提示不在标签图集里**，运行时只会报警告、玩家看不到字（矿山岛三间屋、雾灯岛五个门口、物品栏和图鉴册各一句）。已加进 `LABELS` 重新生成图集；`label("")` 不再误报。
+- 真机启动还发现：调试传送在 `adapter` 创建之前调用 `_update_polygon()`，报 `Nonexistent function 'is_overlay' in base 'Nil'`。已加空值守卫。
+- 新增调试变量 `CATFISH_MAILPAGES`（配合 `CATFISH_MAIL` 看会员寄存柜的寄件地址页和会员页）。
+- 存档安全：启动真机前把 `user://save.json` 备份到 `_backup_save/`（该目录已加进 `.gitignore`，不提交）。
+- 这是一条和 Codex 并行的线：GitHub 上已有 `codex-v0.90`／`codex-v0.91`（标签 `v0.91-codex`），两边的 0.91 是不同东西，靠 `-qwen` / `-codex` 后缀区分；两边都从 `v0.89` 分出，尚未合并（合并时 `assets/sprites/labels.png` 预计冲突，要在合并后的树上重跑一次 `tools/art/generate.py`）。
+- 验证状态见 C176–C179：**测试和截图都在本机跑过；截图内容没有人工目检，`.app` 启动也没验证**。

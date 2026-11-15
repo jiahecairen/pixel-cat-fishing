@@ -444,6 +444,8 @@ func _apply_debug_env() -> void:
 		bag.open_mail(OS.get_environment("CATFISH_MAIL"))
 		bag.draft = {"boot": 4, "rope": 2}
 		bag.tab = OS.get_environment("CATFISH_MAILTAB").to_int() if OS.has_environment("CATFISH_MAILTAB") else 0
+	if OS.has_environment("CATFISH_MAILPAGES"):   # 调试：把对岸会员寄存柜直接开到第 N 页（0–5），配合 CATFISH_MAIL 看寄件地址和会员页
+		st.mail_pages = clampi(OS.get_environment("CATFISH_MAILPAGES").to_int(), 0, 5)
 	if OS.has_environment("CATFISH_SELLMODE"):    # 调试：工坊回收界面（给几样杂物）
 		for id in ["boot", "bait_worm", "rope", "ladder", "stone", "lamp_shell"]:
 			game.give(id, 3)
@@ -1223,6 +1225,8 @@ func _hud_dx() -> float:
 
 
 func _update_polygon() -> void:
+	if adapter == null:
+		return        # 调试变量在 _ready 里就把小猫传到岛上时，adapter 还没建好
 	if not adapter.is_overlay():
 		return
 	if not mini:
@@ -2380,8 +2384,10 @@ func text_right(s: String, right_x: float, y: float, color: Color) -> void:
 func pixel_line(a: Vector2, b: Vector2, color: Color) -> void:
 	_pixel_line(a, b, color)
 
-## 画一个预渲染的中文标签；图集里没有的文字会被跳过并报一次警告。
+## 画一个预渲染的中文标签；空串什么都不画（不报警告），图集里没有的文字会被跳过并报一次警告。
 func label(s: String, pos: Vector2, color: Color) -> void:
+	if s == "":
+		return
 	if not Labels.RECTS.has(s):
 		if not _missing_labels.has(s):
 			_missing_labels[s] = true

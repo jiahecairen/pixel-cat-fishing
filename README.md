@@ -200,9 +200,70 @@ tests/         无界面单元测试
 | `CATFISH_ACT_AT=200` | 在第 200 帧模拟按一次互动键 |
 | `CATFISH_SHOT=/tmp/a:60,120` | 在第 60、120 帧截图到 `/tmp/a_60.png` 等，然后退出 |
 
+矿山岛（v0.80 起）：
+
+| 变量 | 作用 |
+|---|---|
+| `CATFISH_REGION=isle` / `cave` / `mine` / `room` | 直接进矿山岛的区域：岛上 / 矿车大厅 / 矿井里 / 屋里 |
+| `CATFISH_MINEMENU=cart` | 直接打开岛上或大厅的某个菜单（`cart` = 矿车买票） |
+| `CATFISH_ISLEX=120` / `CATFISH_CAVEX=88` / `CATFISH_ROOMX=60` | 分别指定小猫在岛上、大厅、屋里的横坐标 |
+| `CATFISH_ROOM=shop` | 直接走进矿山岛的屋子（`shop` / `rest` / `inn`） |
+| `CATFISH_RUN=1` | 直接开一局（给第一把镐），站在洞口 |
+| `CATFISH_DIG=0,-1` | 朝这个方向开挖（`dx,dy`），配合 `CATFISH_RUN` |
+| `CATFISH_AT=7,9` | 站到（并面朝）这格石头 / 木箱 |
+| `CATFISH_KIT=1` | 给铁镐、油灯、5 颗炸弹，往下挖几格再放一颗 |
+| `CATFISH_LEAVE=1` | 矿井里 1.5 秒后自动离开（方便连拍） |
+| `CATFISH_HOLD=1` | 当作一直按着空格 |
+
+邮局、物品栏、后台：
+
+| 变量 | 作用 |
+|---|---|
+| `CATFISH_MAIL=isle` / `mine` | 打开对岸邮局（顺便给几样东西、钱包给 5000） |
+| `CATFISH_MAILTAB=0..3` | 邮局停在第 N 页：0 寄件 / 1 取件 / 2 取回 / 3 会员 |
+| `CATFISH_MAILPAGES=2` | 对岸会员寄存柜直接开到第 2 页（0–5），看寄件地址和会员页 |
+| `CATFISH_BAGSEL=2` | 物品栏选中第 3 格 |
+| `CATFISH_FISHVIEW=1` | 篓里放几条鱼并切到鱼篓视图 |
+| `CATFISH_WH=4` | 每种物品给 4 个、一半存进仓库，并打开仓库面板 |
+| `CATFISH_SELLMODE=2` / `trash` | 打开工坊回收界面 / 垃圾箱界面 |
+| `CATFISH_WALLET=5000` | 钱包里的铜币数 |
+| `CATFISH_ADMIN=1` | 直接打开后台（顺便给点钱） |
+
+雾灯岛、任务、铺子：
+
+| 变量 | 作用 |
+|---|---|
+| `CATFISH_PAWN=0` | 去雾灯岛站到典当行门口（数值是相对门口的像素偏移：`-40` 在酒馆门口，`30` 在垃圾箱旁） |
+| `CATFISH_POSTX=0` | 去雾灯岛西岸的邮局门口（桥当作已修好） |
+| `CATFISH_TALK=keeper_menu` | 启动后直接打开某段对话 |
+| `CATFISH_CHOOSE=1` | 对话打开后自动选第 N 个选项（从 0 数） |
+| `CATFISH_QSTATE=1` | 任务：看守、裁缝进行中，看守二号已完成（并给点材料） |
+| `CATFISH_QUEST=letter` / `talk` | 读信 / 任务进行中且材料凑齐后和店主说话 |
+| `CATFISH_OUTFITSHOP=hat` / `outfit` | 进屋后直接打开帽子 / 衣服货架 |
+| `CATFISH_SHIPYARD=5000` | 进造船厂后直接打开升级面板（值是钱包铜币数） |
+| `CATFISH_BOATLV=2` | 船的等级（0–3） |
+| `CATFISH_BOATX=512` | 船开局停在这个位置（512 = 贴着码头） |
+| `CATFISH_SHOP=1` | 菜单的商店停在第 N 页 |
+
+其它：
+
+| 变量 | 作用 |
+|---|---|
+| `CATFISH_CATNAME=阿灰` | 直接给小猫起好名（不弹起名框） |
+| `CATFISH_NAMETEXT=一点点长一点的名字` | 预填一段文字，截图看名字的位置 |
+| `CATFISH_CATCH=sunfish` | 显示"钓到鱼"的提示（值是鱼的 id） |
+| `CATFISH_BIRD=1` | 一开局就有鸟来 |
+| `CATFISH_BIRDKIND=steal` / `gift` / `none` | 让一只鸟立刻来访（偷鱼 / 送礼 / 什么都不做） |
+| `CATFISH_BOOK=2` | 造一堆统计数据并打开图鉴册第 2 页 |
+| `CATFISH_WALK=1,0` | 开头几秒自动按住方向键（`dx,dy`） |
+| `CATFISH_MOVE=2` | 小猫与世界动画的速度倍率（≥1） |
+| `CATFISH_NOHOVER=1` | 迷你窗不因为鼠标悬停而躲开 |
+
 ## 验证状态
 
-哪些验证过、哪些没有，见 [`docs/ACCEPTANCE_TESTS.md`](docs/ACCEPTANCE_TESTS.md)。原始需求的完成情况见 [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)。
+哪些验证过、哪些没有，见 [`docs/ACCEPTANCE_TESTS.md`](docs/ACCEPTANCE_TESTS.md)。
+
+`Qwen-v0.91` 分支的版本说明见 [`QWEN_VERSION.md`](QWEN_VERSION.md)。原始需求的完成情况见 [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)。
 
 ## 日志与存档位置
 

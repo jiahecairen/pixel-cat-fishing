@@ -71,6 +71,9 @@ func _init() -> void:
 		test_unstick(balance, fish)
 		test_island_layout(balance, fish)
 		test_mail(balance, fish)
+		test_v088_ticket_and_locker(balance, fish)
+		test_v089_scripts_and_art()
+		test_labels()
 		test_warehouse(balance, fish)
 		test_stats_and_bait_shop(balance, fish)
 		test_outfit_shop_and_dock(balance, fish)
@@ -2470,3 +2473,211 @@ func test_mail(balance: Dictionary, fish: Array) -> void:
 	g.inventory.add(g.state, "boot", 10)
 	clock.t += g.mail_eta_ms("mine", "isle") + 1
 	check(g.mail_take("isle", "rope") == 0 and int(g.mail_ready("isle").get("rope", 0)) == 2, "背包放不下就留在邮局")
+
+
+## v0.88：矿车按井号和楼层卖票；邮局会员寄存柜按页收格子。
+func test_v088_ticket_and_locker(balance: Dictionary, fish: Array) -> void:
+	print("v0.88: 矿车票、会员寄存柜")
+	var clock := FakeClock.new()
+	var g := Game.new(balance, fish, GameState.new(), clock, _rng(88))
+	var mn = g.mine
+	mn.ensure(clock.t)
+	g.state.bag_slots = 40
+	# ---- 矿车票 ----
+	var t: Dictionary = balance.get("mine", {}).get("ticket", {})
+	var base := int(t.get("base", 0))
+	var per_shaft := int(t.get("per_shaft", 0))
+	var per_floor := int(t.get("per_floor", 0))
+	check(base > 0 and per_shaft > 0 and per_floor > 0, "票价三个数写在 balance 里（不在代码里写死）")
+	check(mn.ticket_price(1, 1) == base, "1 号井第 1 层就是起步价 %d" % base)
+	check(mn.ticket_price(2, 1) == base + per_shaft, "井号高一级贵 %d" % per_shaft)
+	check(mn.ticket_price(1, 6) == base + 5 * per_floor, "每深一层加 %d（第 6 层）" % per_floor)
+	check(mn.ticket_price(3, 21) == base + 2 * per_shaft + 20 * per_floor, "井号和楼层一起算：3 号井 21 层")
+	check(mn.ticket_price(1, 100) > mn.ticket_price(1, 1) and mn.ticket_price(5, 1) > mn.ticket_price(1, 1), "楼层越深、井越好，票价越高")
+	check(mn.ticket_price(0, 0) >= 0, "井号楼层再离谱也不会算出负票价")
+	var w0: int = 5000
+	g.state.wallet_gold = w0
+	var r0: int = g.state.revision
+	check(mn.shaft_status(3) == "locked" and mn.buy_ticket(3, 1) == "locked", "3 号井还没开放，买不到票")
+	check(g.state.wallet_gold == w0 and g.state.revision == r0, "买不到票不扣钱也不改存档")
+	check(mn.buy_ticket(1, 7) == "floor" and g.state.wallet_gold == w0, "没到过的层不能直接买票（也照旧不扣钱）")
+	g.state.wallet_gold = base - 1
+	r0 = g.state.revision
+	check(mn.buy_ticket(1, 1) == "gold", "钱不够买不起票")
+	check(g.state.wallet_gold == base - 1 and g.state.revision == r0, "买不起票不扣钱也不改存档")
+	g.state.wallet_gold = w0
+	r0 = g.state.revision
+	check(mn.buy_ticket(1, 1) == "" and g.state.wallet_gold == w0 - base, "买 1 号井 1 层的票扣 %d 铜" % base)
+	check(g.state.revision == r0 + 1, "买票要写进存档（修订号 +1）")
+	# ---- 2 号井：修好之前买不到票 ----
+	var need: Dictionary = mn.repair_need()
+	g.inventory.add(g.state, "metal", int(need.get("metal", 0)))
+	g.inventory.add(g.state, "stone", int(need.get("stone", 0)))
+	g.state.wallet_gold = 90000
+	check(mn.repair_shaft() != "" and mn.shaft_status(2) == "broken", "工人没雇好，矿车不发车")
+	check(mn.buy_ticket(2, 1) == "locked", "铁路没修好，2 号井买不到票")
+	g.state.effects["workers"] = int(need.get("crew", 2))
+	var metal0: int = g.inventory.count(g.state, "metal")
+	var stone0: int = g.inventory.count(g.state, "stone")
+	check(mn.repair_shaft() == "" and mn.shaft_status(2) == "ok", "材料 + 工人齐了就修好了")
+	check(g.inventory.count(g.state, "metal") == metal0 - int(need.get("metal", 0)) and g.inventory.count(g.state, "stone") == stone0 - int(need.get("stone", 0)), "修铁路按 repair2 扣材料")
+	check(mn.repair_shaft() == "done" and g.inventory.count(g.state, "metal") == metal0 - int(need.get("metal", 0)), "已经修好了再点修理不会重复扣材料")
+	check(mn.buy_ticket(2, 1) == "" and g.state.wallet_gold == 90000 - base - per_shaft, "修好后 2 号井的票比 1 号井贵 %d" % per_shaft)
+	# ---- 一局只待在一口井里 ----
+	check(mn.begin_run(2, clock.t) and mn.in_run() and mn.shaft_id() == 2, "坐上车：开始 2 号井的一局")
+	var w1: int = g.state.wallet_gold
+	var r1: int = g.state.revision
+	check(mn.buy_ticket(1, 1) == "busy" and g.state.wallet_gold == w1 and g.state.revision == r1, "这局没结束就买不了别的井的票")
+	check(mn.buy_ticket(2, mn.floor_n()) == "" and g.state.wallet_gold < w1, "接着这一局往下挖也要买票（第 %d 层）" % mn.floor_n())
+	# ---- 会员寄存柜 ----
+	var mail: Dictionary = balance.get("mail", {})
+	var per_page := int(mail.get("locker_page_slots", 0))
+	var costs: Array = mail.get("member_upgrade_costs", [])
+	check(per_page > 0 and costs.size() == 5, "寄存柜每页格数和五页价格都写在 balance 里")
+	g.state.mail_pages = 0
+	check(g.mail_addresses("isle").size() == 1 and str(g.mail_addresses("isle")[0]["id"]) == "mine", "没开会员只有一个邮局地址")
+	check(g.mail_send("isle", "locker_mine", {"boot": 1}, "x0") == "same", "没开会员寄不进寄存柜")
+	for i in costs.size():
+		g.state.mail_pages = i
+		check(g.mail_member_cost() == int(costs[i]), "开到第 %d 页要 %d 铜" % [i + 1, int(costs[i])])
+	g.state.mail_pages = 5
+	check(g.mail_member_cost() == 0, "五页到顶，不能再扩")
+	var w2: int = 90000
+	g.state.mail_pages = 0
+	g.state.wallet_gold = int(costs[0]) - 1
+	r1 = g.state.revision
+	check(g.mail_upgrade() == "gold" and g.state.mail_pages == 0 and g.state.wallet_gold == int(costs[0]) - 1, "钱不够开不了会员")
+	g.state.wallet_gold = w2
+	g.state.mail_pages = 0
+	g.state.wallet_gold = w2
+	r1 = g.state.revision
+	var c0: int = int(costs[0])
+	check(g.mail_upgrade() == "" and g.state.mail_pages == 1 and g.state.wallet_gold == w2 - c0, "开通会员扣 %d 铜，多一页柜子" % c0)
+	check(g.state.revision == r1 + 1, "会员页数要写进存档（修订号 +1）")
+	var addrs: Array = g.mail_addresses("isle")
+	check(addrs.size() == 2 and str(addrs[1]["id"]) == "locker_mine", "开通后多一个会员寄存柜地址")
+	check(not g.mail_place("locker_mine").is_empty() and g.mail_distance("isle", "locker_mine") == g.mail_distance("isle", "mine"), "寄存柜和对岸邮局算同一段路")
+	check(g.mail_quote("isle", "locker_mine", {"boot": 4}) == g.mail_quote("isle", "mine", {"boot": 4}), "寄到寄存柜的邮费和寄到邮局一样")
+	# 容量：格数 = 每页格数 × 页数，按物品栏的叠加上限折算
+	var cap: int = g.inventory.stack_cap("boot")
+	var full: int = per_page * cap
+	g.inventory.add(g.state, "boot", full + cap)
+	var half: int = full / 2
+	check(g.mail_send("isle", "locker_mine", {"boot": half}, "L1") == "" and g._mail_locker_cells("locker_mine") == per_page / 2, "先存半页（%d 格）" % (per_page / 2))
+	var w3: int = g.state.wallet_gold
+	var p3: int = g.mail_quote("isle", "mine", {"boot": half})
+	check(g.mail_send("isle", "locker_mine", {"boot": half}, "L2") == "" and g.state.wallet_gold == w3 - p3, "再存半页，正好装满一页")
+	check(g._mail_locker_cells("locker_mine") == per_page, "一页 %d 格全满" % per_page)
+	var n_before: int = g.state.mail.size()
+	var boots_before: int = g.inventory.count(g.state, "boot")
+	check(g.mail_send("isle", "locker_mine", {"boot": 1}, "L3") == "locker_full", "柜子满了就寄不进去")
+	check(g.state.mail.size() == n_before and g.inventory.count(g.state, "boot") == boots_before, "被拒的寄件不扣钱也不扣东西")
+	g.inventory.add(g.state, "boot", cap)
+	clock.t += g.mail_eta_ms("isle", "locker_mine") + 1
+	check(int(g.mail_ready("mine").get("boot", 0)) == full, "到时间后在对岸取得到寄存柜里的东西")
+	check(g.mail_ready_cells("mine").size() == per_page, "取回页一格一组（%d 组）" % per_page)
+	check(g.mail_take("mine", "boot", cap) == cap and g._mail_locker_cells("locker_mine") == per_page - 1, "取回一组就空出一格")
+	check(g.mail_send("isle", "locker_mine", {"boot": cap}, "L4") == "", "空出一格后能再寄一组")
+	g.state.mail_pages = 2
+	check(g._mail_locker_cells("locker_mine") <= per_page and g.mail_send("isle", "locker_mine", {"boot": cap}, "L5") == "", "开到第二页，容量翻倍")
+	g.state.mail_pages = 1
+	check(g.mail_send("isle", "locker_mine", {"boot": cap}, "L6") == "locker_full", "页数改回一页，同样的东西就又放不下了")
+	g.state.mail_pages = 2
+	clock.t += g.mail_eta_ms("isle", "locker_mine") + 1
+	var guard := 0
+	while not g.state.mail.is_empty() and guard < 30:
+		guard += 1
+		if g.mail_take("mine", "boot") == 0:
+			break
+	check(g.state.mail.is_empty() and g._mail_locker_cells("locker_mine") == 0, "全取完，柜子空了")
+	# ---- 存档往返 ----
+	var s2 := GameState.new()
+	check(s2.from_dict(JSON.parse_string(JSON.stringify(g.state.to_dict()))) and s2.mail_pages == g.state.mail_pages, "会员页数随存档保存")
+	var d: Dictionary = g.state.to_dict()
+	d["mail_pages"] = 99
+	var s3 := GameState.new()
+	check(s3.from_dict(JSON.parse_string(JSON.stringify(d))) and s3.mail_pages == 5, "页数最多算五页")
+	d["mail_pages"] = -3
+	var s4 := GameState.new()
+	check(s4.from_dict(JSON.parse_string(JSON.stringify(d))) and s4.mail_pages == 0, "负数页数当没开通")
+	d.erase("mail_pages")
+	var s5 := GameState.new()
+	check(s5.from_dict(JSON.parse_string(JSON.stringify(d))) and s5.mail_pages == 0, "旧存档没这个字段也能读")
+
+
+## v0.89：画面脚本要能编译（编译不过 = 游戏直接起不来），SPRITES 里的贴图都要存在。
+func test_v089_scripts_and_art() -> void:
+	print("v0.89: 画面脚本编译与贴图齐全")
+	var main: GDScript = load("res://presentation/main.gd")
+	check(main != null and main.can_instantiate(), "main.gd 能编译（游戏入口）")
+	for p in ["world", "mine_view", "bag", "works_panel", "shopfronts", "dialog", "dest_panel", "quest_panel"]:
+		var s: GDScript = load("res://presentation/%s.gd" % p)
+		check(s != null and s.can_instantiate(), "%s.gd 能编译" % p)
+	var sprites: Array = main.get_script_constant_map().get("SPRITES", [])
+	check(sprites.size() > 100, "SPRITES 列了 %d 张贴图" % sprites.size())
+	for n in ["keeper_ko", "island_repair", "island_pawn", "island_tavern", "lighthouse", "mine_gate"]:
+		check(str(n) in sprites, "SPRITES 里有 %s" % str(n))
+	var missing := 0
+	var first_missing := ""
+	for n in sprites:
+		var path := "res://assets/sprites/%s.png" % str(n)
+		if not ResourceLoader.exists(path):
+			missing += 1
+			if first_missing == "":
+				first_missing = str(n)
+	check(missing == 0, "SPRITES 里每一张图都生成出来了（缺的第一张：%s）" % first_missing)
+	var labels: String = FileAccess.get_file_as_string("res://presentation/labels.gd")
+	check(not labels.is_empty(), "labels.gd 在（界面文字表）")
+
+
+
+## v0.90：运行时用 label() 画出来的提示文字必须在标签图集里。
+## 之前雾灯岛/矿山岛漏了 8 条（空格键进酒馆、空格键看修理厂…），真机跑起来只报警告、玩家什么都看不见。
+func test_labels() -> void:
+	print("v0.90: 提示文字都在标签图集里")
+	var labels: Dictionary = preload("res://presentation/labels.gd").RECTS
+	check(labels.size() > 400, "标签图集里有 %d 条文字" % labels.size())
+	# 1) 屋里的提示：World.SPOT_HINT 的每个值
+	var wsrc: String = FileAccess.get_file_as_string("res://presentation/world.gd")
+	var line := ""
+	for l in wsrc.split("\n"):
+		if str(l).begins_with("const SPOT_HINT"):
+			line = str(l)
+	check(not line.is_empty(), "World.SPOT_HINT 还在")
+	var rv := RegEx.create_from_string(":\\s*\"([^\"]*)\"")
+	for m in rv.search_all(line):
+		var s: String = m.get_string(1)
+		check(labels.has(s), "屋里提示在图集里: %s" % s)
+	# 2) 岛上的提示：_island_hint() 里每条 return 的文字
+	var msrc: String = FileAccess.get_file_as_string("res://presentation/main.gd")
+	var i: int = msrc.find("func _island_hint")
+	check(i >= 0, "main.gd 的 _island_hint 还在")
+	var j: int = msrc.find("\nfunc ", i + 10)
+	if j < 0:
+		j = msrc.length()
+	var body: String = msrc.substr(i, j - i)
+	var rr := RegEx.create_from_string("return \"([^\"]*)\"")
+	var n_hint := 0
+	for m in rr.search_all(body):
+		var s2: String = m.get_string(1)
+		if s2 == "":
+			continue        # 看守头顶是聊天气泡，故意不写字
+		n_hint += 1
+		check(labels.has(s2), "岛上提示在图集里: %s" % s2)
+	check(n_hint >= 10, "_island_hint 里查到 %d 条提示" % n_hint)
+	# 3) 所有画面脚本里写死的 label("…") 字面量
+	var dr := DirAccess.open("res://presentation")
+	var bad := 0
+	var first_bad := ""
+	var rl := RegEx.create_from_string("label(?:_centered)?\\(\\s*\"([^\"]*)\"")
+	for f in dr.get_files():
+		var p: String = "res://presentation/" + str(f)
+		if not str(f).ends_with(".gd") or str(f) == "labels.gd":
+			continue
+		for m in rl.search_all(FileAccess.get_file_as_string(p)):
+			var s3: String = m.get_string(1)
+			if s3 != "" and not labels.has(s3):
+				bad += 1
+				if first_bad == "":
+					first_bad = "%s: %s" % [str(f), s3]
+	check(bad == 0, "画面脚本里写死的 label 文字全在图集里（漏了 %d 条，第一个：%s）" % [bad, first_bad])

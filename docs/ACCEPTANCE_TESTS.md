@@ -6,7 +6,7 @@
 
 | 项目 | 命令 | 结果 |
 |---|---|---|
-| 单元测试 166 项 | `godot --headless --path . --script res://tests/run_tests.gd` | 通过 |
+| 单元测试 912 项（v0.91 起在 macOS 无界面跑） | `godot --headless --path . --script res://tests/run_tests.gd` | 通过 |
 | 8 小时逻辑模拟 | `godot --headless --path . --script res://tests/sim_long_run.gd` | 通过 |
 | 工程无报错启动 | `godot --headless --path . --quit-after 30` | 通过 |
 | 导出包可加载 | 用 Linux 引擎加载导出的 `.pck` | 通过 |
@@ -281,12 +281,30 @@
 - 未运行：Mac 上实际寄一次快递再去对岸取（真实等待时间）、快捷键 Z/X、点击目的地文字切换（现在只有一个目的地，没法试）、.app 启动。
 
 ## C176 v0.88：矿车票务、会员寄存柜、修理厂完工显示
-- 静态检查：`data/balance.json` 可解析，`git diff --check` 通过。
-- Godot 导入和 macOS Release 导出：由 `build_codex.command` 执行；输出 `build/CatFishing.app` 与 `build/CatFishing_v0.88_codex.app`。
-- 未运行：run_tests、sim_long_run、画面截图和实际启动操作。
+- 逻辑与画面：由 v0.89 一并带上（`v0.89` 已包含矿车票、会员寄存柜、修理厂完工显示的代码）。
+- 自动测试：v0.88 当时没写测试；**v0.91 补上了**，见 C178。
+- 真机启动与截图：v0.91 在本机（macOS，Godot 4.7.2）跑通，见 C179。
+- 未运行：真机上真买一次票坐矿车下井、真开通一次会员再寄一件到寄存柜（要等真实时间）、`.app` 导出包能否启动。
 
 ## C177 v0.89：邮费显示、老柯立绘、雾灯岛行业建筑
-- 素材生成：`tools/art/generate.py` 输出的 214 张素材通过 24 色调色板校验；新增老柯、修理厂、典当行、酒馆图样已在像素放大预览中检查。
+- 素材生成：`tools/art/generate.py` 输出的 214 张素材通过 24 色调色板校验（v0.91 在本机重跑一次，除标签图集外全部像素一致）。
 - Godot 4.7.2 导入与 macOS Release 导出：成功，生成 `build/CatFishing.app` 和 `build/CatFishing_v0.89_codex.app`；两者 `Info.plist` 版本均为 0.89。
 - `git diff --check`、`data/balance.json` JSON 解析：通过。
-- 未运行：run_tests、sim_long_run、实际启动游戏和游戏内画面截图。
+- 自动测试：v0.89 当时没写测试；**v0.91 补上了**，见 C178。
+- 真机启动与截图：v0.91 在本机跑通（老柯对话、典当行／修理厂／酒馆门面、矿山岛屋里），见 C179。
+- 未运行：v0.89 导出的 `.app` 双击启动；`.app` 里的行业门面贴图缩放观感。
+
+## C178 v0.91：补 v0.88 / v0.89 的自动测试（本机 macOS，Godot 4.7.2 无界面）
+- `godot --headless --path . --script res://tests/run_tests.gd` → `ALL TESTS PASS`，**912 项检查、0 失败**（v0.87 基线 811 项，本次 +101 项），输出里没有 `SCRIPT ERROR`。
+- `godot --headless --path . --script res://tests/sim_long_run.gd` → `SIM PASS`，退出码 0，无 `SCRIPT ERROR`。
+- 新增 `test_v088_ticket_and_locker`：票价公式与单调性（不换井、不降层不会更贵）、买票被拒时钱包和 `revision` 不变（钱不够／井没开／正在下井）、修好 2 号井前后票价差 `per_shaft`、下井中不能重复买票、会员每页价格表 500/1200/3000/7500/18000、满 5 页返回 `max`、开通后地址表多出寄存柜地址、寄存柜格数 = `locker_page_slots × 页数`、寄存柜满了不扣钱不扣物、取件走寄存柜、`mail_pages` 存档往返（99→5、负数→0、旧存档缺字段→0）。
+- 新增 `test_v089_scripts_and_art`：`main.gd` 等 9 个画面脚本 `can_instantiate()`（编译不过 = 游戏起不来，这是 v0.88 候选踩过的坑）、`SPRITES` 里每张图都在 `assets/sprites/` 里生成出来（含 `keeper_ko`、`island_repair`、`island_pawn`、`island_tavern`、`lighthouse`、`mine_gate`）。
+- 新增 `test_labels`：`World.SPOT_HINT` 的每条提示、`_island_hint()` 的每条提示、以及所有画面脚本里写死的 `label("…")` 字面量，都必须在 `Labels.RECTS` 里。
+- 未运行：这些新测试在 Linux 沙盒里跑（本机是 macOS，只在 macOS 无界面跑过）。
+
+## C179 v0.91：标签图集漏字与调试传送报错（本机 macOS 真机）
+- 现象：真机启动时 `push_warning` 报 `标签图集缺少文字`，共 **10 条界面提示画不出来**（玩家看不到字）：`空格键看工具`、`空格键让厨师做菜`、`空格键住宿休息`、`空格键看修理厂`、`空格键进酒馆`、`空格键进典当行`、`空格键扔东西（垃圾箱）`、`空格键进邮局寄快递`、`鱼篓是空的`、`当天没有小时记录`。
+- 修法：这 10 条加进 `tools/art/generate.py` 的 `LABELS` 并重新生成（`assets/sprites/labels.png` 由 149×4770 长到 149×4850，其余 225 张素材逐像素对比与之前完全一致）；`label("")` 改为直接不画、不再误报警告。
+- 另一处真机报错：调试变量 `CATFISH_PAWN`／`CATFISH_POSTX` 在 `_ready` 里传送时 `adapter` 还没创建 → `SCRIPT ERROR: Nonexistent function 'is_overlay' in base 'Nil'`（`_update_polygon`）。已加 `adapter == null` 直接返回的守卫。
+- 验证：修好后本机再启动 6 次（`boot`、典当行门口、酒馆门口、垃圾箱旁、矿山岛工具屋、老柯对话），6 张截图都生成，**0 条 `标签图集缺少文字` 警告、0 条 `SCRIPT ERROR`**。截图在本机 `/tmp/cfq2_*_120.png`（1920×1080，不透明像素 100%，颜色数 46–318）。
+- 未运行：截图内容的**人工目检**（本次由无界面代理生成，没有肉眼看过画面）；真实窗口是否透明可穿透、能否拖动、点击穿透、音效听感；`.app` 能否双击启动。
