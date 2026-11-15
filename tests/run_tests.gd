@@ -78,6 +78,7 @@ func _init() -> void:
 		test_v096_ore_dex(balance, fish)
 		test_v097_no_helper_cycles()
 		test_v098_perf_hygiene()
+		test_v099_label_atlas_coverage()
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -3161,7 +3162,11 @@ func test_v098_perf_hygiene() -> void:
 	for l in sweep.split("\n"):
 		if str(l).begins_with("\t\"") and str(l).contains("|CATFISH_"):
 			screens += 1
-	check(screens >= 10, "泄漏扫描覆盖 %d 个画面" % screens)
+	check(screens >= 30, "泄漏扫描覆盖 %d 个画面" % screens)
+	check(sweep.contains("CATFISH_SHOT") and sweep.contains(".png"), "泄漏扫描给每个画面留一张截图当证据")
+	check(sweep.contains("没截到图"), "没截出图判失败（画面可能压根没打开，不能算扫过）")
+	check(sweep.contains("跟基线一帧不差"), "和基线画面逐字节相同也算没打开（面板没弹开但游戏照常画了一帧）")
+	check(sweep.contains("LEAK_ONLY"), "支持 LEAK_ONLY 只跑其中几个画面（不然调试一个画面要等半小时）")
 	var idle: String = FileAccess.get_file_as_string("res://tools/perf/idle_rss.sh")
 	check(idle.contains("ps -o rss="), "挂机探针读的是 RSS（常驻内存），不是虚拟内存")
 	check(idle.contains("trap 'rm -rf"), "挂机探针退出时把临时目录删掉")
@@ -3171,3 +3176,53 @@ func test_v098_perf_hygiene() -> void:
 	check(main.contains("const FPS_NORMAL := 30"), "平时限 30 帧（不是满帧在画）")
 	check(main.contains("const FPS_HIDDEN := 5"), "窗口最小化时降到 5 帧")
 
+
+func test_v099_label_atlas_coverage() -> void:
+	print("v0.99: 界面里写死的中文必须都在标签图集里（漏了会被整条跳过，玩家一个字都看不见）")
+	var keys := {}
+	var lab: String = FileAccess.get_file_as_string("res://presentation/labels.gd")
+	check(lab.length() > 5000, "presentation/labels.gd 在（%d 字节）" % lab.length())
+	for l in lab.split("\n"):
+		var s := str(l)
+		var q1 := s.find("\"")
+		if q1 < 0 or not s.contains("\": Rect2"):
+			continue
+		var q2 := s.find("\"", q1 + 1)
+		if q2 > q1:
+			keys[s.substr(q1 + 1, q2 - q1 - 1)] = true
+	check(keys.size() >= 400, "标签图集里有 %d 条文字" % keys.size())
+	check(keys.has("买来的鱼饵每竿用 1 个"), "商店鱼饵页那句提示在图集里（v0.99 的泄漏扫描就是抓到它漏了）")
+	var re := RegEx.create_from_string("label(?:_left|_center|_right)?\\(\\s*\"([^\"]+)\"")
+	var dir := DirAccess.open("res://presentation")
+	check(dir != null, "presentation/ 目录在")
+	var lit := 0
+	var bad := 0
+	var bad_list := ""
+	if dir != null:
+		for f in dir.get_files():
+			var fn := str(f)
+			if not fn.ends_with(".gd"):
+				continue
+			var src: String = FileAccess.get_file_as_string("res://presentation/%s" % fn)
+			for m in re.search_all(src):
+				var t := str(m.get_string(1))
+				var cjk := false
+				for i in t.length():
+					if t.unicode_at(i) >= 0x4E00 and t.unicode_at(i) <= 0x9FFF:
+						cjk = true
+				if not cjk:
+					continue
+				if t.contains("%"):
+					continue
+				var after := m.get_end()
+				while after < src.length() and src[after] == " ":
+					after += 1
+				if after < src.length() and src[after] == "+":
+					continue
+				lit += 1
+				if not keys.has(t):
+					bad += 1
+					if bad <= 3:
+						bad_list += " %s:%s" % [fn, t]
+	check(lit >= 20, "静态扫到 %d 处写死的中文标签" % lit)
+	check(bad == 0, "写死的中文标签全都在图集里%s" % (("；漏了：" + bad_list) if bad > 0 else ""))

@@ -49,6 +49,18 @@ if [[ $alive -eq 0 ]]; then
 	exit 1
 fi
 
+# 采完了就把游戏关掉：这是个体检脚本，不该在人家桌面上留一个开着的窗口
+sleep 1
+if kill -0 "$pid" 2>/dev/null; then
+	kill -TERM "$pid" 2>/dev/null
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		kill -0 "$pid" 2>/dev/null || break
+		sleep 1
+	done
+	kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null
+	echo "已关掉探针开的那个游戏窗口（存档在临时目录，跟你的真存档无关）"
+fi
+
 # 热身 30 秒后再取"首段"，避开启动期贴图加载的正常上涨
 /usr/bin/python3 - "$log" <<'PY'
 import csv, sys
