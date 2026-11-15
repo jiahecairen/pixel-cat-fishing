@@ -498,3 +498,10 @@
 - `tools/art/generate.py` 的 214 张素材通过调色板校验；像素稿和隔离的 Godot 调试画面已目检。
 - `build_codex.command`：Godot 4.7.2 导入及 macOS Release 导出成功，生成 `build/CatFishing.app` 与 `build/CatFishing_v0.90_codex.app`，两者版本为 0.90。
 - run_tests、sim_long_run、发布版 `.app` 实际启动和玩家操作未运行；详见 C178。
+
+## v0.91：雾灯岛—矿山岛可操控航行
+- 雾灯岛西码头到矿山岛改为完整海程，移除原先 4.2 秒的自动过场；方向键实际划船，沿用潮声镇—雾灯岛的船速、加速度、松手滑行和海流参数，到岸后切换到对应码头。
+- 航程长度直接按现有潮声镇码头与雾灯岛的世界坐标计算；海面加入远岸移动、浪纹、尾迹和航向进度条。
+- `build_codex.command`：Godot 4.7.2 导入与 macOS Release 导出成功，生成 `build/CatFishing.app` 与 `build/CatFishing_v0.91_codex.app`。
+- 隔离的 Godot GUI 预览已目检航行画面；调试截图进程退出时有对象清理提示，没有脚本错误。
+- 未运行 run_tests、sim_long_run、发布版 `.app` 实际启动和玩家完整往返操作；详见 C179。

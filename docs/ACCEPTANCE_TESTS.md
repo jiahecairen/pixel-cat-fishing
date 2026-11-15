@@ -297,3 +297,10 @@
 - `build_codex.command`：Godot 导入与 macOS Release 导出成功；两个 `.app` 包的 Info.plist 版本均为 0.90。
 - `git diff --check`、`data/balance.json` JSON 解析：通过。
 - 未运行：run_tests、sim_long_run、发布版 `.app` 实际启动和玩家操作。
+
+## C179 v0.91：雾灯岛—矿山岛可操控航行
+- `git diff --check`：通过。
+- `build_codex.command`：Godot 4.7.2 导入与 macOS Release 导出成功；生成稳定入口 `build/CatFishing.app` 和版本包 `build/CatFishing_v0.91_codex.app`。
+- 两个 `.app` 的 `Info.plist` `CFBundleShortVersionString` 与 `CFBundleVersion` 均为 0.91。
+- 隔离 Godot GUI 场景：方向输入后船朝行进方向转向，连续海面、浪纹和航向指示可见；未出现过场标题或 `SCRIPT ERROR`。调试截图自动退出时打印 ObjectDB/resource 清理提示。
+- 未运行：run_tests、sim_long_run、发布版 `.app` 实际启动、从雾灯岛完整航至矿山岛并再返航的玩家操作。

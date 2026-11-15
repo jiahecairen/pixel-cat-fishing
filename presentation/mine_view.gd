@@ -1,7 +1,7 @@
 extends RefCounted
-## 矿山岛：过海过场、岛上（码头/饭店/工具店/矿洞口）、洞穴大厅（矿车）、矿井（主动挖掘、裂痕、光圈、梯子、天赋）。
+## 矿山岛：可操控航海、岛上（码头/饭店/工具店/矿洞口）、洞穴大厅（矿车）、矿井（主动挖掘、裂痕、光圈、梯子、天赋）。
 ## 逻辑在 core/mine.gd；这里只管画面和按键。
-## 区域："" / "cross_out" / "isle" / "cave" / "ride_in" / "mine" / "ride_back" / "cross_back"。
+## 区域："" / "sea_out" / "sea_back" / "isle" / "cave" / "ride_in" / "mine" / "ride_back"。
 const Pal := preload("res://presentation/palette.gd")
 const MoneyC := preload("res://core/money.gd")
 
@@ -9,8 +9,11 @@ const CELL := 32
 const TILE := {"dirt": 0, "stone": 1, "rock": 2, "deep": 3, "granite": 4, "back": 5, "ladder": 6, "gold": 7, "metal": 8, "stone_ore": 9, "chest": 10, "tnt": 15, "exit_mark": 16, "hole": 17, "floor": 18, "wall": 19, "walltop": 20, "crate": 21, "dirt1": 22, "dirt2": 23, "stone1": 24, "stone2": 25, "rock1": 26, "rock2": 27, "deep1": 28, "deep2": 29}
 const CRACK0 := 11
 const MINE_FRAMES := 30
-const CROSS_MS := 4200
 const RIDE_MS := 1500
+const SEA_SPEED := 44.0
+const SEA_ACCEL := 98.0
+const SEA_DECEL := 55.0
+const SEA_WAVE_PUSH := 150.0
 const ISLE_W := 560.0
 const SPOT := {"dock": 500.0, "rest": 380.0, "inn": 315.0, "shop": 250.0, "post": 172.0, "gate": 96.0}
 const CAVE_W := 560.0
@@ -28,6 +31,8 @@ var isle_moving: bool = false
 var cave_x: float = 60.0
 var cave_flip: bool = false
 var cave_moving: bool = false
+var sea_x: float = 0.0             # 0=矿山岛，航程终点=雾灯岛；海上始终显示在镜头中央
+var sea_v: float = 0.0
 var face: int = 1               # 矿里小猫左右朝向（画图翻转用）
 var face_v := Vector2i(0, 1)     # 矿里小猫面朝的方向（空格挖的就是这个方向的那一格）
 var mine_moving := false
@@ -61,6 +66,13 @@ func _el(t: int) -> float:
 
 func active() -> bool:
 	return region != ""
+
+func is_sea() -> bool:
+	return region in ["sea_out", "sea_back"]
+
+func _sea_length() -> float:
+	# 复用潮声镇码头到雾灯岛岸边的完整航程长度。
+	return absf(m.game.journey.cfg_dock_x() - m.game.island_x())
 
 ## 在矿井里（状态栏换成层数、体力、炸弹、背包）。
 func in_mine() -> bool:
@@ -101,6 +113,12 @@ func go(r: String) -> void:
 	region = r
 	t0 = Time.get_ticks_msec()
 	menu = ""
+	if r == "sea_out":
+		sea_x = _sea_length()
+		sea_v = 0.0
+	elif r == "sea_back":
+		sea_x = 0.0
+		sea_v = 0.0
 	var mn = m.game.mine
 	if r != "":
 		mn.ensure(m.game.now_ms())
@@ -141,17 +159,8 @@ func process(dt: float, dx: int, dy: int) -> void:
 		_open("leave")
 		menu_sel = 1
 	match region:
-		"cross_out":
-			if _el(t) >= CROSS_MS:
-				go("isle")
-				isle_x = SPOT["dock"] - 16.0
-				isle_flip = true
-				if not m.game.state.islands.has("mine"):
-					m.game.state.islands.append("mine")
-				say("到了矿山岛！岛上住着鼹鼠")
-		"cross_back":
-			if _el(t) >= CROSS_MS:
-				go("")
+		"sea_out", "sea_back":
+			_process_sea(dt, dx)
 		"ride_in":
 			if _el(t) >= RIDE_MS:
 				var mn2 = m.game.mine
@@ -190,6 +199,42 @@ func process(dt: float, dx: int, dy: int) -> void:
 				cave_x = clampf(cave_x + dx * WALK_SPEED * m.game.move_speed() * dt, 20.0, CAVE_W - 40.0)
 		"mine":
 			_process_mine(dt, dx, dy)
+
+func _sea_world_x() -> float:
+	# 沿用潮声镇—雾灯岛航线的流速曲线，把这段海域映射到同一条海流带。
+	return lerpf(m.game.island_x(), m.game.journey.cfg_dock_x(), sea_x / _sea_length())
+
+func _process_sea(dt: float, dx: int) -> void:
+	var speed_scale: float = m.game.move_speed()
+	var wx := _sea_world_x()
+	var push: float = m.game.wave_push(wx)
+	if dx != 0:
+		var dir := float(dx)
+		var target_speed: float = SEA_SPEED * m.game.current_mult(wx, dir)
+		sea_v = move_toward(sea_v, dir * target_speed, SEA_ACCEL * speed_scale * dt)
+		if push > 0.0:
+			sea_v += SEA_WAVE_PUSH * lerpf(0.4, 1.0, push) * speed_scale * dt
+	else:
+		sea_v = move_toward(sea_v, 0.0, SEA_DECEL * speed_scale * dt)
+		if push > 0.0:
+			sea_v += SEA_WAVE_PUSH * lerpf(0.4, 1.0, push) * speed_scale * dt
+	var route_len := _sea_length()
+	sea_x = clampf(sea_x + sea_v * speed_scale * dt, 0.0, route_len)
+	if sea_x <= 0.0 and sea_v < -1.0:
+		sea_v = 0.0
+		go("isle")
+		isle_x = SPOT["dock"] - 16.0
+		isle_flip = true
+		if not m.game.state.islands.has("mine"):
+			m.game.state.islands.append("mine")
+		m.game.dirty = true
+		m.play("done")
+		say("到了矿山岛！岛上住着鼹鼠")
+	elif sea_x >= route_len and sea_v > 1.0:
+		sea_v = 0.0
+		go("")
+		m.play("done")
+		say("回到雾灯岛西码头")
 
 func _process_mine(dt: float, dx: int, dy: int) -> void:
 	var mn = m.game.mine
@@ -379,7 +424,7 @@ func key(code: int) -> bool:
 				"mcook": _open("cook")
 				"minn": _open("inn")
 		return true
-	return region.begins_with("cross") or region.begins_with("ride")
+	return region.begins_with("sea") or region.begins_with("ride")
 
 func _bomb() -> void:
 	var mn = m.game.mine
@@ -515,7 +560,7 @@ func _cave_spot() -> String:
 func _interact_isle() -> void:
 	match _spot():
 		"dock":
-			go("cross_back")
+			go("sea_back")
 			m.play("click")
 		"gate":
 			go("cave")
@@ -723,39 +768,78 @@ func hint() -> String:
 			if _special_ahead() == "ladder":
 				return "空格键：爬梯子"
 			return "第 %d 层  方向键走  空格挖  B 放炸弹（有 %d 颗）" % [mh.floor_n(), mh.bombs()]
+		"sea_out", "sea_back":
+			return "方向键划船，松开后会滑行"
 	return ""
 
 ## ================= 绘制 =================
-func _draw_cross(view: Vector2, t: int) -> void:
-	var k := clampf(_el(t) / float(CROSS_MS), 0.0, 1.0)
-	var cam := Vector2(0, 180.0 - view.y)
-	m.draw_set_transform(-cam)
-	m.world._draw_sky(cam, view, t)
+func _draw_sea(view: Vector2, t: int) -> void:
+	var sky_cam := Vector2(0, 180.0 - view.y)
+	m.draw_set_transform(-sky_cam)
+	m.world._draw_sky(sky_cam, view, t)
 	m.draw_set_transform(Vector2.ZERO)
 	var sea_y := view.y - 60.0
+	var route_len := _sea_length()
+	var progress_from_fog := route_len - sea_x
 	m.draw_rect(Rect2(0, sea_y, view.x, view.y - sea_y), Pal.U_B)
-	# 大浪：比平时高一截的浪头一排排滚过去
-	for row in 4:
-		var amp := 7.0 - row
-		var y0 := sea_y + row * 12.0
+	# 两端岛岸随船逐渐远去或靠近，中央航段保持开阔海面。
+	var mine_edge := 76.0 - sea_x * 0.28
+	if mine_edge > 0.0:
+		m.draw_texture(m.tex["mine_mtn"], Vector2(mine_edge - 160.0, sea_y - 53.0))
+		m.draw_rect(Rect2(0, sea_y - 12.0, mine_edge, 16.0), Pal.L_G)
+		m.draw_rect(Rect2(0, sea_y - 12.0, mine_edge, 2.0), Pal.U_G)
+	var fog_edge := view.x - 48.0 + progress_from_fog * 0.28
+	if fog_edge < view.x:
+		m.draw_rect(Rect2(fog_edge, sea_y - 14.0, view.x - fog_edge, 18.0), Pal.L_G)
+		m.draw_rect(Rect2(fog_edge, sea_y - 14.0, view.x - fog_edge, 2.0), Pal.U_G)
+		if fog_edge < view.x - 34.0:
+			m.draw_texture(m.tex["tree"], Vector2(fog_edge + 8.0, sea_y - 48.0))
+			m.draw_texture(m.tex["lighthouse"], Vector2(fog_edge + 28.0, sea_y - 56.0))
+	# 浪头、浪尖和水下白色浪纹持续横过画面。
+	var scroll := progress_from_fog * 0.7
+	for row in 5:
+		var amp := 7.0 - float(row) * 0.8
+		var y0 := sea_y + float(row) * 11.0
 		for x in range(0, int(view.x) + 8, 4):
-			var h := amp * (0.5 + 0.5 * sin(float(x) / 18.0 + float(t) / 260.0 + row * 1.7))
+			var ph := (float(x) + scroll) / 18.0 + float(t) / 260.0 + float(row) * 1.7
+			var h := amp * (0.5 + 0.5 * sin(ph))
 			m.draw_rect(Rect2(x, y0 - h, 4, h + 3), Pal.L_B if row % 2 == 0 else Pal.U_B)
-			if h > amp * 0.85:
+			if h > amp * 0.82:
 				m.draw_rect(Rect2(x, y0 - h, 4, 2), Pal.U_W)
-	var dir := 1.0 if region == "cross_back" else -1.0
-	var bx := lerpf(view.x * 0.75, view.x * 0.25, k) if dir < 0 else lerpf(view.x * 0.25, view.x * 0.75, k)
-	var bob := roundf(sin(float(t) / 180.0) * 3.0)
+	for row in 3:
+		var ry := sea_y + 62.0 + row * 18.0
+		for i in 7:
+			var wx := fposmod(float(i * 53 + row * 31) - scroll * (0.5 + row * 0.1) + float(t) / (120.0 + row * 35.0), view.x + 20.0) - 10.0
+			m.draw_rect(Rect2(wx, ry, 6 + row * 2, 1), Color(Pal.U_W, 0.38 - row * 0.07))
+	var bx := view.x * 0.5
+	var speed_ratio := clampf(absf(sea_v) / SEA_SPEED, 0.0, 1.3)
+	var bob := roundf(sin(float(t) / 180.0) * (2.0 + speed_ratio * 2.0))
 	var by := sea_y - 18.0 + bob
 	var boat_tex: String = ["boat", "boat_1", "boat_2", "boat_3"][clampi(m.game.state.boat_level, 0, 3)]
-	if dir < 0:
-		m.tex_frame_flipped(boat_tex, Vector2(bx - 40, by), 0, 1)
-		m.draw_cat(Vector2(bx - 18, by - 22), 0, true)
+	var facing_left := sea_v < -0.5
+	if facing_left:
+		m.tex_frame_flipped(boat_tex, Vector2(bx - 40.0, by), 0, 1)
+		m.draw_cat(Vector2(bx - 18.0, by - 22.0), 0, true)
 	else:
-		m.draw_texture(m.tex[boat_tex], Vector2(bx - 40, by))
-		m.draw_cat(Vector2(bx - 18, by - 22), 0, false)
-	var title := "驶向矿山岛……" if dir < 0 else "回雾灯岛……"
-	m.dyn_text(title, Vector2(view.x / 2.0 - m.dyn_text_width(title) / 2.0, 40), Pal.L_W)
+		m.draw_texture(m.tex[boat_tex], Vector2(bx - 40.0, by))
+		m.draw_cat(Vector2(bx - 18.0, by - 22.0), 0, false)
+	if speed_ratio > 0.12:
+		var wake_x := bx + (38.0 if facing_left else -12.0)
+		for i in 3:
+			var off := (t / 120 + i * 7) % 18
+			m.draw_rect(Rect2(wake_x + i * 3, sea_y + 2 + off, 5 + i * 2, 1), Color(Pal.U_W, 0.65 - i * 0.14))
+	# 小航线只提示两端位置；船、海流、浪和镜头保持连续，不显示过场标题。
+	var nav_center := view.x / 2.0
+	var nav_width := 44.0
+	var nav_left := nav_center - nav_width / 2.0
+	m.dyn_text("矿山岛", Vector2(nav_center - 102.0, 58), Pal.L_W)
+	m.dyn_text("雾灯岛", Vector2(nav_center + 58.0, 58), Pal.L_W)
+	m.draw_rect(Rect2(nav_left, 62, nav_width, 3), Pal.U_K)
+	var travel_ratio := clampf(progress_from_fog / route_len if region == "sea_out" else sea_x / route_len, 0.0, 1.0)
+	var fill_width := (nav_width - 2.0) * travel_ratio
+	var fill_x := nav_left + 1.0 if region == "sea_back" else nav_left + nav_width - 1.0 - fill_width
+	if fill_width > 0.0:
+		m.draw_rect(Rect2(fill_x, 63, fill_width, 1), Pal.L_Y)
 
 func _isle_cam(view: Vector2) -> float:
 	return clampf(isle_x + 16.0 - view.x / 2.0, 0.0, ISLE_W - view.x)
@@ -809,8 +893,8 @@ func _draw_isle(view: Vector2, t: int) -> void:
 
 func draw(view: Vector2, t: int) -> void:
 	match region:
-		"cross_out", "cross_back":
-			_draw_cross(view, t)
+		"sea_out", "sea_back":
+			_draw_sea(view, t)
 		"isle":
 			_draw_isle(view, t)
 		"room":
@@ -867,6 +951,19 @@ func _draw_mini_town(view: Vector2, t: int) -> void:
 ## 迷你窗里的挖矿动画：小猫对着岩壁一下一下挥镐，碎石飞溅、矿石闪光。游戏暂停，放大窗口接着挖。
 func draw_mini(view: Vector2, t: int) -> void:
 	var mn = m.game.mine
+	if is_sea():
+		var rsea := Rect2(3, 31, view.x - 6, 61)
+		m.draw_rect(rsea.grow(1), Pal.U_K)
+		m.draw_rect(rsea, Pal.U_B)
+		for row in 3:
+			var ysea := rsea.position.y + 28 + row * 11
+			for i in 5:
+				var sx := rsea.position.x + fposmod(float(i * 29 + t / (65 + row * 15)), rsea.size.x)
+				m.draw_rect(Rect2(sx, ysea, 10, 1), Color(Pal.U_W, 0.55 - row * 0.1))
+		m.draw_texture(m.tex["boat"], Vector2(view.x / 2.0 - 20, rsea.position.y + 27 + roundf(sin(float(t) / 180.0) * 2.0)))
+		m.dyn_text("矿山岛", Vector2(rsea.position.x + 8, rsea.position.y + 5), Pal.L_W)
+		m.dyn_text("雾灯岛", Vector2(rsea.end.x - 38, rsea.position.y + 5), Pal.L_W)
+		return
 	if region != "mine":
 		_draw_mini_town(view, t)
 		return
@@ -1286,7 +1383,7 @@ func _draw_swing(cp: Vector2, flip: bool, dirv: Vector2i, t: int) -> void:
 func _draw_overlay(view: Vector2, t: int) -> void:
 	if region == "mine":
 		pass                                   # 矿井里状态栏已经有层数、体力、炸弹、背包，不再显示钱和提示
-	elif region in ["isle", "cave", "ride_in", "ride_back"]:
+	elif region in ["isle", "cave", "ride_in", "ride_back", "sea_out", "sea_back"]:
 		var w: float = 22.0 + m.dyn_text_width(_wallet_text())
 		m.draw_rect(Rect2(view.x - w - 8, 5, w + 4, 16), Color(0.1, 0.08, 0.14, 0.8))
 		m.draw_texture(m.tex[MoneyC.icon(m.game.state.wallet_gold)], Vector2(view.x - w - 4, 6))

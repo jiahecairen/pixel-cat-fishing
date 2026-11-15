@@ -1045,7 +1045,7 @@ func _interact_island(x: float) -> void:
 	if game.bridge_built() and x <= game.island_walk_min() + 4.0:
 		if game.state.boat_level >= int(game.mine.cfg().get("boat_need", 2)):
 			play("click")
-			mine_view.go("cross_out")
+			mine_view.go("sea_out")
 		else:
 			_toast("浪太大了", "船要升级两次")
 			play("deny")
@@ -2019,7 +2019,7 @@ func _draw_weather(t: int) -> void:
 func _btn_block(which: String) -> String:
 	match which:
 		"town":
-			if mine_view.active() and (mine_view.region == "mine" or mine_view.region.begins_with("ride") or mine_view.region.begins_with("cross")):
+			if mine_view.active() and (mine_view.region == "mine" or mine_view.region.begins_with("ride") or mine_view.region.begins_with("sea")):
 				return "在矿井里，先回地面"
 		"dest":
 			if not game.journey.on_boat():
