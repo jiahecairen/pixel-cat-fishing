@@ -501,3 +501,11 @@
 - 存档安全：启动真机前把 `user://save.json` 备份到 `_backup_save/`（该目录已加进 `.gitignore`，不提交）。
 - 这是一条和 Codex 并行的线：GitHub 上已有 `codex-v0.90`／`codex-v0.91`（标签 `v0.91-codex`），两边的 0.91 是不同东西，靠 `-qwen` / `-codex` 后缀区分；两边都从 `v0.89` 分出，尚未合并（合并时 `assets/sprites/labels.png` 预计冲突，要在合并后的树上重跑一次 `tools/art/generate.py`）。
 - 验证状态见 C176–C179：**测试和截图都在本机跑过；截图内容没有人工目检，`.app` 启动也没验证**。
+
+## v0.92：修好"双击运行游戏.command 没反应"，并真打包出可验收的 CatFishing_v0.92_Qwen.app
+- **用户反馈的问题是真的**：`运行游戏.command` 只有一行 `open build/CatFishing.app`，而 `build/` 不入库；`CC_CatFashing_Qwen` 这个工作树里从来没人打包过，`build/` 目录都不存在 → `open` 直接报 `The file … does not exist.`、终端一闪就关。本机复现过。
+- `运行游戏.command` 重写：优先开 `build/` 里最新的 `CatFishing_v*_Qwen.app`，没有就现打包一份，`open` 前清隔离标记，失败时把原因打印出来并停住等用户看（不再一闪而过）。
+- 新增 `打包游戏.command`：版本号从 `project.godot` 读并回写 `export_presets.cfg` → `--import` → `--export-release "macOS"` → 生成 `build/CatFishing_v<版本>_Qwen.app` + `build/CatFishing.app` 替身 → 临时签名 + `xattr -cr` → **自己无界面起两帧自检**，有 `SCRIPT ERROR` 就失败退出。
+- 产物：**`build/CatFishing_v0.92_Qwen.app`**（163 MB 通用二进制，`CFBundleShortVersionString=0.92`，签名校验通过，PCK 里确认带上了 `data/*.json`）。另外打了一份调试包用 `CATFISH_SHOT` 让它**自己截图**，证明这个包真的在跑游戏画面（两张 1920×1080，0 警告 0 报错）。
+- `project.godot` 的 `config/version` 从 `0.89` 升到 `0.92`（之前一直没跟着版本号走，"关于"里显示的是旧版本）。
+- 验证状态见 C180：打包、启动、自检、回归测试都在本机跑过；**真人双击、透明/穿透/拖动、Intel 机器**还没验。

@@ -4,12 +4,16 @@ macOS 桌面上的像素小猫，在透明悬浮窗里坐船钓鱼。开始一�
 
 ## 运行
 
-**直接玩**：双击 `build/CatFishing.app`（未经 Apple 公证；如果系统拦截，在"系统设置 → 隐私与安全性"里点"仍要打开"，或右键 → 打开）。
+**直接玩**：双击 **`运行游戏.command`**。它会自己找 `build/` 里最新的 `CatFishing_v*_Qwen.app`；一个都还没有就**自动打包一份**再打开（第一次约一分钟）。窗口是透明的，小猫可能贴在屏幕角落。
+
+- 双击后终端一闪就没了：那是 v0.92 之前的老脚本（只会 `open build/CatFishing.app`，而 `build/` 不入库，新克隆里没有这个文件）。现在的脚本找不到会**自己打包**，失败会把原因打印出来并停住等你看。
+- 提示"没有权限/无法打开"：先 `chmod +x 运行游戏.command` 再双击。
+- 被 Gatekeeper 拦（"未验证的开发者"）：在 Finder 里 Control + 单击该 `.app` → 打开（只第一次），或 系统设置 → 隐私与安全性 → "仍要打开"。脚本每次打开前会 `xattr -cr` 清掉隔离标记。
 
 **开发调试**：用 Godot 4.7 打开本文件夹（`project.godot`），按 F5。或在终端：
 
 ```bash
-/Applications/Godot.app/Contents/MacOS/Godot --path /Users/rain/DevGame/CC_CatFashing
+/Applications/Godot.app/Contents/MacOS/Godot --path /Users/rain/DevGame/CC_CatFashing_Qwen
 ```
 
 ## 两种视图
@@ -138,10 +142,18 @@ macOS 桌面上的像素小猫，在透明悬浮窗里坐船钓鱼。开始一�
 ## 导出
 
 ```bash
-./build_codex.command
+./打包游戏.command        # Qwen 线：产物 build/CatFishing_v<版本>_Qwen.app
+./build_codex.command     # Codex 线：产物 build/CatFishing_v<版本>_codex.app
 ```
 
-脚本会读取 `project.godot` 的版本号，更新 `build/CatFishing.app`，并另存为 `build/CatFishing_v<版本>_codex.app`。导出预设在 `export_presets.cfg`：通用二进制（Intel + Apple Silicon）、临时签名、不公证。首次导出需要安装匹配当前 Godot 版本的导出模板（编辑器 → 管理导出模板）。
+两个脚本都会读取 `project.godot` 的 `config/version`，把它同步进 `export_presets.cfg` 的版本号，导出后再把 `build/CatFishing.app` 做成指向版本包的替身。`打包游戏.command` 还会**自己无界面起两帧做自检**，起不来就报错退出，不会假装打包成功。
+想打包一份"能截图能看"的调试版（调试版才认 `CATFISH_*` 调试变量）：
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path . --export-debug "macOS" build/CatFishing_v0.92_Qwen_debug.app
+CATFISH_SHOT=/tmp/shot:150 "build/CatFishing_v0.92_Qwen_debug.app/Contents/MacOS/CatFishing"   # 注意：打包好的 app 不能再加 --path
+```
+导出预设在 `export_presets.cfg`：通用二进制（Intel + Apple Silicon）、临时签名、不公证。首次导出需要安装匹配当前 Godot 版本的导出模板（编辑器 → 管理导出模板）。
 
 ## 目录结构
 
@@ -263,7 +275,7 @@ tests/         无界面单元测试
 
 哪些验证过、哪些没有，见 [`docs/ACCEPTANCE_TESTS.md`](docs/ACCEPTANCE_TESTS.md)。
 
-`Qwen-v0.91` 分支的版本说明见 [`QWEN_VERSION.md`](QWEN_VERSION.md)。原始需求的完成情况见 [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)。
+`Qwen-v0.92` 分支的版本说明见 [`QWEN_VERSION.md`](QWEN_VERSION.md)。原始需求的完成情况见 [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)。
 
 ## 日志与存档位置
 

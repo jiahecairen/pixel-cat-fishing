@@ -308,3 +308,12 @@
 - 另一处真机报错：调试变量 `CATFISH_PAWN`／`CATFISH_POSTX` 在 `_ready` 里传送时 `adapter` 还没创建 → `SCRIPT ERROR: Nonexistent function 'is_overlay' in base 'Nil'`（`_update_polygon`）。已加 `adapter == null` 直接返回的守卫。
 - 验证：修好后本机再启动 6 次（`boot`、典当行门口、酒馆门口、垃圾箱旁、矿山岛工具屋、老柯对话），6 张截图都生成，**0 条 `标签图集缺少文字` 警告、0 条 `SCRIPT ERROR`**。截图在本机 `/tmp/cfq2_*_120.png`（1920×1080，不透明像素 100%，颜色数 46–318）。
 - 未运行：截图内容的**人工目检**（本次由无界面代理生成，没有肉眼看过画面）；真实窗口是否透明可穿透、能否拖动、点击穿透、音效听感；`.app` 能否双击启动。
+
+## C180 v0.92：双击「运行游戏.command」打不开 + 打包出可验收的 .app（本机 macOS 真机）
+- **根因**：老的 `运行游戏.command` 只有 `open build/CatFishing.app` 一行，而 `build/` 在 `.gitignore` 里不入库 → 新的工作树／新克隆里那个 .app 根本不存在 → `open` 报 `The file … does not exist.`（退出码 1），终端窗口一闪就关，看起来就是"双击没反应"。本机实测复现：在没有 `build/` 的工作树里跑 `open build/CatFishing.app` → 退出码 1 + 上面那句报错。
+- **修法**：`运行游戏.command` 重写（自动挑 `build/` 里最新的 `CatFishing_v*_Qwen.app` → 退回 `build/CatFishing.app` → 一个都没有就调用 `./打包游戏.command` 现打包 → 打开前 `xattr -cr` 清隔离标记 → 失败时打印原因并 `read` 停住，不再一闪而过）。新增 `打包游戏.command`：读 `project.godot` 的 `config/version`、同步进 `export_presets.cfg`、`--import`、`--export-release "macOS"`、把 `build/CatFishing.app` 做成指向版本包的替身、`codesign --force --sign -` 临时签名、最后**自己无界面起两帧自检**（有 `SCRIPT ERROR` 就退出码 1，不假装成功）。
+- **产物**：`build/CatFishing_v0.92_Qwen.app`（163 MB，通用二进制 x86_64+arm64，`CFBundleShortVersionString=0.92`，`codesign -v` → `valid on disk` / `satisfies its Designated Requirement`，PCK 1.33 MB 含 `data/balance.json`、`data/fish.json`、`data/cat.json`、`data/cities.json`、`data/dialogs.json`）。
+- **本机实跑**：`./打包游戏.command` → 自检通过、退出码 0（8.6 秒）。`./运行游戏.command` → 打印"打开：build/CatFishing_v0.92_Qwen.app"、退出码 0，`pgrep` 看到 `Contents/MacOS/CatFishing` 进程活着（≥12 秒），`kill` 后正常退出，`user://save.json` 的 md5 前后一致（`5aa60145…`，说明启动→退出这一趟没污染存档）。
+- **打包出来的包真的在跑游戏，不只是启动器**：另外用 `--export-debug` 打了一份调试包（调试包才认 `CATFISH_*`），让它自己截图两张：`/tmp/cfapp_boot_150.png`、`/tmp/cfapp_tavern_150.png`，都是 1920×1080、不同颜色 198 / 276 种、两张之间有 100 万像素不同（= 传送换地方了），日志 **0 条 `SCRIPT ERROR`、0 条 `标签图集缺少文字``。
+- 回归：`--script res://tests/run_tests.gd` → `ALL TESTS PASS`，**912 项 0 失败**；`--script res://tests/sim_long_run.gd` → `SIM PASS`；两者退出码 0，无 `SCRIPT ERROR`。
+- **未运行**：①**真人双击**的完整体验（我是用命令行跑同一个 `.command` 等价验证的，双击时 Terminal 的打开方式、字体、窗口位置没法替你看）；②Gatekeeper 第一次拦不拦（本机自己打的包没有隔离标记，从 GitHub 下载下来的那份要靠脚本里的 `xattr -cr` 兜底）；③窗口**透明、点击穿透、拖动**的肉眼确认——注意 `.app` 里 `get_viewport().get_texture().get_image()` 截出来是 **100% 不透明**的（视口截图不带窗口 alpha），所以截图**不能**用来判断透明度；④`.app` 图标在 Dock／Finder 里的观感；⑤Intel 机器上的实机运行（只验了 Apple Silicon 这台）。
