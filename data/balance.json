@@ -1481,6 +1481,11 @@
   "mine": {
     "width": 30,
     "boat_need": 2,
+    "ticket": {
+      "base": 20,
+      "per_shaft": 25,
+      "per_floor": 3
+    },
     "layers": [
       {
         "to": 4,
@@ -2372,6 +2377,8 @@
     "per_item": 3,
     "per_dist": 0.04,
     "ms_per_dist": 3000,
-    "max_items": 99
+    "max_items": 99,
+    "locker_page_slots": 8,
+    "member_upgrade_costs": [500, 1200, 3000, 7500, 18000]
   }
 }

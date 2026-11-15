@@ -1,6 +1,6 @@
 extends RefCounted
 ## 矿山岛的矿井（纯逻辑，不碰节点）。见 docs/MINE_ISLAND.md。
-## 结构：洞穴大厅（矿车）→ 矿井（1 号通畅，2 号铁路坏了）。每次坐矿车下井是一"局"（run）：
+## 结构：洞穴大厅（矿车）→ 矿井。每次坐矿车下井是一"局"（run）：
 ##   - 一层一层往下：每层是一张随机小地图（宽 width × 高 height 格），入口是顶部一格台阶，
 ##     出口（往下的洞）埋在某块石头下面，挖开它再走上去才能下一层。每局种子不同，每层地图不同。
 ##   - 四个方向都能自由地挖，没有梯子、绳子这类限制；外圈是挖不动的花岗岩。
@@ -107,6 +107,26 @@ func shaft_status(id: int) -> String:
 	if shaft_ok(id):
 		return "ok"
 	return "broken" if id == 2 else "locked"
+
+## 矿车票价：矿井越高级、选择的存档楼层越深，票价越高。
+func ticket_price(id: int, floor: int) -> int:
+	var c: Dictionary = _c.get("ticket", {})
+	return maxi(0, int(c.get("base", 20)) + maxi(0, id - 1) * int(c.get("per_shaft", 25)) + maxi(0, floor - 1) * int(c.get("per_floor", 3)))
+
+## 上车时买票。返回空字符串表示已扣款成功。
+func buy_ticket(id: int, floor: int) -> String:
+	if not shaft_ok(id):
+		return "locked"
+	if in_run() and shaft_id() != id:
+		return "busy"
+	if floor < 1 or floor > max_floor() or (not in_run() and not start_floors(id).has(floor)):
+		return "floor"
+	var cost := ticket_price(id, floor)
+	if _s.wallet_gold < cost:
+		return "gold"
+	_s.wallet_gold -= cost
+	_s.revision += 1
+	return ""
 
 ## 2 号井的修复条件。
 func repair_need() -> Dictionary:

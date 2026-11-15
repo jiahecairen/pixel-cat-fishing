@@ -1984,7 +1984,7 @@ func _draw() -> void:
 	_draw_name_dialog(t)
 	_draw_island_title()
 	if not mini or _mini_shown:       # 右下角的版本号
-		var ver: String = str(ProjectSettings.get_setting("application/config/version", ""))
+		var ver: String = "v" + str(ProjectSettings.get_setting("application/config/version", ""))
 		_text(ver, Vector2(view.x - ver.length() * 4 - 1, view.y - 6), Color(Pal.L_W, 0.7), true)
 
 

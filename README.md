@@ -138,10 +138,10 @@ macOS 桌面上的像素小猫，在透明悬浮窗里坐船钓鱼。开始一�
 ## 导出
 
 ```bash
-/Applications/Godot.app/Contents/MacOS/Godot --headless --path . --export-release "macOS" build/CatFishing.zip
+./build_codex.command
 ```
 
-需要先在 Godot 编辑器里安装导出模板（编辑器 → 管理导出模板）。导出预设在 `export_presets.cfg`：通用二进制（Intel + Apple Silicon）、临时签名、不公证。
+脚本会读取 `project.godot` 的版本号，更新 `build/CatFishing.app`，并另存为 `build/CatFishing_v<版本>_codex.app`。导出预设在 `export_presets.cfg`：通用二进制（Intel + Apple Silicon）、临时签名、不公证。首次导出需要安装匹配当前 Godot 版本的导出模板（编辑器 → 管理导出模板）。
 
 ## 目录结构
 

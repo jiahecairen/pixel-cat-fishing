@@ -10,11 +10,12 @@ var ore_mode: bool = false    # 老钻收矿石：只能卖石头、金属、金
 var trash_mode: bool = false  # 在垃圾箱打开的：什么都能扔
 var confirm_id: String = ""   # 扔任务物品要按两次：第一次记在这里
 var wh: bool = false      # 在家里仓库打开的：多了"身上 / 仓库"两页，按钮变成存入 / 取出
-var tab: int = 0          # 仓库模式下：0 = 身上，1 = 仓库
-var mail_mode: bool = false   # 在邮局打开的：寄件 / 取件
+var tab: int = 0          # 仓库：身上/仓库；邮局：寄件/取件/撤回/会员
+var mail_mode: bool = false
 var mail_place_id: String = ""
 var mail_dest: String = ""
 var draft: Dictionary = {}    # 准备寄的东西：物品 id -> 个数（寄出前不会离开物品栏）
+var mail_step: int = 0         # 寄件流程：选物品 → 选地址 → 确认邮费
 var mail_msg: String = ""
 var mail_msg_t: int = 0
 var fish_view: bool = false   # 鱼篓视图：里面有哪些鱼、各占百分之几
@@ -122,22 +123,43 @@ func _cells() -> Array:
 	if mail_mode:
 		if tab == 1:
 			return m.game.mail_ready_cells(mail_place_id)
-		var out: Array = []
+		if tab == 2 or (tab == 0 and mail_step > 0):
+			return _draft_cells()
+		if tab == 3:
+			return []
+		var available: Array = []
 		for d in m.game.inventory.defs:
-			var left: int = m.game.inventory.count(m.game.state, d["id"]) - mini(int(draft.get(d["id"], 0)), m.game.inventory.count(m.game.state, d["id"]))
-			var cap: int = m.game.inventory.stack_cap(d["id"])
+			var id := str(d["id"])
+			var have: int = m.game.inventory.count(m.game.state, id)
+			var left: int = have - mini(int(draft.get(id, 0)), have)
+			var cap: int = m.game.inventory.stack_cap(id)
 			while left > 0:
-				out.append([d["id"], mini(left, cap)])
+				available.append([id, mini(left, cap)])
 				left -= cap
-		return out
+		return available
 	return m.game.inventory.cells(m.game.state, wh and tab == 1)
+
+func _draft_cells() -> Array:
+	var out: Array = []
+	for d in m.game.inventory.defs:
+		var id := str(d["id"])
+		var left := int(draft.get(id, 0))
+		var cap: int = m.game.inventory.stack_cap(id)
+		while left > 0:
+			out.append([id, mini(left, cap)])
+			left -= cap
+	return out
 
 func _owned() -> Array:
 	return _cells().map(func(c): return c[0])
 
 func _cnt(id: String) -> int:
 	if mail_mode:
-		return int(m.game.mail_ready(mail_place_id).get(id, 0)) if tab == 1 else m.game.inventory.count(m.game.state, id) - int(draft.get(id, 0))
+		if tab == 1:
+			return int(m.game.mail_ready(mail_place_id).get(id, 0))
+		if tab == 2 or (tab == 0 and mail_step > 0):
+			return int(draft.get(id, 0))
+		return m.game.inventory.count(m.game.state, id) - int(draft.get(id, 0))
 	if _redeem():
 		return m.game.pawn_count(id)
 	if wh and tab == 1:
@@ -146,7 +168,15 @@ func _cnt(id: String) -> int:
 
 func _tab_rect(i: int) -> Rect2:
 	var r := rect()
-	return Rect2(r.position.x + ((100 if (sell_mode or mail_mode) else 46) if not m.mini else 4) + i * 34, r.position.y + 2, 32, 11)
+	if mail_mode:
+		var tab_w := 24 if m.mini else 32
+		var gap := 25 if m.mini else 34
+		return Rect2(r.position.x + (4 if m.mini else 38) + i * gap, r.position.y + 2, tab_w, 11)
+	return Rect2(r.position.x + ((100 if sell_mode else 46) if not m.mini else 4) + i * 34, r.position.y + 2, 32, 11)
+
+func _mail_address_rect() -> Rect2:
+	var r := rect()
+	return Rect2(r.position.x + (4 if m.mini else 174), r.position.y + 1, r.size.x - (8 if m.mini else 190), 13)
 
 func _all_rect() -> Rect2:
 	var u := _use_rect()
@@ -171,20 +201,22 @@ func open_mail(place: String) -> void:
 	fish_view = false
 	mail_mode = true
 	mail_place_id = place
-	var others: Array = m.game.mail_others(place)
-	mail_dest = str(others[0]["id"]) if not others.is_empty() else ""
+	var addresses: Array = m.game.mail_addresses(place)
+	mail_dest = str(addresses[0]["id"]) if not addresses.is_empty() else ""
 	draft = {}
+	mail_step = 0
 	open = true
 	tab = 0
 	sel = 0
 
 func _mail_dest_cycle() -> void:
-	var others: Array = m.game.mail_others(mail_place_id)
-	if others.size() < 2:
+	var addresses: Array = m.game.mail_addresses(mail_place_id)
+	if addresses.size() < 2:
+		_mail_say("目前只有一个可选地址")
 		return
-	for i in others.size():
-		if str(others[i]["id"]) == mail_dest:
-			mail_dest = str(others[(i + 1) % others.size()]["id"])
+	for i in addresses.size():
+		if str(addresses[i]["id"]) == mail_dest:
+			mail_dest = str(addresses[(i + 1) % addresses.size()]["id"])
 			break
 	m.play("click")
 
@@ -193,6 +225,9 @@ func _mail_say(s: String) -> void:
 	mail_msg_t = Time.get_ticks_msec()
 
 func mail_add() -> void:
+	if mail_step != 0:
+		m.play("deny")
+		return
 	var owned := _owned()
 	if sel >= owned.size():
 		m.play("deny")
@@ -215,16 +250,42 @@ func mail_unadd() -> void:
 	if id == "" or not draft.has(id):
 		m.play("deny")
 		return
-	draft.erase(id)
+	var remaining := int(draft[id]) - _cell_n()
+	if remaining > 0:
+		draft[id] = remaining
+	else:
+		draft.erase(id)
+	m.play("click")
+	sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
+
+func _mail_start_address() -> void:
+	if draft.is_empty():
+		_mail_say("先放点东西进包裹")
+		m.play("deny")
+		return
+	mail_step = 1
+	sel = 0
+	m.play("click")
+
+func _mail_confirm_address() -> void:
+	if mail_dest == "":
+		_mail_say("先选择收件地址")
+		m.play("deny")
+		return
+	mail_step = 2
 	m.play("click")
 
 func mail_send_now() -> void:
+	if mail_step != 2:
+		m.play("deny")
+		return
 	var why: String = m.game.mail_send(mail_place_id, mail_dest, draft, m.game.state.new_id("m"))
 	match why:
 		"":
 			m.play("coin")
 			_mail_say("寄出了，路上要一会儿")
 			draft = {}
+			mail_step = 0
 			sel = clampi(sel, 0, maxi(0, _owned().size() - 1))
 		"gold":
 			m.play("deny")
@@ -235,9 +296,25 @@ func mail_send_now() -> void:
 		"big":
 			m.play("deny")
 			_mail_say("包裹太大了")
+		"locker_full":
+			m.play("deny")
+			_mail_say("寄存柜空间不够，请先取件或扩容")
 		_:
 			m.play("deny")
 			_mail_say("寄不出去")
+
+func mail_upgrade() -> void:
+	var why: String = m.game.mail_upgrade()
+	match why:
+		"":
+			m.play("buy")
+			_mail_say("会员寄存柜已扩容到 %d 页" % m.game.state.mail_pages)
+		"gold":
+			m.play("deny")
+			_mail_say("钱不够开通或扩容")
+		_:
+			m.play("deny")
+			_mail_say("会员寄存柜已满级")
 
 func mail_take_selected(all: bool) -> void:
 	var g = m.game
@@ -320,7 +397,7 @@ func open_warehouse() -> void:
 	sel = 0
 
 func switch_tab() -> void:
-	tab = 1 - tab
+	tab = posmod(tab + 1, 4) if mail_mode else 1 - tab
 	confirm_id = ""
 	sel = 0
 	m.play("click")
@@ -397,14 +474,18 @@ func click(p: Vector2) -> bool:
 		sell_mode = false
 		ore_mode = false
 		trash_mode = false
+		mail_mode = false
 		m.play("click")
 		m.on_panel_toggled()
 		return true
 	if _tabbed():
-		for i in 2:
+		var tab_count := 4 if mail_mode else 2
+		for i in tab_count:
 			if _tab_rect(i).has_point(p):
 				if tab != i:
-					switch_tab()
+					tab = i
+					sel = 0
+					m.play("click")
 				return true
 	var owned := _owned()
 	for i in mini(owned.size(), _cols() * _rows()):
@@ -420,20 +501,32 @@ func click(p: Vector2) -> bool:
 		elif _wh_use_rect().has_point(p):
 			use_selected()
 	elif mail_mode:
-		if tab == 0:
+		if tab == 0 and mail_step == 0:
 			if _use_rect().has_point(p):
 				mail_add()
-			elif _sell_rect().has_point(p):
-				mail_unadd()
+			elif _sell_all_rect().has_point(p):
+				_mail_start_address()
+		elif tab == 0 and mail_step == 1:
+			if _use_rect().has_point(p):
+				mail_step = 0
+				m.play("click")
+			elif _sell_all_rect().has_point(p):
+				_mail_confirm_address()
+			elif _mail_address_rect().has_point(p):
+				_mail_dest_cycle()
+		elif tab == 0 and mail_step == 2:
+			if _use_rect().has_point(p):
+				mail_step = 1
+				m.play("click")
 			elif _sell_all_rect().has_point(p):
 				mail_send_now()
-			elif Rect2(rect().position + Vector2(176, 0), Vector2(rect().size.x - 196, 14)).has_point(p):
-				_mail_dest_cycle()
-		else:
+		elif tab == 1:
 			if _use_rect().has_point(p):
 				mail_take_selected(false)
-			elif _sell_rect().has_point(p):
-				mail_take_selected(true)
+		elif tab == 2 and _use_rect().has_point(p):
+			mail_unadd()
+		elif tab == 3 and _use_rect().has_point(p):
+			mail_upgrade()
 	elif trash_mode:
 		if _use_rect().has_point(p):
 			trash_selected(false)
@@ -459,9 +552,15 @@ func key(keycode: int) -> bool:
 	var n := _owned().size()
 	match keycode:
 		KEY_LEFT, KEY_A:
-			sel = maxi(0, sel - 1)
+			if mail_mode and tab == 0 and mail_step == 1:
+				_mail_dest_cycle()
+			else:
+				sel = maxi(0, sel - 1)
 		KEY_RIGHT, KEY_D:
-			sel = mini(maxi(0, n - 1), sel + 1)
+			if mail_mode and tab == 0 and mail_step == 1:
+				_mail_dest_cycle()
+			else:
+				sel = mini(maxi(0, n - 1), sel + 1)
 		KEY_UP, KEY_W:
 			if sel - _cols() >= 0:
 				sel -= _cols()
@@ -473,10 +572,12 @@ func key(keycode: int) -> bool:
 				use_selected()
 		KEY_X:
 			if mail_mode:
-				if tab == 0:
+				if tab == 0 and mail_step == 1:
+					mail_step = 0
+				elif tab == 0 and mail_step == 2:
+					mail_step = 1
+				elif tab == 2:
 					mail_unadd()
-				else:
-					mail_take_selected(true)
 			elif not wh and not sell_mode and not trash_mode:
 				trash_selected(false)
 			elif trash_mode:
@@ -485,10 +586,12 @@ func key(keycode: int) -> bool:
 				sell_selected()
 		KEY_Z:
 			if mail_mode:
-				if tab == 0:
+				if tab == 0 and mail_step == 0:
+					_mail_start_address()
+				elif tab == 0 and mail_step == 1:
+					_mail_confirm_address()
+				elif tab == 0 and mail_step == 2:
 					mail_send_now()
-				else:
-					mail_take_selected(true)
 			elif not wh and not sell_mode and not trash_mode:
 				trash_selected(true)
 			elif trash_mode:
@@ -500,10 +603,14 @@ func key(keycode: int) -> bool:
 				switch_tab()
 		KEY_SPACE, KEY_ENTER, KEY_E:
 			if mail_mode:
-				if tab == 0:
+				if tab == 0 and mail_step == 0:
 					mail_add()
-				else:
+				elif tab == 1:
 					mail_take_selected(false)
+				elif tab == 2:
+					mail_unadd()
+				elif tab == 3:
+					mail_upgrade()
 			elif wh:
 				move_selected(false)
 			elif trash_mode:
@@ -573,37 +680,76 @@ func _draw_chest_frame(r: Rect2) -> void:
 	m.draw_rect(Rect2(lx + 4, r.position.y + 7, 1, 3), Pal.U_K)
 
 func _draw_mail_buttons(r: Rect2, id: String) -> void:
-	var g = m.game
 	if tab == 0:
-		_btn(_use_rect(), "放入", Pal.L_C, Pal.U_B)
-		_btn(_sell_rect(), "取回", Pal.L_A, Pal.U_A)
-		_btn(_sell_all_rect(), "寄出", Pal.L_Y, Pal.U_H)
-	else:
+		if mail_step == 0:
+			_btn(_use_rect(), "放入", Pal.L_C, Pal.U_B)
+			_btn(_sell_all_rect(), "选地址", Pal.L_Y, Pal.U_H)
+		elif mail_step == 1:
+			_btn(_use_rect(), "返回", Pal.L_A, Pal.U_A)
+			_btn(_sell_all_rect(), "确认地址", Pal.L_Y, Pal.U_H)
+		else:
+			_btn(_use_rect(), "返回", Pal.L_A, Pal.U_A)
+			_btn(_sell_all_rect(), "付费寄出", Pal.L_Y, Pal.U_H)
+	elif tab == 1:
 		_btn(_use_rect(), "领这组", Pal.L_G, Pal.U_G)
-		_btn(_sell_rect(), "全领", Pal.L_G, Pal.U_G)
+	elif tab == 2:
+		_btn(_use_rect(), "取回这组", Pal.L_C, Pal.U_B)
+
+func _mail_address_name() -> String:
+	for a in m.game.mail_addresses(mail_place_id):
+		if str(a["id"]) == mail_dest:
+			return str(a["name"])
+	return "未选择"
 
 ## 邮局面板顶上一行：寄件时写目的地、件数和邮费；取件时写路上还有多少。
 func _draw_mail_info(r: Rect2) -> void:
 	var g = m.game
 	var t := Time.get_ticks_msec()
-	var x := r.position.x + 176
+	var x := r.position.x + (4 if m.mini else 180)
 	if t - mail_msg_t < 2200 and mail_msg != "":
-		m.dyn_text(mail_msg, Vector2(x, r.position.y + 2), Pal.L_Y)
+		m.dyn_text(mail_msg, Vector2(x, r.position.y + (14 if m.mini else 2)), Pal.L_Y)
 		return
 	if tab == 0:
-		var dn: String = str(g.mail_place(mail_dest).get("name", "?"))
 		var n: int = g.mail_item_count(draft)
-		m.dyn_text("寄往 %s  %d 件" % [dn, n], Vector2(x, r.position.y + 2), Pal.L_W)
-		if n > 0:
-			m.draw_money(g.mail_quote(mail_place_id, mail_dest, draft), Vector2(x + m.dyn_text_width("寄往 %s  %d 件" % [dn, n]) + 6, r.position.y + 1), Pal.L_Y)
-		else:
-			m.dyn_text("路上约 %d 秒" % int(g.mail_eta_ms(mail_place_id, mail_dest) / 1000), Vector2(x + m.dyn_text_width("寄往 %s  %d 件" % [dn, n]) + 8, r.position.y + 2), Pal.L_A)
+		var line := "包裹 %d 件" % n
+		if mail_step == 1:
+			line = "收件地址：%s（点击或 ←→切换）" % _mail_address_name()
+		elif mail_step == 2:
+			line = "确认寄往：%s" % _mail_address_name()
+		m.dyn_text(line, Vector2(x, r.position.y + (14 if m.mini else 2)), Pal.L_W)
+		if mail_step == 2 and n > 0:
+			m.draw_money(g.mail_quote(mail_place_id, mail_dest, draft), Vector2(x + m.dyn_text_width(line) + 6, r.position.y + (13 if m.mini else 1)), Pal.L_Y)
+		elif mail_step == 0:
+			m.dyn_text("选好物品后进入地址选择", Vector2(x, r.position.y + (24 if m.mini else 14)), Pal.L_A)
+		elif mail_step == 2:
+			m.dyn_text("约 %d 秒送达" % int(g.mail_eta_ms(mail_place_id, mail_dest) / 1000), Vector2(x, r.position.y + (24 if m.mini else 14)), Pal.L_A)
+	elif tab == 2:
+		m.dyn_text("误放入包裹的物品可逐组取回", Vector2(x, r.position.y + (14 if m.mini else 2)), Pal.L_A)
+	elif tab == 3:
+		m.dyn_text("会员寄存柜：%s" % ("未开通" if g.state.mail_pages == 0 else "%d/5 页" % g.state.mail_pages), Vector2(x, r.position.y + (14 if m.mini else 2)), Pal.L_W)
 	else:
 		var inc: Array = g.mail_incoming(mail_place_id)
 		if int(inc[0]) > 0:
-			m.dyn_text("路上还有 %d 件，约 %d 秒" % [int(inc[0]), int(ceil(float(inc[1]) / 1000.0))], Vector2(x, r.position.y + 2), Pal.L_W)
+			m.dyn_text("路上还有 %d 件，约 %d 秒" % [int(inc[0]), int(ceil(float(inc[1]) / 1000.0))], Vector2(x, r.position.y + (14 if m.mini else 2)), Pal.L_W)
 		else:
-			m.dyn_text("没有在路上的包裹", Vector2(x, r.position.y + 2), Pal.L_A)
+			m.dyn_text("没有在路上的包裹", Vector2(x, r.position.y + (14 if m.mini else 2)), Pal.L_A)
+
+func _draw_mail_member(r: Rect2) -> void:
+	var y := _detail_y()
+	var pages: int = m.game.state.mail_pages
+	if pages == 0:
+		m.dyn_text("开通后可把包裹寄到对岸会员寄存柜。", Vector2(r.position.x + 8, y), Pal.L_W)
+		m.dyn_text("开通即有 1 页，每页可存 8 格物品。", Vector2(r.position.x + 8, y + 14), Pal.L_A)
+	else:
+		m.dyn_text("对岸会员寄存柜已开通。", Vector2(r.position.x + 8, y), Pal.L_W)
+		m.dyn_text("容量 %d/5 页 · 每页 8 格；寄件时可选寄存柜地址。" % pages, Vector2(r.position.x + 8, y + 14), Pal.L_A)
+	var cost: int = m.game.mail_member_cost()
+	if cost > 0:
+		m.dyn_text("下一页扩容费用", Vector2(r.position.x + 8, y + 30), Pal.L_Y)
+		m.draw_money(cost, Vector2(r.position.x + 82, y + 29), Pal.L_Y)
+		_btn(_use_rect(), "开通会员" if pages == 0 else "扩容一页", Pal.L_G, Pal.U_G)
+	else:
+		m.dyn_text("已达到最大容量。", Vector2(r.position.x + 8, y + 30), Pal.L_G)
 
 func _draw_fish_view(r: Rect2, size: float) -> void:
 	var g = m.game
@@ -656,18 +802,23 @@ func draw() -> void:
 			m.label("仓库" if wh else "物品栏", r.position + Vector2(5, 3), Pal.L_W)
 			m.draw_rect(Rect2(r.position.x + 5, r.position.y + 14, 29, 1), Pal.L_Y if wh else Pal.L_R)
 	if _tabbed():
-		for i in 2:
+		var tab_count := 4 if mail_mode else 2
+		for i in tab_count:
 			var tr := _tab_rect(i)
 			m.draw_rect(tr, Pal.L_Y if tab == i else Pal.U_A)
 			m.draw_rect(tr.grow(-1), Pal.L_A if tab == i else Pal.U_K)
 			if sell_mode or mail_mode:
-				var tn := ("典当" if i == 0 else "赎回") if sell_mode else ("寄件" if i == 0 else "取件")
+				var mail_names := ["寄件", "取件", "取回", "会员"]
+				var tn := ("典当" if i == 0 else "赎回") if sell_mode else str(mail_names[i])
 				m.dyn_text(tn, Vector2(tr.position.x + (tr.size.x - m.dyn_text_width(tn)) / 2.0, tr.position.y - 1), Pal.U_K if tab == i else Pal.L_A)
 			else:
 				m.label_centered("身上" if i == 0 else "仓库", tr.position.x + tr.size.x / 2, tr.position.y + 0, Pal.U_K if tab == i else Pal.L_A)
 	m.tex_frame("btn_close", _close_rect().position, 0, 2)
 	if mail_mode and not m.mini:
 		_draw_mail_info(r)
+	if mail_mode and tab == 3:
+		_draw_mail_member(r)
+		return
 	if _plain():                                            # 物品栏旁边的鱼篓按钮
 		var fb := _fish_btn_rect()
 		m.draw_rect(fb, Pal.L_Y if fish_view else Pal.U_A)
@@ -701,7 +852,8 @@ func draw() -> void:
 		if _redeem():
 			m.dyn_text("没有典当过的东西", Vector2(r.position.x + 5, dy), Pal.L_A)
 		elif mail_mode:
-			m.dyn_text("没有可取的东西" if tab == 1 else "身上没有东西了", Vector2(r.position.x + 5, dy), Pal.L_A)
+			var empty_text := "没有可取的东西" if tab == 1 else ("没有待撤回的物品" if tab == 2 else ("身上没有可寄的物品" if mail_step == 0 else "包裹还是空的"))
+			m.dyn_text(empty_text, Vector2(r.position.x + 5, dy), Pal.L_A)
 			if tab == 0:
 				_draw_mail_buttons(r, "")
 		elif sell_mode or trash_mode:

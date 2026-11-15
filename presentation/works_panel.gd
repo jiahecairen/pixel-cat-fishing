@@ -126,7 +126,8 @@ func draw() -> void:
 			var st: String = g.works.status(id)
 			m.dyn_text(str(p["name"]), rr.position + Vector2(6, 2), Pal.L_W)
 			m.dyn_text(str(p["desc"]), rr.position + Vector2(6, 14), Pal.L_A)
-			_cost_line(p.get("cost", []), rr.position + Vector2(6, 26), func(): return true)
+			if st != "done":
+				_cost_line(p.get("cost", []), rr.position + Vector2(6, 26), func(): return true)
 			var need_w: int = g.works.needs_workers(id)
 			var label := ""
 			var col: Color = Pal.U_A

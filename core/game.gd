@@ -1347,6 +1347,8 @@ func mail_places() -> Array:
 	return _cfg.get("mail", {}).get("places", [])
 
 func mail_place(id: String) -> Dictionary:
+	if id.begins_with("locker_"):
+		id = id.substr(7)
 	for p in mail_places():
 		if str(p["id"]) == id:
 			return p
@@ -1355,6 +1357,35 @@ func mail_place(id: String) -> Dictionary:
 ## 别的岛（只有两个岛时就是对面那个）。
 func mail_others(from: String) -> Array:
 	return mail_places().filter(func(p): return str(p["id"]) != from)
+
+## 邮寄地址：普通邮局，以及开通会员后可选的对岸寄存柜。
+func mail_addresses(from: String) -> Array:
+	var out: Array = []
+	for p in mail_others(from):
+		out.append({"id": str(p["id"]), "name": str(p["name"]) + "邮局"})
+	if state.mail_pages > 0:
+		for p in mail_others(from):
+			out.append({"id": "locker_" + str(p["id"]), "name": str(p["name"]) + "会员寄存柜"})
+	return out
+
+func mail_member_cost() -> int:
+	var costs: Array = _cfg.get("mail", {}).get("member_upgrade_costs", [])
+	if state.mail_pages >= 5 or state.mail_pages >= costs.size():
+		return 0
+	return int(costs[state.mail_pages])
+
+## 开通会员寄存柜，或扩容一页；最多五页。
+func mail_upgrade() -> String:
+	var cost := mail_member_cost()
+	if cost <= 0:
+		return "max"
+	if state.wallet_gold < cost:
+		return "gold"
+	state.wallet_gold -= cost
+	state.mail_pages += 1
+	state.revision += 1
+	dirty = true
+	return ""
 
 func mail_item_count(items: Dictionary) -> int:
 	var n := 0
@@ -1373,6 +1404,23 @@ func mail_quote(from: String, to: String, items: Dictionary) -> int:
 		return 0
 	return int(ceil((float(c.get("base", 15)) + float(c.get("per_item", 3)) * float(n)) * (1.0 + float(mail_distance(from, to)) * float(c.get("per_dist", 0.04)))))
 
+func _mail_cells(items: Dictionary) -> int:
+	var cells := 0
+	for id in items:
+		var n := int(items[id])
+		var cap := inventory.stack_cap(str(id))
+		if n > 0 and cap > 0:
+			cells += int(ceil(float(n) / float(cap)))
+	return cells
+
+func _mail_locker_cells(address: String) -> int:
+	var stored: Dictionary = {}
+	for p in state.mail:
+		if str(p.get("to", "")) == address:
+			for id in p.get("items", {}):
+				stored[str(id)] = int(stored.get(str(id), 0)) + int(p["items"][id])
+	return _mail_cells(stored)
+
 ## 路上要多久（毫秒）：只看距离。
 func mail_eta_ms(from: String, to: String) -> int:
 	return mail_distance(from, to) * int(_cfg.get("mail", {}).get("ms_per_dist", 3000))
@@ -1384,13 +1432,22 @@ func mail_send(from: String, to: String, items: Dictionary, send_id: String = ""
 		for p in state.mail:
 			if str(p["id"]) == send_id:
 				return ""
-	if mail_place(to).is_empty() or mail_place(from).is_empty() or from == to:
+	var valid_address := false
+	for address in mail_addresses(from):
+		if str(address["id"]) == to:
+			valid_address = true
+			break
+	if not valid_address or mail_place(to).is_empty() or mail_place(from).is_empty():
 		return "same"
 	var n := mail_item_count(items)
 	if n <= 0:
 		return "none"
 	if n > int(_cfg.get("mail", {}).get("max_items", 99)):
 		return "big"
+	if to.begins_with("locker_"):
+		var slots: int = int(_cfg.get("mail", {}).get("locker_page_slots", 8)) * state.mail_pages
+		if _mail_locker_cells(to) + _mail_cells(items) > slots:
+			return "locker_full"
 	for k in items:
 		if int(items[k]) <= 0 or inventory.count(state, str(k)) < int(items[k]):
 			return "have"
@@ -1413,7 +1470,7 @@ func mail_ready(place: String) -> Dictionary:
 	var out := {}
 	var now: int = _clock.now_ms()
 	for p in state.mail:
-		if str(p["to"]) == place and int(p["ready_ms"]) <= now:
+		if str(p["to"]) in [place, "locker_" + place] and int(p["ready_ms"]) <= now:
 			for k in p["items"]:
 				out[k] = int(out.get(k, 0)) + int(p["items"][k])
 	return out
@@ -1436,7 +1493,7 @@ func mail_incoming(place: String) -> Array:
 	var wait := 0
 	var now: int = _clock.now_ms()
 	for p in state.mail:
-		if str(p["to"]) == place and int(p["ready_ms"]) > now:
+		if str(p["to"]) in [place, "locker_" + place] and int(p["ready_ms"]) > now:
 			n += mail_item_count(p["items"])
 			wait = maxi(wait, int(p["ready_ms"]) - now)
 	return [n, wait]
@@ -1455,7 +1512,7 @@ func mail_take(place: String, id: String, limit: int = 0) -> int:
 	for p in state.mail:
 		if left <= 0:
 			break
-		if str(p["to"]) == place and int(p["ready_ms"]) <= now and p["items"].has(id):
+		if str(p["to"]) in [place, "locker_" + place] and int(p["ready_ms"]) <= now and p["items"].has(id):
 			var take := mini(left, int(p["items"][id]))
 			p["items"][id] = int(p["items"][id]) - take
 			left -= take

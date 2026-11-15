@@ -14,7 +14,7 @@ const RIDE_MS := 1500
 const ISLE_W := 560.0
 const SPOT := {"dock": 500.0, "rest": 380.0, "inn": 315.0, "shop": 250.0, "post": 172.0, "gate": 96.0}
 const CAVE_W := 560.0
-const CAVE := {"miner": 150.0, "exit": 40.0, "cart": 250.0, "shaft1": 360.0, "rail2": 440.0, "shaft2": 500.0}
+const CAVE := {"miner": 150.0, "exit": 40.0, "cart": 250.0, "barrier": 330.0, "shaft1": 380.0, "shaft2": 500.0}
 const STEP_S := 0.055
 const SWING_MS := 440
 const WALK_SPEED := 92.0
@@ -39,6 +39,7 @@ var menu: String = ""           # "" / "shop" / "cook" / "cart" / "repair"
 var menu_sel: int = 0
 var ride_shaft: int = 1
 var ride_floor: int = 1
+var gate_open: float = 0.0
 var flashes: Array = []
 var _step_cd: float = 0.0
 var _swing_t: int = 0
@@ -506,7 +507,7 @@ func _spot() -> String:
 
 func _cave_spot() -> String:
 	var cx := cave_x + 16.0
-	for k in ["exit", "miner", "cart", "rail2"]:
+	for k in ["exit", "miner", "cart"]:
 		if absf(cx - CAVE[k]) <= 24.0:
 			return k
 	return ""
@@ -539,8 +540,6 @@ func _interact_cave() -> void:
 			m._talk("miner_menu")
 		"cart":
 			_open("cart")
-		"rail2":
-			_open("repair")
 
 ## 每口井各记一个"准备从第几层开始"，默认是这口井到过的最深存档层。
 func _cart_floor(id: int) -> int:
@@ -572,14 +571,24 @@ func _cart(i: int) -> void:
 				m.play("deny")
 				return
 			ride_shaft = id
-			ride_floor = _cart_floor(id)
+			ride_floor = mn.floor_n() if mn.in_run() else _cart_floor(id)
+			var fare: int = mn.ticket_price(id, ride_floor)
+			var ticket: String = mn.buy_ticket(id, ride_floor)
+			if ticket != "":
+				say("钱不够买票" if ticket == "gold" else "这趟矿车现在不能出发")
+				m.play("deny")
+				return
 			menu = ""
 			region = "ride_in"
 			t0 = Time.get_ticks_msec()
+			gate_open = 0.0
+			m.game.dirty = true
+			m.log.write("mine_ticket", {"shaft": id, "floor": ride_floor, "price": fare})
 			m.play("click")
 		"broken":
 			menu = "repair"
 			menu_sel = 0
+			m.play("click")
 		_:
 			say("%d 号井还没有开放" % id)
 			m.play("deny")
@@ -704,7 +713,6 @@ func hint() -> String:
 				"exit": return "空格键回岛上"
 				"miner": return ""
 				"cart": return "空格键坐矿车"
-				"rail2": return "空格键看 2 号井"
 			return "方向键走动"
 		"mine":
 			var mh = m.game.mine
@@ -965,18 +973,20 @@ func _draw_menu(view: Vector2) -> void:
 				var st: String = mn.shaft_status(id)
 				if st == "ok":
 					if mn.in_run() and mn.shaft_id() == id:
-						crow.append(["%d 号井" % id, "接着上一局：第 %d 层" % mn.floor_n()])
+						var active_fare: int = mn.ticket_price(id, mn.floor_n())
+						crow.append(["%d 号井" % id, "接着第 %d 层 · 票 %s" % [mn.floor_n(), _price(active_fare)]])
 					elif mn.in_run():
 						crow.append(["%d 号井" % id, "先结束上一局", true])
 					else:
 						var fl: Array = mn.start_floors(id)
 						var f := _cart_floor(id)
-						crow.append(["%d 号井" % id, ("◀  第 %d 层  ▶" % f) if fl.size() > 1 else "第 %d 层" % f])
+						var fare: int = mn.ticket_price(id, f)
+						crow.append(["%d 号井" % id, ("◀ %d层 · %s ▶" % [f, _price(fare)]) if fl.size() > 1 else ("%d层 · 票 %s" % [f, _price(fare)])])
 				elif st == "broken":
-					crow.append(["%d 号井" % id, "铁路坏了（空格看看）"])
+					crow.append(["%d 号井" % id, "铁路未修好", true])
 				else:
 					crow.append(["%d 号井" % id, "还没开放", true])
-			_panel(view, "矿车", "", crow, "↑↓选井  ←→换层  空格出发  Esc离开", 17.0 + crow.size() * 22.0 + 17.0, true)
+			_panel(view, "矿车票务", _wallet_text(), crow, "↑↓选井  ←→选层  空格买票出发  Esc离开", 17.0 + crow.size() * 22.0 + 17.0, true)
 		"repair":
 			var need: Dictionary = mn.cfg().get("repair2", {})
 			var inv = m.game.inventory
@@ -999,10 +1009,21 @@ func _draw_menu(view: Vector2) -> void:
 func _cart_world_x(t: int) -> float:
 	var k := clampf(_el(t) / float(RIDE_MS), 0.0, 1.0)
 	k = k * k * (3.0 - 2.0 * k)
+	var station_x: float = CAVE["shaft2"] if ride_shaft == 2 else CAVE["shaft1"]
 	match region:
-		"ride_in": return lerpf(CAVE["cart"], CAVE["shaft1"] - 26.0, k)
-		"ride_back": return lerpf(CAVE["shaft1"] - 26.0, CAVE["cart"], k)
+		"ride_in": return lerpf(CAVE["cart"], station_x - 26.0, k)
+		"ride_back": return lerpf(station_x - 26.0, CAVE["cart"], k)
 	return CAVE["cart"]
+
+func _gate_progress(t: int) -> float:
+	if region not in ["ride_in", "ride_back"]:
+		return 0.0
+	var k := clampf(_el(t) / float(RIDE_MS), 0.0, 1.0)
+	if k < 0.18:
+		return k / 0.18
+	if k < 0.9:
+		return 1.0
+	return 1.0 - (k - 0.9) / 0.1
 
 func _draw_cave(view: Vector2, t: int) -> void:
 	var riding := region != "cave"
@@ -1039,35 +1060,42 @@ func _draw_cave(view: Vector2, t: int) -> void:
 	m.draw_rect(Rect2(0, fy, CAVE_W + 20, view.y - fy), Pal.U_A)
 	m.draw_rect(Rect2(0, fy, CAVE_W + 20, 3), Pal.L_A)
 	m.draw_rect(Rect2(0, fy + 3, CAVE_W + 20, 1), Pal.U_K)
-	# 铁轨：1 号井这一段是好的，2 号井前面塌了一截
-	for seg in [[170.0, CAVE["shaft1"] + 20.0], [CAVE["shaft1"] + 28.0, 404.0], [446.0, CAVE["shaft2"] + 22.0]]:
-		var a: float = seg[0]
-		var b: float = seg[1]
-		for x in range(int(a), int(b), 8):
-			m.draw_rect(Rect2(x, fy + 4, 5, 3), Pal.U_O)
-		m.draw_rect(Rect2(a, fy + 3, b - a, 1), Pal.L_A)
-		m.draw_rect(Rect2(a, fy + 6, b - a, 1), Pal.U_K)
-	for k in 6:                                       # 塌下来的碎石和断掉的铁轨
-		var bx := 408.0 + float(absi(hash([k, 9])) % 34)
-		m.draw_rect(Rect2(bx, fy - 2 - (k % 3), 6 + k % 4, 4 + k % 3), Pal.U_S if k % 2 == 0 else Pal.L_A)
-	m.draw_rect(Rect2(414, fy + 1, 12, 2), Pal.L_A)
-	# 两个井口
-	m.draw_texture(m.tex["mine_gate"], Vector2(CAVE["shaft1"] - 28, fy - 46))
-	m.draw_texture(m.tex["mine_gate"], Vector2(CAVE["shaft2"] - 28, fy - 46))
-	m.pixel_line(Vector2(CAVE["shaft2"] - 22, fy - 40), Vector2(CAVE["shaft2"] + 22, fy - 6), Pal.L_O)
-	m.pixel_line(Vector2(CAVE["shaft2"] - 22, fy - 6), Vector2(CAVE["shaft2"] + 22, fy - 40), Pal.L_O)
-	for sx in [CAVE["exit"], CAVE["miner"], CAVE["shaft1"], CAVE["shaft2"]]:
-		var name: String = {CAVE["miner"]: "老钻", CAVE["exit"]: "出口", CAVE["shaft1"]: "1号井", CAVE["shaft2"]: "2号井 封闭"}[sx]
+	# 一条完整的矿车轨道。矿井入口藏在隧道深处，玩家只能在矿车菜单选井。
+	var rail_a := 170.0
+	var rail_b := CAVE_W - 20.0
+	for x in range(int(rail_a), int(rail_b), 8):
+		m.draw_rect(Rect2(x, fy + 4, 5, 3), Pal.U_O)
+	m.draw_rect(Rect2(rail_a, fy + 3, rail_b - rail_a, 1), Pal.L_A)
+	m.draw_rect(Rect2(rail_a, fy + 6, rail_b - rail_a, 1), Pal.U_K)
+	# 矿车闸杆：买票后抬起，让老钻开车通过；到站后自动落下。
+	gate_open = _gate_progress(t)
+	var gx: float = CAVE["barrier"]
+	var pivot := Vector2(gx, fy - 12)
+	var tip := Vector2(gx + 28, fy - 12 - gate_open * 25.0)
+	m.draw_rect(Rect2(gx - 2, fy - 19, 5, 26), Pal.U_K)
+	m.draw_rect(Rect2(gx - 1, fy - 18, 3, 24), Pal.L_O)
+	m.draw_line(pivot + Vector2(1, 1), tip + Vector2(1, 1), Pal.U_K, 6.0)
+	m.draw_line(pivot, tip, Pal.L_R, 4.0)
+	for stripe in range(1, 5):
+		var kstripe := float(stripe) / 5.0
+		var sp := pivot.lerp(tip, kstripe)
+		m.draw_line(sp, sp + Vector2(-2, 3), Pal.L_Y, 2.0)
+	m.draw_rect(Rect2(gx - 3, fy - 15, 7, 7), Pal.L_Y)
+	m.draw_rect(Rect2(gx - 1, fy - 13, 3, 3), Pal.U_O)
+	for sx in [CAVE["exit"], CAVE["miner"], CAVE["cart"]]:
+		var name: String = {CAVE["miner"]: "老钻", CAVE["exit"]: "出口", CAVE["cart"]: "矿车站"}[sx]
 		var w: float = m.dyn_text_width(name) + 6.0
 		m.draw_rect(Rect2(sx - w / 2.0 - 1, fy - 62, w + 2, 14), Pal.U_K)
 		m.draw_rect(Rect2(sx - w / 2.0, fy - 61, w, 12), Pal.L_N)
 		m.dyn_text(name, Vector2(sx - w / 2.0 + 3, fy - 61), Pal.U_K)
-	# 墙边干活的鼹鼠
-	m.tex_frame("mole_miner", Vector2(150, fy - 22), (t / 420) % 2, 2)
+	# 老钻平时在墙边工作；出发时坐到车头开车。
+	if not riding:
+		m.tex_frame("mole_miner", Vector2(150, fy - 22), (t / 420) % 2, 2)
 	# 矿车和小猫
 	m.draw_texture(m.tex["mine_cart"], Vector2(cart_x - 16, fy - 20))
 	if riding:
 		var sway := roundf(sin(float(t) / 60.0))
+		m.tex_frame("mole_miner", Vector2(cart_x - 35, fy - 42 + sway), (t / 260) % 2, 2)
 		m.draw_cat(Vector2(cart_x - 14, fy - 46 + sway), 0, region == "ride_back")
 	else:
 		m.draw_cat(Vector2(roundf(cave_x), fy - 32), 4 if cave_moving else 0, cave_flip)

@@ -279,3 +279,8 @@
 ## C175 v0.87
 - run_tests：ALL TESTS PASS（811 项）；sim_long_run：SIM PASS（Linux 沙盒）。截图目检（Linux）：两个岛的邮局建筑、寄件页、取件页。新增测试覆盖邮费、距离对称、扣钱、重复提交、到达时间、取件、存档、放不下。
 - 未运行：Mac 上实际寄一次快递再去对岸取（真实等待时间）、快捷键 Z/X、点击目的地文字切换（现在只有一个目的地，没法试）、.app 启动。
+
+## C176 v0.88：矿车票务、会员寄存柜、修理厂完工显示
+- 静态检查：`data/balance.json` 可解析，`git diff --check` 通过。
+- Godot 导入和 macOS Release 导出：由 `build_codex.command` 执行；输出 `build/CatFishing.app` 与 `build/CatFishing_v0.88_codex.app`。
+- 未运行：run_tests、sim_long_run、画面截图和实际启动操作。
