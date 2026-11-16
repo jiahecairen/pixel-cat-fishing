@@ -180,6 +180,7 @@ var _shot_prefix: String = ""   # 调试：CATFISH_SHOT=前缀:帧号,帧号  �
 var _shot_frames: Array = []
 var _shot_busy: bool = false
 var _quit_at_frames: Array = []   # 调试：CATFISH_QUIT_AT=150,200  在这些帧各按一次"退出"（和点红叉/退出按钮同一条路）
+var _dbg_toast: Array = []   # 调试：CATFISH_TOAST="一行|二行"  在第 20 帧弹这条（用真的 _toast，只为截图看字有没有画全）
 
 
 func _ready() -> void:
@@ -388,6 +389,8 @@ func _apply_debug_env() -> void:
 	if OS.has_environment("CATFISH_QUIT_AT"):    # 调试：在指定帧各按一次"退出"，用来验"只拦一次、第二次真退"
 		for fq in OS.get_environment("CATFISH_QUIT_AT").split(","):
 			_quit_at_frames.append(fq.to_int())
+	if OS.has_environment("CATFISH_TOAST"):    # 调试：弹一条指定文字的弹层，用来看图集里到底有没有这些字
+		_dbg_toast = OS.get_environment("CATFISH_TOAST").split("|")
 	if OS.has_environment("CATFISH_VIEW"):
 		st.settings["view_mode"] = OS.get_environment("CATFISH_VIEW").to_int()
 	if OS.has_environment("CATFISH_LOOK"):
@@ -1231,7 +1234,7 @@ func _interact_inside() -> void:
 					var dur := 2600
 					if rs == "":
 						dur = maxi(dur, int(game.mine.rest_info()["t1"]) - int(game.mine.rest_info()["t0"]))
-						_toast("在家睡觉：体力会补满，但不会超过上限", "")
+						_toast("在家睡觉", "体力补满就停")
 					_nap_until = Time.get_ticks_msec() + dur
 					log.write("nap", {"lucky_until_ms": game.state.effects["lucky_until_ms"], "rest": rs == ""})
 				else:
@@ -1441,6 +1444,9 @@ func _process(dt: float) -> void:
 		_save()
 	if not _low_power:
 		queue_redraw()
+	if _dbg_toast.size() > 0 and Engine.get_frames_drawn() >= 20:
+		_toast(str(_dbg_toast[0]), str(_dbg_toast[1]) if _dbg_toast.size() > 1 else "")
+		_dbg_toast = []   # 只弹一次，免得每次 _process 都刷新 3 秒计时
 	if not _quit_at_frames.is_empty() and Engine.get_frames_drawn() >= int(_quit_at_frames[0]):
 		_quit_at_frames.pop_front()
 		_quit()
@@ -2079,8 +2085,8 @@ func _draw() -> void:
 	works_panel.draw()
 	dialog.draw()
 	if Time.get_ticks_msec() - _toast_t0 < 3000:
-		label(_toast_l1, Vector2(17, 63), Pal.L_R)
-		label(_toast_l2, Vector2(17, 74), Pal.L_R)
+		_draw_toast(_toast_l1, 63.0)
+		_draw_toast(_toast_l2, 74.0)
 	_draw_catch_pop()
 	bag.draw()
 	book.draw()
@@ -2501,6 +2507,20 @@ func label(s: String, pos: Vector2, color: Color) -> void:
 
 func label_width(s: String) -> float:
 	return Labels.RECTS[s].size.x if Labels.RECTS.has(s) else 0.0
+
+## 弹层的一行。放大窗 960 宽，随便写都放得下；迷你窗只有 128 宽，字太长会被窗口边切掉，
+## 所以迷你窗里先把整行往左挪进窗口，实在放不下（比窗口还宽）就干脆不画这一行——
+## 事件已经写进日志了，宁可少说一句，也不在窗口边上露半个字。
+func _draw_toast(line: String, y: float) -> void:
+	if line == "":
+		return
+	if not mini:
+		label(line, Vector2(17, y), Pal.L_R)
+		return
+	var w := label_width(line)
+	if w > float(MINI_VIEW.x) - 4.0:
+		return
+	label(line, Vector2(clampf(17.0, 2.0, float(MINI_VIEW.x) - w - 2.0), y), Pal.L_R)
 
 
 func label_centered(s: String, center_x: float, y: float, color: Color) -> void:

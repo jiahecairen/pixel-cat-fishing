@@ -701,3 +701,43 @@ v1.00 让存档"出事会吭声"，但留了一条没验的：**"写不进去"�
 - 与 v1.00 快照逐字段对比：`wallet_gold 44615 → 44463`（正好等于票价 152）、`mine.runs 15 → 16`、`mine.sta 105 → 93`、`inventory.tin_ore +1`、`stats.ore_counts.tin_ore = 1`、`revision 3681 → 3683`；**旧档里有的字段一个都没少** ✓ 新快照已存 `_backup_save/save_2026-11-15_1256_v101.json`（md5 `59c68589…`，已记进 `MD5SUMS`）。
 - 顺带记一条卫生问题：离线测试用 `--script` 跑的时候**没改 `HOME`**，Godot 会往真的 `app_userdata/CatFishing/logs/` 里丢引擎日志（`godot2026-11-15T12.51.xx.log`）。**`save.json` 没被碰**（测试只写 `user://test_save.json`、`user://t100/…`，跑完自己清），但以后跑测试建议 `HOME=/tmp/xxx` 一起隔离。
 
+# v1.02：弹层提示其实一个字都没画出来 + 扫描的存档不再共用
+
+## 一、真正的 bug：`_toast("中文")` 的字从没进过标签图集
+`_toast()` 走 `label()`，而 `label()` 只认 `labels.gd` 里的 rect；**图集里没有的字，运行时只打一句"标签图集缺少"然后什么都不画**。v0.99 那条"缺字判失败"的覆盖测试只扫 `label("…")` 的字面量，**从没扫过 `_toast("…")`**，所以 10 条提示（迷你窗点小猫 →「放大窗口／再来聊天」、点工坊 →「再来看看」、体力满 →「体力是满的，睡不着」、修船 →「修好了」、矿里赶路 →「休息中或正在赶路」、出航 →「现在不能出航」……）一直只有"咚"的音效，一个字都没显示过。
+- 补进 `tools/art/generate.py` 的 `LABELS` → 重生成：`labels.png` 4940 → **5040 px**（+10 条），`labels.gd` 的 rect 表整体重排（所以那一版 diff 看着很大）
+- 新测试 `test_v102_toast_labels()`：扫全部 `_toast("…","…")` 与 `call_deferred("_toast","…","…")` 的字面量，凡带中文的必须**在图集里**、且**每行 ≤124 px（迷你窗 128 宽放得下）**；另钉住 `_draw_toast` 的 clamp、`CATFISH_TOAST` 开关和"只弹一次"
+- 顺带把 19 个字的「在家睡觉：体力会补满，但不会超过上限」拆成两行（「在家睡觉」/「体力补满就停」），128 宽的迷你窗装不下 19 个字
+
+## 二、迷你窗会把长句子从窗口右边切掉
+迷你窗宽 128 px，弹层画在 ui x=17，v1.01 那句「进度还在内存里，别关窗口」宽 **118 px** → 17+118=135，比窗口宽 7 px，最后一个字被切一半。
+- 新增 `_draw_toast(line, y)`（`presentation/main.gd`）：全窗口照旧；迷你窗里放不下就**整行不画**，放得下就 `clampf` 往左挪进窗口
+- **像素证据**（同一份调试包、同种子、同帧，只换弹层文字）：迷你窗第一行一带（设备 y378..444 = 基座 y63..74）新旧两版差异列 **48..755** —— 48 = 8×6（clamp 后的新起点），755 = (8+118)×6−1 → **整行落在 768 px 宽的窗口里，右边不再被切**
+- 没做噪声地板（同 build 同 env 跑两遍的帧间抖动）对照；弹层第二行正好压在动画水面上，那一行只有几何论证
+
+## 三、扫描里「矿井开挖」和「矿井里」逐字节相同 —— 不是挖矿动画坏了，是扫描自己的坑
+`leak_sweep.sh` 原来 35 行**共用同一份存档**（`home=$(mktemp -d)` 只开一次）。前面的画面会把镐子、体力、矿洞挖过的格子全改一遍，等扫到第 12 行时 `CATFISH_DIG=0,-1` 那一格早挖空 → `start_dig()` 直接拒绝 → 小猫站着不动 → 和第 11 行「矿井里」**逐字节相同** → 扫描判"这画面根本没打开"（`LEAK_ONLY=矿井` 单跑退出码 1「跟基线一帧不差」）。
+- 单独手动复跑证实：**同 build、同种子、同 env 跑两遍，截图 md5 也不同**（`aa51…` vs `5b17…`，画面里的水是时间驱动的）→ 所以"两张图逐字节相同"只可能来自"两行都停在同一张静帧"，判据本身没错，是存档把矿洞提前挖空了
+- 修法（纯工具，不动玩法）：**每行一份独立存档**（`home="$home_root/行号"`，行号先自增再建目录，退出时 `rm -rf "$home_root"` 一次扫干净）
+- 新测试 `test_v102_sweep_isolated_saves()` 钉住：每行自己的 home、真的 `mkdir` 了存档目录、自增在建目录之前、仍走 `CATFISH_SAVE`、退出清理，以及"不许再所有画面共用一个 home"
+
+## 本机（macOS 真跑）实际跑过的命令
+| 命令 | 结果 |
+|---|---|
+| `python3 tools/art/generate.py` | `OK: 214 张素材，全部只用调色板 24 色` |
+| 逐像素审计重生成后的素材 | 210 个"显示已修改"的素材里 **209 个像素完全相同** → `git checkout` 还原；cat/icon 16 个也全还原；最终**只有 `labels.png` 真的变了** |
+| `Godot --headless --path . --import` | 退出码 0，`SCRIPT ERROR` 0 |
+| `Godot --headless --path . --script res://tests/run_tests.gd` | `ALL TESTS PASS`，**1098 项、0 失败**，`SCRIPT ERROR` 0（v1.01 是 1079） |
+| `Godot --headless --path . --script res://tests/sim_long_run.gd` | `SIM PASS`，0 条 `SCRIPT ERROR` |
+| `./打包游戏.command` | 产出 `build/CatFishing_v1.02_Qwen.app`（163 MB），自检「app 能启动（两帧，退出码 0，无 SCRIPT ERROR；临时存档目录已删）」 |
+| `--export-debug "macOS" …_debug.app` + `codesign --force --sign -` + `xattr -cr` + `codesign -v` | 全部退出码 0（179 MB 调试包，给测试/扫描用） |
+| `CATFISH_VIEW=0 CATFISH_TOAST="…" CATFISH_SHOT=…` 调试包截图 | 退出码 0；差异列 48..755 见上 |
+| 真存档 md5 | 打包后（11-15 13:44）仍是 `59c68589…`。**今天（11-16）再核对已经变成 `7e6daf526b6e8f684d9442d52991acee`** —— 查过不是测试写的：真的 `app_userdata/CatFashing/save.json` 的 mtime 是 **11-15 15:19**，`logs/events.log` 里最后一条是 `app_quit gold=44167 @15:19:43`，前面三条 `mine_ticket` 是 72+152+72=**296**，正好等于 44463−44167 → **是你真机打开玩了约 1 小时后正常退出**；今天的事件日志里 **0 条 `app_start`**，说明这轮所有测试/扫描（全部带 `HOME=/tmp/…` + `CATFISH_SAVE=/tmp/…`）一个字节都没写进你的真存档 |
+
+## 没验证 / 没做
+- **真人双击 `打包游戏.command` / `运行游戏.command` 验收** —— 只有你在 Mac 上能验
+- Intel 与其它平台；透明 / 鼠标穿透 / 拖动窗口；真人鼠标点红叉、⌘Q 的实际手感
+- 弹层第二行的像素证据（压在动画水面上，只能靠几何论证）；没测帧间抖动噪声地板
+- 盘满（ENOSPC）那条措辞从没真的触发过
+- v1.02 没有重跑 20 分钟 `idle_rss.sh`（v1.01 实测过：−73.2 MB / −39.7%；本版没碰缓存与动画代码）
+- 没动 `data/balance.json`、存档结构、已锁定决定；矿石的"用途"按约定继续等你拍板

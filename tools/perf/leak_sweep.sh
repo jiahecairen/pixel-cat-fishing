@@ -6,7 +6,8 @@
 # v0.97 就是这么抓出 World⇄Shopfronts 的环的；这个脚本把它变成随时能复跑的检查。
 #
 # 用法：  ./tools/perf/leak_sweep.sh [每个画面跑多少帧，默认 240] [调试包路径] [截图目录]
-# 存档一律写到 mktemp 的临时目录（CATFISH_SAVE + HOME 双保险），**绝不碰你的真存档**。
+# 存档一律写到 mktemp 的临时目录（CATFISH_SAVE + HOME 双保险），**绝不碰你的真存档**；
+# 而且**每个画面一份**，画面之间不继承状态（原因见下面循环里的注释）。
 # 每个画面还会留一张截图当"画面真的打开了"的证据（默认丢到 /tmp/catfish_sweep_shots）。
 # 截图还用来抓"画面压根没打开"：如果某个画面截出来的图和**基线画面**（列表里第一个，
 # 就是"家里"）逐字节一模一样，说明那个面板根本没弹开 → 判失败。
@@ -32,9 +33,13 @@ fi
 shots="${3:-${TMPDIR:-/tmp}/catfish_sweep_shots}"
 rm -rf "$shots" 2>/dev/null
 mkdir -p "$shots" || exit 1
-home="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/catfish_sweep_home.XXXXXX")"
-save="$home/save"
-trap 'rm -rf "$home"' EXIT
+# 每个画面一个独立的存档目录（放在同一个根目录下，好一次扫干净）。
+# 以前所有画面共用一份存档：前面的画面会把镐子、体力、矿洞挖过的格子都改一遍，
+# 等扫到「矿井开挖」时那一格早挖空了，start_dig 直接拒绝 → 小猫站着不动，
+# 结果「矿井开挖」和「矿井里」两张图逐字节相同，扫描报"这画面没打开"，其实冤枉得很。
+# 分开之后每一行都从同一个干净状态出发，画面是不是真的打开了才作数。
+home_root="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/catfish_sweep_home.XXXXXX")"
+trap 'rm -rf "$home_root"' EXIT
 
 # 名字|环境变量（一个画面一行；加画面就往这里加一行，测试会盯着条数）
 screens=(
@@ -92,9 +97,13 @@ for row in "${screens[@]}"; do
 		done
 		[[ $skip -eq 1 ]] && continue
 	fi
+	i=$((i + 1))
+	# 这一行专用的干净存档目录（每个画面都从头开始，不继承上一个画面挖过的矿洞）
+	home="$home_root/$(printf '%02d' "$i")"
+	mkdir -p "$home/save"
+	save="$home/save"
 	log="$home/leak.log"
 	: >"$log"
-	i=$((i + 1))
 	note=""
 	# 截图是给"这个画面真的打开了"当证据的：拿不到图就判这次扫描没跑成
 	shot_at=$((frames - 40))

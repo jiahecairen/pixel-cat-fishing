@@ -81,6 +81,8 @@ func _init() -> void:
 		test_v099_label_atlas_coverage()
 		test_v100_save_safety()
 		test_v101_quit_guard()
+		test_v102_toast_labels()
+		test_v102_sweep_isolated_saves()
 		test_v089_scripts_and_art()
 		test_labels()
 		test_warehouse(balance, fish)
@@ -3324,3 +3326,80 @@ func test_v101_quit_guard() -> void:
 	check(row.contains("CATFISH_SEED=7") and mine.contains("CATFISH_SEED=7"), "两行用的是同一个种子 7（实测：不钉种子时随机矿脉会让开挖那张和矿井里一帧不差，看不出问题）")
 	check(main.contains("OS.has_environment(\"CATFISH_QUIT_AT\")"), "有 CATFISH_QUIT_AT 调试开关（能在指定帧按退出，机器可验\"只拦一次\"）")
 	check(main.contains("Engine.get_frames_drawn() >= int(_quit_at_frames[0])"), "调试退出用引擎帧号（和截图同一套，不做业务计时）")
+
+## v1.02：弹层（toast）里写死的中文必须都在标签图集里，而且迷你窗（128 宽）要放得下。
+## v0.99 那条覆盖测试只扫 label("…")，漏了 _toast("…")——结果迷你窗点小猫、点工坊、
+## 睡觉、修船这些提示其实一个字都没画出来（图集里没有，label 直接跳过），音效却照常响。
+func test_v102_toast_labels() -> void:
+	print("v1.02: 弹层里的中文必须进图集，且在迷你窗里不能被窗口边切掉")
+	var lab: String = FileAccess.get_file_as_string("res://presentation/labels.gd")
+	var widths := {}
+	for l in lab.split("\n"):
+		var t := str(l)
+		if not t.contains("\": Rect2("):
+			continue
+		var q1 := t.find("\"")
+		var q2 := t.find("\"", q1 + 1)
+		var rp := t.find("Rect2(", q2)
+		if q1 < 0 or q2 < 0 or rp < 0:
+			continue
+		var nums := t.substr(rp + 6, t.length()).split(",")
+		if nums.size() >= 4:
+			widths[t.substr(q1 + 1, q2 - q1 - 1)] = nums[2].to_int()
+	check(widths.size() >= 410, "标签图集里有 %d 条文字" % widths.size())
+	var main: String = FileAccess.get_file_as_string("res://presentation/main.gd")
+	var mini_w := 128
+	var miss := 0
+	var wide := 0
+	var seen := 0
+	var re_a := RegEx.create_from_string("_toast\\(\\s*\"([^\"]*)\"(?:\\s*,\\s*\"([^\"]*)\")?")
+	var re_b := RegEx.create_from_string("call_deferred\\(\"_toast\",\\s*\"([^\"]*)\"(?:,\\s*\"([^\"]*)\")?")
+	for re in [re_a, re_b]:
+		for m in re.search_all(main):
+			for gi in [1, 2]:
+				var txt := str(m.get_string(gi))
+				if txt == "" or not _has_cjk(txt):
+					continue
+				seen += 1
+				if not widths.has(txt):
+					miss += 1
+					print("   漏字：" + txt)
+				elif widths[txt] > mini_w - 4:
+					wide += 1
+					print("   太宽：" + txt + "（%d px）" % widths[txt])
+	check(seen >= 20, "扫到 %d 条弹层文字（太少说明正则没匹配上，别当成通过）" % seen)
+	check(miss == 0, "弹层里的中文全在标签图集里（漏了 %d 条）" % miss)
+	check(wide == 0, "弹层里每一行在迷你窗（%d 宽）都放得下（超宽 %d 条）" % [mini_w, wide])
+	check(widths.has("放大窗口") and widths.has("修好了") and widths.has("在家睡觉") and widths.has("体力补满就停"), "迷你窗点小猫/修船/睡觉那几条提示进图集了")
+	check(not main.contains("在家睡觉：体力会补满"), "睡觉那句长句拆成了两行短句（19 个字迷你窗放不下）")
+	check(main.contains("func _draw_toast(line: String, y: float) -> void:"), "弹层改成走 _draw_toast（迷你窗里放不下就整行不画，不露半个字）")
+	check(main.contains("if w > float(MINI_VIEW.x) - 4.0:"), "_draw_toast 里确实有迷你窗放不下就跳过的判断")
+	check(main.contains("_draw_toast(_toast_l1, 63.0)") and not main.contains("label(_toast_l1, Vector2(17, 63)"), "画弹层的地方换成了 _draw_toast")
+	check(main.contains("OS.has_environment(\"CATFISH_TOAST\")"), "有 CATFISH_TOAST 调试开关（用真 _toast 弹一条，专门用来截图）")
+	check(main.contains("_dbg_toast = []"), "调试弹层只弹一次（不每次 _process 刷新 3 秒计时）")
+
+
+func _has_cjk(t: String) -> bool:
+	for i in t.length():
+		if t.unicode_at(i) >= 0x4E00 and t.unicode_at(i) <= 0x9FFF:
+			return true
+	return false
+
+## v1.02：泄漏扫描的每个画面必须从一份干净的存档开始（不再共用同一份）。
+## 实测教训：35 行共用一份存档时，前面的画面把镐子/体力/矿洞都改了一遍，
+## 轮到「矿井开挖」时那一格早挖空、start_dig 被拒 → 和「矿井里」逐字节相同，
+## 扫描误判成"这画面根本没打开"。分开存档之后，判"一样"才真的说明画面没打开。
+func test_v102_sweep_isolated_saves() -> void:
+	print("v1.02: 泄漏扫描每行一份干净存档（否则矿井开挖会被前面的画面挖空，误判成画面没打开）")
+	var sw: String = FileAccess.get_file_as_string("res://tools/perf/leak_sweep.sh")
+	check(sw.contains("home_root"), "扫描先开一个总的临时根目录 home_root")
+	check(sw.contains("home=\"$home_root/$(printf '%02d' \"$i\")\""), "每行有自己的 home（按行号分目录）")
+	check(sw.contains("mkdir -p \"$home/save\""), "每行真的建了自己的存档目录")
+	var i_inc := sw.find("i=$((i + 1))")
+	var i_home := sw.find("home=\"$home_root/")
+	check(i_inc > 0 and i_home > i_inc, "行号先自增再建目录（目录名和截图编号对得上）")
+	check(sw.contains("save=\"$home/save\""), "存档路径跟着每行的 home 走")
+	check(sw.contains("CATFISH_SAVE=\"$save\""), "还是用 CATFISH_SAVE 指到那份隔离存档")
+	check(sw.contains("trap 'rm -rf \"$home_root\"' EXIT"), "退出时把整棵临时目录扫干净")
+	check(not sw.contains("home=\"$(/usr/bin/mktemp -d \""), "不再所有画面共用同一个 home（就是它把矿洞提前挖空的）")
+
