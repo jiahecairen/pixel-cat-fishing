@@ -731,7 +731,7 @@ v1.00 让存档"出事会吭声"，但留了一条没验的：**"写不进去"�
 | `Godot --headless --path . --script res://tests/sim_long_run.gd` | `SIM PASS`，0 条 `SCRIPT ERROR` |
 | `./打包游戏.command` | 产出 `build/CatFishing_v1.02_Qwen.app`（163 MB），自检「app 能启动（两帧，退出码 0，无 SCRIPT ERROR；临时存档目录已删）」 |
 | `--export-debug "macOS" …_debug.app` + `codesign --force --sign -` + `xattr -cr` + `codesign -v` | 全部退出码 0（179 MB 调试包，给测试/扫描用） |
-| `CATFISH_VIEW=0 CATFISH_TOAST="…" CATFISH_SHOT=…` 调试包截图 | 退出码 0；差异列 48..755 见上 |
+| 提交并推送 | `git commit` → **`8dfe661`**；`git tag -a v1.02-qwen`；`git push origin qwen-v0.99:Qwen-v1.02`（新建远端分支）与 `git push origin v1.02-qwen`（**这次标签推上去了**）；`git ls-remote` 复核：`refs/heads/Qwen-v1.02` = `refs/tags/v1.02-qwen^{}` = `8dfe661…`，工作区干净 || `CATFISH_VIEW=0 CATFISH_TOAST="…" CATFISH_SHOT=…` 调试包截图 | 退出码 0；差异列 48..755 见上 |
 | 真存档 md5 | 打包后（11-15 13:44）仍是 `59c68589…`。**今天（11-16）再核对已经变成 `7e6daf526b6e8f684d9442d52991acee`** —— 查过不是测试写的：真的 `app_userdata/CatFashing/save.json` 的 mtime 是 **11-15 15:19**，`logs/events.log` 里最后一条是 `app_quit gold=44167 @15:19:43`，前面三条 `mine_ticket` 是 72+152+72=**296**，正好等于 44463−44167 → **是你真机打开玩了约 1 小时后正常退出**；今天的事件日志里 **0 条 `app_start`**，说明这轮所有测试/扫描（全部带 `HOME=/tmp/…` + `CATFISH_SAVE=/tmp/…`）一个字节都没写进你的真存档 |
 
 ## 没验证 / 没做
